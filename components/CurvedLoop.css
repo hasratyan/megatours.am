@@ -1,0 +1,39 @@
+.curved-loop-jacket {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: auto;
+  width: 100vw;
+  position: relative;
+  --nav-fade-size: 15em;
+  -mask-image: linear-gradient(to right, transparent, #000 var(--nav-fade-size), #000 calc(100% - var(--nav-fade-size)), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--nav-fade-size), #000 calc(100% - var(--nav-fade-size)), transparent);
+
+}
+
+.curved-loop-svg {
+  user-select: none;
+  aspect-ratio: 8 / 1;
+  font-size: 2rem;
+  overflow: visible;
+  display: block;
+  fill: #ffffff;
+  user-select: none;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 1;
+  @media screen and (max-width: 1280) {
+    font-size: 3rem;
+    aspect-ratio: 6 / 1;
+  }
+  @media screen and (max-width: 1024) {
+    font-size: 4rem;
+  }
+  @media screen and (max-width: 768) {
+    font-size: 7rem;
+    aspect-ratio: 3 / 1;
+    margin-top: 0.5em;
+  }
+}

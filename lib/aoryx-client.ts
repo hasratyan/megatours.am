@@ -189,17 +189,18 @@ async function coreRequest<TRequest, TResponse>(
 
 // Normalize hotel from search response
 function normalizeSearchHotel(hotel: AoryxSearchHotel, currency: string | null): AoryxHotelSummary {
+  const info = hotel.hotelInfo;
   return {
     code: toStringValue(hotel.code),
-    name: toStringValue(hotel.name) ?? toStringValue(hotel.hotelInfo?.name),
+    name: toStringValue(hotel.name) ?? toStringValue(info?.name),
     minPrice: toNumber(hotel.minPrice),
     currency: currency,
-    rating: toNumber(hotel.hotelInfo?.rating),
-    address: toStringValue(hotel.hotelInfo?.address),
-    city: toStringValue(hotel.hotelInfo?.city),
-    imageUrl: toStringValue(hotel.hotelInfo?.imageUrl),
-    latitude: toNumber(hotel.hotelInfo?.geoCode?.lat),
-    longitude: toNumber(hotel.hotelInfo?.geoCode?.lon),
+    rating: toNumber(info?.starRating), // API uses "starRating" as string
+    address: toStringValue(info?.add1), // API uses "add1" for address
+    city: toStringValue(info?.city),
+    imageUrl: toStringValue(info?.image), // API uses "image" not "imageUrl"
+    latitude: toNumber(info?.lat), // Direct string, not in geoCode
+    longitude: toNumber(info?.lon), // Direct string, not in geoCode
   };
 }
 

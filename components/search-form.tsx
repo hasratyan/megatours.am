@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { FormEvent, useState, useMemo, useCallback, useEffect, useRef, useId } from "react";
 import { useRouter } from "next/navigation";
 import Select, { StylesConfig, CSSObjectWithLabel, components as selectComponents } from "react-select";
 import type { SingleValue } from "react-select";
@@ -160,6 +160,11 @@ export default function SearchForm({
   initialRooms,
 }: Props) {
   const defaults = useMemo(() => buildDefaultDates(), []);
+  const reactSelectId = useId();
+  const reactSelectInstanceId = useMemo(
+    () => `location-select-${reactSelectId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+    [reactSelectId],
+  );
   const router = useRouter();
   const { locale: appLocale } = useLanguage();
   const dateFnsLocale = dateFnsLocales[appLocale];
@@ -492,6 +497,7 @@ export default function SearchForm({
       {!hideLocationFields && (
         <div className="field">
           <Select<LocationOption>
+            instanceId={reactSelectInstanceId}
             options={combinedOptions}
             value={selectedLocation}
             onChange={(option: SingleValue<LocationOption>) => {

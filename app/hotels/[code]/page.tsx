@@ -40,18 +40,16 @@ export default function HotelDetailsPage() {
 
   const [result, setResult] = useState<AoryxSearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const missingError = parsed.payload ? null : (parsed.error ?? "Missing search details.");
+  const finalError = missingError ?? error;
 
   useEffect(() => {
-    if (!parsed.payload) {
-      setResult(null);
-      setError(parsed.error ?? "Missing search details.");
-      setLoading(false);
-      return;
-    }
+    if (!parsed.payload) return;
 
-    setLoading(true);
-    setError(null);
+    queueMicrotask(() => {
+      setError(null);
+      setResult(null);
+    });
 
     postJson<AoryxSearchResult>("/api/aoryx/search", parsed.payload)
       .then((data) => {
@@ -62,9 +60,8 @@ export default function HotelDetailsPage() {
         const message = err instanceof Error ? err.message : "Unable to load this hotel right now.";
         setError(message);
         setResult(null);
-      })
-      .finally(() => setLoading(false));
-  }, [parsed]);
+      });
+  }, [parsed.payload]);
 
   const currentHotel =
     result?.hotels.find((hotel) => hotel.code === hotelCode) ?? result?.hotels[0] ?? null;
@@ -116,7 +113,7 @@ export default function HotelDetailsPage() {
           <div className="results-top">
             <div>
               <p className="eyebrow" style={{ margin: 0 }}>Hotel details</p>
-              <h1 className="section-title font-display" style={{ margin: "6px 0 12px" }}>
+              <h1 className="section-title" style={{ margin: "6px 0 12px" }}>
                 {currentHotel?.name ?? "Selected hotel"}
               </h1>
               <p className="section-subtitle" style={{ margin: 0 }}>
@@ -134,16 +131,16 @@ export default function HotelDetailsPage() {
             </div>
           </div>
 
-          {error && (
+          {finalError && (
             <div className="results-error">
-              <p>{error}</p>
+              <p>{finalError}</p>
               <div className="results-error-actions">
                 <Link href="/" className="btn btn-primary">Back to search</Link>
               </div>
             </div>
           )}
 
-          {!error && (
+          {!finalError && (
             <div className="hotel-hero">
               <div
                 className="hotel-hero-media"
@@ -195,7 +192,7 @@ export default function HotelDetailsPage() {
             </div>
           )}
 
-          {!error && (
+          {!finalError && (
             <div className="hotel-search-card">
               <div>
                 <p className="eyebrow" style={{ margin: 0 }}>Adjust dates & guests</p>
