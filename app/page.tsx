@@ -6,6 +6,7 @@ import HotelCard from "@/components/hotel-card";
 import SearchForm from "@/components/search-form";
 import CurvedLoop from '@/components/CurvedLoop';
 import ShinyText from '@/components/ShinyText';
+import { Marquee } from "@/components/ui/marquee";
 import { useTranslations } from "@/components/language-provider";
 import { hotels } from "@/lib/hotels";
 
@@ -57,13 +58,21 @@ export default function Home() {
             <h2>{t.featured.title}</h2>
             <p>{t.featured.subtitle}</p>
             <Link href={"#"}><span className="material-symbols-rounded">redeem</span>{t.featured.cta}</Link>
-            <div className="hotels">
-              {hotels.map((hotel) => (
-                <HotelCard key={hotel.id} hotel={hotel} copy={t.card} />
-              ))}
-            </div>
           </section>
-          <div className="section-divider" role="separator" aria-hidden="true"></div>
+        </div>
+        <div id="hotels">
+          <Marquee reverse pauseOnHover={true}>
+            {hotels.map((hotel) => (
+              <HotelCard key={hotel.id} hotel={hotel} copy={t.card} />
+            ))}
+          </Marquee>
+          <Marquee  pauseOnHover={true}>
+            {hotels.map((hotel) => (
+              <HotelCard key={hotel.id} hotel={hotel} copy={t.card} />
+            ))}
+          </Marquee>
+        </div>
+        <div className="container">
           {/* Services Section */}
           <section id="services" aria-labelledby="services-title">
             <h2 className="section-title">{t.services.title}</h2>
@@ -108,9 +117,12 @@ export default function Home() {
         <div className="container">
           <section id="trust" aria-labelledby="trust-title">
             <h2>{t.trustStats.title}</h2>
-            <div className="trust-stats-grid" role="list">
+            <div className="grid" role="list">
               {t.trustStats.stats.map((stat) => (
                 <div key={stat.label} className="trust-stat" role="listitem">
+                  <span className="trust-stat-badge" aria-hidden="true">
+                    <span className="material-symbols-rounded">{stat.icon}</span>
+                  </span>
                   <p className="trust-stat-value">{stat.value}</p>
                   <p className="trust-stat-label">{stat.label}</p>
                 </div>
@@ -118,97 +130,47 @@ export default function Home() {
             </div>
           </section>
         </div>
-
         <div className="section-divider" role="separator" aria-hidden="true"></div>
-
         <div className="container">
-          <section id="offers" className="section" aria-labelledby="offers-title">
-            <div className="section-header">
-              <div>
-                <p className="eyebrow" style={{ margin: 0 }}>{t.exclusives.tag}</p>
-                <h2 className="section-title">{t.exclusives.title}</h2>
-                <p className="section-subtitle">{t.exclusives.subtitle}</p>
-              </div>
-              <button className="btn">{t.exclusives.cta}</button>
-            </div>
-            <div className="offers-grid" style={{ marginTop: 12 }}>
+          <div id="offers" className="grid" aria-labelledby="offers-title">
               {t.exclusives.offers.map((offer) => (
-                <div key={offer.title} className="offer-card">
-                  <div className="offer-inner">
-                    <div className="offer-meta">
+                <div key={offer.title} className="card">
+                  <div className="inner">
+                    <div className="meta">
                       <span className="badge">{offer.badge}</span>
                       <span className="eyebrow" style={{ color: "#cbd5e1" }}>
                         {t.labels.exclusive}
                       </span>
                     </div>
-                    <h3 className="heading-sm">{offer.title}</h3>
-                    <p className="text-muted">{offer.description}</p>
-                    <button className="btn btn-primary" type="button">
-                      {offer.cta}
+                    <h3>{offer.title}</h3>
+                    <p>{offer.description}</p>
+                    <button type="button">
+                      {offer.cta} <span className="material-symbols-rounded">arrow_forward</span>
                     </button>
                   </div>
                 </div>
               ))}
-            </div>
-          </section>
+          </div>
 
-          <section id="how" className="section" aria-labelledby="how-title">
-            <div className="section-header" style={{ alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ display: "inline-block", width: 40, height: 4, borderRadius: 4, background: "#7cf2d4" }} />
-                <p className="eyebrow" style={{ margin: 0 }}>
-                  {t.steps.tag}
-                </p>
-              </div>
-            </div>
-            <div className="steps-grid" style={{ marginTop: 16 }}>
-              {t.steps.items.map((step, idx) => (
-                <div key={step.title} className="step-card">
-                  <div className="step-index">{idx + 1}</div>
-                  <h3 className="heading-sm">{step.title}</h3>
-                  <p className="text-muted" style={{ marginTop: 8 }}>{step.description}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section id="perks" className="section" aria-labelledby="perks-title">
-            <div className="perks-grid">
-              <div className="card" style={{ boxShadow: "none" }}>
-                <p className="eyebrow" style={{ margin: 0 }}>{t.perks.tag}</p>
-                <h3 className="section-title" style={{ marginTop: 8 }}>{t.perks.title}</h3>
-                <p className="section-subtitle">{t.perks.subtitle}</p>
-                <div className="cards-grid" style={{ marginTop: 12 }}>
-                  {t.perks.items.map((perk) => (
-                    <div key={perk.title} className="perk-card">
-                      <p className="heading-sm" style={{ fontSize: 16 }}>{perk.title}</p>
-                      <p className="text-muted" style={{ marginTop: 6 }}>{perk.body}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section id="faq" className="section" aria-labelledby="faq-title">
-            <div className="section-header">
-              <div>
-                <p className="eyebrow" style={{ margin: 0 }}>{t.faq.tag}</p>
-                <h3 className="section-title">{t.faq.title}</h3>
-                <p className="section-subtitle">{t.faq.subtitle}</p>
-              </div>
-            </div>
-            <div className="faq-grid" style={{ marginTop: 16 }}>
-              {t.faq.items.map((item) => (
-                <div key={item} className="faq-item">
-                  <div className="faq-icon">✓</div>
-                  <p className="text-muted" style={{ marginTop: 8 }}>{item}</p>
-                </div>
+          <section id="faq" aria-labelledby="faq-title">
+            <h2>{t.perks.title}</h2>
+            <div>
+              {t.perks.items.map((perk) => (
+                <details key={perk.title}>
+                  <summary>
+                    {perk.title}
+                    <span className="material-symbols-rounded" aria-hidden="true">
+                      keyboard_arrow_right
+                    </span>
+                  </summary>
+                  <p>{perk.body}</p>
+                </details>
               ))}
             </div>
           </section>
         </div>
       </main>
+      <footer>&copy; 2026 | MEGATOURS</footer>
     </div>
   );
 }

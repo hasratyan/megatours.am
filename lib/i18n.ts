@@ -37,7 +37,6 @@ export type Translation = {
   services: {
     tag: string;
     title: string;
-    subtitle: string;
     items: { icon: string; title: string; description: string }[];
   };
   bundleSave: {
@@ -51,7 +50,7 @@ export type Translation = {
   trustStats: {
     tag: string;
     title: string;
-    stats: { value: string; label: string }[];
+    stats: { value: string; label: string; icon: string}[];
   };
   exclusives: {
     tag: string;
@@ -124,7 +123,7 @@ const translations: Record<Locale, Translation> = {
         { label: "Աջակցության SLA", value: "<5 րոպե" },
         { label: "Էմիրաթներ", value: "7" },
       ],
-      marquee: " ՀՅՈՒՐԱՆՈՑՆԵՐ  ✦  ՏՐԱՆՍՖԵՐՆԵՐ  ✦  ԹԵՄԱՏԻԿ ՊԱՐԿԵՐԻ ՏՈՄՍԵՐ  ✦  ԷՔՍԿՈՒՐՍԻԱՆԵՐ  ✦ ",
+      marquee: " ՀՅՈՒՐԱՆՈՑՆԵՐ  ✦  ՏՐԱՆՍՖԵՐՆԵՐ  ✦  ԹԵՄԱՏԻԿ ՊԱՐԿԵՐԻ ՏՈՄՍԵՐ  ✦  ԷՔՍԿՈՒՐՍԻԱՆԵՐ  ✦  ԱՎԻԱՏՈՄՍԵՐ  ✦  ԱՊԱՀՈՎԱԳՐՈՒԹՅՈՒՆ  ✦ ",
     },
     search: {
       wherePlaceholder: "Քաղաք, վայր կամ հյուրանոց",
@@ -235,13 +234,13 @@ const translations: Record<Locale, Translation> = {
     services: {
       tag: "Մեր ծառայությունները",
       title: "Ամեն ինչ կատարյալ ճամփորդության համար",
-      subtitle: "Հյուրանոցներ, ավիատոմսեր, տրանսֆերներ, էքսկուրսիաներ և թեմատիկ պարկեր՝ մեկ վայրում լավագույն արժեքներով",
       items: [
         { icon: "directions_car", title: "Տրանսֆերներ", description: "Հարմարավետ օդանավակայանի և քաղաքային տրանսֆերներ" },
         { icon: "hotel", title: "Հյուրանոցներ", description: "480+ պրեմիում ՀԱԷ հյուրանոցներ էքսկլուզիվ գներով" },
         { icon: "tour", title: "Էքսկուրսիաներ", description: "Տուրերի և յուրահատուկ փորձառությունների ընտրանի" },
         { icon: "attractions", title: "Թեմատիկ պարկեր", description: "Տոմսեր առանց հերթի լավագույն ատրակցիոններին" },
         { icon: "flight", title: "Ավիատոմսեր", description: "Լավագույն առաջարկներ տոմսերի վրա ամբողջ աշխարհում" },
+        { icon: "shield_with_heart", title: "Ապահովագրություն", description: "Ապահովագրական ծառայություններ ձեր հանգստի համար" },
       ],
     },
     bundleSave: {
@@ -260,10 +259,10 @@ const translations: Record<Locale, Translation> = {
       tag: "Վստահություն ամբողջ աշխարհում",
       title: "Միացեք հազարավոր գոհ ճամփորդներին",
       stats: [
-        { value: "50,000+", label: "Գոհ հյուրեր" },
-        { value: "4.9/5", label: "Միջին գնահատական" },
-        { value: "24/7", label: "Աջակցություն օնլայն" },
-        { value: "100%", label: "Ապահով ամրագրում" },
+        { value: "50,000+", label: "Գոհ հյուրեր", icon: "people" },
+        { value: "4.9/5", label: "Միջին գնահատական", icon: "star" },
+        { value: "24/7", label: "Աջակցություն օնլայն", icon: "support_agent" },
+        { value: "100%", label: "Ապահով ամրագրում", icon: "security" },
       ],
     },
     accessibility: {
@@ -311,7 +310,7 @@ const translations: Record<Locale, Translation> = {
         { label: "Response SLA", value: "<5 min" },
         { label: "Emirates", value: "7" },
       ],
-      marquee: " STAYS  ✦  TRANSFERS  ✦  THEME PARK TICKETS  ✦  EXCURSIONS  ✦ ",
+      marquee: " STAYS  ✦  TRANSFERS  ✦  THEME PARK TICKETS  ✦  EXCURSIONS  ✦  FLIGHTS  ✦  INSURANCE  ✦ ",
     },
     search: {
       wherePlaceholder: "City, landmark, or hotel",
@@ -422,13 +421,13 @@ const translations: Record<Locale, Translation> = {
     services: {
       tag: "Our Services",
       title: "Everything You Need for Your Perfect Trip",
-      subtitle: "Hotels, flights, transfers, excursions, and theme parks — all in one place with the best prices",
       items: [
         { icon: "hotel", title: "Hotels", description: "480+ premium UAE properties with exclusive rates" },
         { icon: "flight", title: "Flights", description: "Best deals on air tickets worldwide" },
         { icon: "directions_car", title: "Transfers", description: "Comfortable airport and city transfers" },
         { icon: "tour", title: "Excursions", description: "Curated tours and unique experiences" },
         { icon: "attractions", title: "Theme Parks", description: "Skip-the-line tickets to top attractions" },
+        { icon: "shield_with_heart", title: "Insurance", description: "Travel insurance services for your trip" },
       ],
     },
     bundleSave: {
@@ -447,10 +446,10 @@ const translations: Record<Locale, Translation> = {
       tag: "Trusted Worldwide",
       title: "Join Thousands of Happy Travelers",
       stats: [
-        { value: "50,000+", label: "Happy Guests" },
-        { value: "4.9/5", label: "Average Rating" },
-        { value: "24/7", label: "Support Available" },
-        { value: "100%", label: "Secure Booking" },
+        { value: "50,000+", label: "Happy Guests", icon: "people" },
+        { value: "4.9/5", label: "Average Rating", icon: "star" },
+        { value: "24/7", label: "Support Available", icon: "support_agent" },
+        { value: "100%", label: "Secure Booking", icon: "security" },
       ],
     },
     accessibility: {
@@ -498,7 +497,7 @@ const translations: Record<Locale, Translation> = {
         { label: "SLA поддержки", value: "<5 мин" },
         { label: "Эмиратов", value: "7" },
       ],
-      marquee: " ОТЕЛИ  ✦  ТРАНСФЕРЫ  ✦  БИЛЕТЫ В ТЕМАТИЧЕСКИЕ ПАРКИ  ✦  ЭКСКУРСИИ  ✦ ",
+      marquee: " ОТЕЛИ  ✦  ТРАНСФЕРЫ  ✦  БИЛЕТЫ В ТЕМАТИЧЕСКИЕ ПАРКИ  ✦  ЭКСКУРСИИ  ✦  АВИАБИЛЕТЫ  ✦  СТРАХОВКА  ✦ ",
     },
     search: {      
       wherePlaceholder: "Город, место или отель",
@@ -609,13 +608,13 @@ const translations: Record<Locale, Translation> = {
     services: {
       tag: "Наши услуги",
       title: "Всё для идеального путешествия",
-      subtitle: "Отели, авиабилеты, трансферы, экскурсии и парки развлечений — всё в одном месте по лучшим ценам",
       items: [
         { icon: "hotel", title: "Отели", description: "480+ премиальных отелей в ОАЭ с эксклюзивными ценами" },
         { icon: "flight", title: "Авиабилеты", description: "Лучшие предложения на билеты по всему миру" },
         { icon: "directions_car", title: "Трансферы", description: "Комфортные трансферы из аэропорта и по городу" },
         { icon: "tour", title: "Экскурсии", description: "Подборка туров и уникальных впечатлений" },
         { icon: "attractions", title: "Парки развлечений", description: "Билеты без очередей в топовые парки" },
+        { icon: "shield_with_heart", title: "Страховка", description: "Страховые услуги для вашего отдыха" },
       ],
     },
     bundleSave: {
@@ -634,10 +633,10 @@ const translations: Record<Locale, Translation> = {
       tag: "Доверие по всему миру",
       title: "Присоединяйся к тысячам довольных путешественников",
       stats: [
-        { value: "50,000+", label: "Довольных гостей" },
-        { value: "4.9/5", label: "Средний рейтинг" },
-        { value: "24/7", label: "Поддержка онлайн" },
-        { value: "100%", label: "Безопасное бронирование" },
+        { value: "50,000+", label: "Довольных гостей", icon: "people" },
+        { value: "4.9/5", label: "Средний рейтинг", icon: "star" },
+        { value: "24/7", label: "Поддержка онлайн", icon: "support_agent" },
+        { value: "100%", label: "Безопасное бронирование", icon: "security" },
       ],
     },
     accessibility: {

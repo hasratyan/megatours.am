@@ -46,7 +46,7 @@ export default function HotelCard({ hotel, copy }: Props) {
         <div className="footer">
           <div>
             <p className="price">
-              {copy.from} {hotel.currency}{hotel.priceFrom} <small>{copy.perNight}</small>
+              {copy.from} {hotel.currency}{hotel.priceFrom} <span className="old-price">$120</span> <small>{copy.perNight}</small>
             </p>
             <p className="reviews">
               {hotel.reviews.toLocaleString()} {copy.reviews}
