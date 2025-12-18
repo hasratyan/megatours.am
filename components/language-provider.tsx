@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Locale, defaultLocale, getTranslations } from "@/lib/i18n";
+import { createContext, useContext, useEffect, useMemo } from "react";
+import { useParams, usePathname, useRouter } from "next/navigation";
+import { Locale, defaultLocale, locales, getTranslations } from "@/lib/i18n";
 
 type LanguageContextValue = {
   locale: Locale;
@@ -11,21 +12,46 @@ type LanguageContextValue = {
 
 const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
 
-export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocale] = useState<Locale>(() => {
-    if (typeof window === "undefined") return defaultLocale;
-    const stored = window.localStorage.getItem("aoryx-locale") as Locale | null;
-    return stored && ["hy", "en", "ru"].includes(stored) ? stored : defaultLocale;
-  });
+type LanguageProviderProps = {
+  children: React.ReactNode;
+  initialLocale?: Locale;
+};
 
+export function LanguageProvider({ children, initialLocale }: LanguageProviderProps) {
+  const params = useParams();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  // Get locale from URL params, falling back to initialLocale or default
+  const paramLocale = params?.locale as Locale | undefined;
+  const locale: Locale = paramLocale && locales.includes(paramLocale) 
+    ? paramLocale 
+    : (initialLocale ?? defaultLocale);
+
+  const setLocale = (newLocale: Locale) => {
+    // Set cookie for middleware to use on next navigation
+    document.cookie = `aoryx-locale=${newLocale};path=/;max-age=31536000`;
+    
+    // Navigate to the new locale path
+    const segments = pathname.split("/");
+    // Check if first segment is a locale
+    if (segments[1] && locales.includes(segments[1] as Locale)) {
+      segments[1] = newLocale;
+    } else {
+      segments.splice(1, 0, newLocale);
+    }
+    const newPath = segments.join("/") || `/${newLocale}`;
+    router.push(newPath);
+  };
+
+  // Update document lang attribute when locale changes
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("aoryx-locale", locale);
+    document.documentElement.lang = locale;
   }, [locale]);
 
   const value = useMemo<LanguageContextValue>(
     () => ({ locale, setLocale, t: getTranslations(locale) }),
-    [locale],
+    [locale, pathname],
   );
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import * as React from "react";
 // import { Google_Sans } from "next/font/google";
 import 'material-symbols';
+import Header from "@/components/header";
 import Providers from "@/components/providers";
 import "./globals.css";
 
@@ -24,13 +25,11 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
-                                     children,
-                                   }: Readonly<{
+export default function RootLayout({children,}: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="hy">
+    <html suppressHydrationWarning>
     <head>
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -41,7 +40,13 @@ export default function RootLayout({
     </head>
     {/*<body className={`${body.variable} ${display.variable} antialiased`}>*/}
     <body className={`antialiased`}>
-    <Providers>{children}</Providers>
+      <Providers>
+        <div className="page">
+          <Header />
+          {children}
+          <footer>&copy; 2026 | MEGATOURS</footer>
+        </div>
+      </Providers>
     </body>
     </html>
   );

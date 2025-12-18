@@ -63,6 +63,23 @@ const buildDefaultDates = () => {
   return { checkIn, checkOut };
 };
 
+// Helper to format date as YYYY-MM-DD using local timezone (avoids UTC shift)
+const formatDateLocal = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+// Helper to format date for display (consistent between server and client)
+const formatDateDisplay = (date: Date, locale: string): string => {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  // Use consistent format: DD.MM.YYYY for all locales to avoid hydration mismatch
+  return `${day}.${month}.${year}`;
+};
+
 const dateFnsLocales: Record<AppLocale, DateFnsLocale> = {
   hy,
   en: enGB,
@@ -429,8 +446,8 @@ export default function SearchForm({
         countryCode: "AE",
         nationality: "AM",
         currency: "USD",
-        checkInDate: dateRange.startDate.toISOString().split("T")[0],
-        checkOutDate: dateRange.endDate.toISOString().split("T")[0],
+        checkInDate: formatDateLocal(dateRange.startDate),
+        checkOutDate: formatDateLocal(dateRange.endDate),
         rooms: rooms.map((room, index) => ({
           roomIdentifier: index + 1,
           adults: room.adults,
@@ -582,9 +599,9 @@ export default function SearchForm({
               {dateRange.startDate && dateRange.endDate
                 ? (
                   <>
-                    {dateRange.startDate.toLocaleDateString(intlLocale)}{" "}
+                    {formatDateDisplay(dateRange.startDate, intlLocale)}{" "}
                     <span className="material-symbols-rounded">arrow_forward</span>{" "}
-                    {dateRange.endDate.toLocaleDateString(intlLocale)}
+                    {formatDateDisplay(dateRange.endDate, intlLocale)}
                   </>
                 )
                 : "Select dates"}
