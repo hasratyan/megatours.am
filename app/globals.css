@@ -480,12 +480,22 @@ header {
             }
           }
 
-          .language-switcher{
+          .language-switcher, .auth-user{
             gap: 0.5em 0.8em;
             padding: 0.5em;
+            max-width: 100%;
 
             button{
               padding: 0.5em;
+              font-size: 0.95em;
+            }
+
+            .avatar{
+              width: 35px;
+              height: 35px;
+            }
+
+            .auth-name{
               font-size: 0.95em;
             }
           }
@@ -560,7 +570,7 @@ header {
         display:  inline-flex;
         align-items:  center;
         gap:  0.5em;
-        padding: 0.7em 0.9em;
+        padding: 0.6em 0.9em;
         border-radius:  999px;
         background:  rgba(255, 255, 255, 0.05);
         color:  #e2e8f0;
@@ -573,23 +583,29 @@ header {
       }
 
       .auth-user  {
-        display:  flex;
-        align-items:  center;
-        gap:  10px;
-        padding:  8px 12px;
-        border-radius:  999px;
+        display: flex;
+        align-items: center;
+        gap:  0.5em;
+        border-radius: 999px;
         background:  rgba(255, 255, 255, 0.05);
         border:  1px solid var(--border);
+        padding: 0.25em;
+        padding-right: 0.5em;
+        max-width: 300px;
 
-      }
+        .avatar {
+          width: 30px;
+          height: 30px;
+          border-radius: 999px;
+          overflow:  hidden;
+          border:  1px solid rgba(255, 255, 255, 0.15);
+          position:  relative;
+        }
 
-      .avatar  {
-        width:  36px;
-        height:  36px;
-        border-radius:  999px;
-        overflow:  hidden;
-        border:  1px solid rgba(255, 255, 255, 0.15);
-        position:  relative;
+        button{
+          color: #fff;
+          padding: 0;
+        }
       }
 
       .avatar-fallback  {
@@ -604,19 +620,17 @@ header {
         font-size:  12px;
       }
 
-      .auth-meta  {
-        line-height:  1.2;
-      }
-
       .auth-label  {
         font-size:  11px;
         color:  #94a3b8;
       }
 
       .auth-name  {
-        font-size:  13px;
+        font-size:  0.9rem;
         font-weight:  700;
         color:  #e2e8f0;
+        line-height: normal;
+        flex: 1;
       }
     }
   }
@@ -721,7 +735,7 @@ main {
         min-width: 300px;
       }
 
-      .field:has(.guests){
+      .field:has(.guests), .field:has(.rooms){
         color: #fff;
         background-color: #ffffff1a;
         border: 1px solid #ffffff4d;
@@ -739,7 +753,7 @@ main {
           padding-block: 0.5em;
         }
 
-        .guests{
+        .guests, .rooms{
           display: flex;
           align-items: center;
           gap: 0.5em;
@@ -1976,7 +1990,8 @@ main.details{
         gap: 0.5em 1em;
         flex-wrap: wrap;
         border-top: 1px solid #fff5;
-        padding-top: 0.5em;
+        padding-top: 1em;
+        margin-top: 0.5em;
 
         & > a{
           display: flex;
@@ -2009,6 +2024,18 @@ main.details{
         }
       }
     }
+    .tripadvisor{
+      display: flex;
+      gap: 0.5em;
+      align-items: center;
+      font-weight: bold;
+
+      @media screen and (min-width:1024px) {
+        background: linear-gradient(#0000001f, #00000036);
+        padding: 1em;
+        border-radius: 1.5em;
+      }
+    }
   }
 
   .image-gallery-wrapper{
@@ -2035,6 +2062,7 @@ main.details{
       grid-auto-flow: column;
       grid-auto-columns: max-content;
       padding-block: 1em;
+      justify-content: center;
       gap: 1.5em;
       anchor-name: --carousel;
 
@@ -2075,6 +2103,25 @@ main.details{
         max-width: 90%;
         max-height: 90%;
 
+        @media screen and (max-width: 1024px){
+          max-width: 100%;
+          max-height: 100%;
+          width: 100%;
+
+          img{
+            width: calc(100% - 3em)!important;
+            margin: auto;
+          }
+
+          .prev{
+            left: 35px!important;
+          }
+
+          .next{
+            right: 35px!important;
+          }
+        }
+
         img{
           object-fit: contain;
           border-radius: 1em;
@@ -2087,11 +2134,10 @@ main.details{
 
         button{
           position: absolute;
-          width: auto;
           padding: 0;
-          background: none;
-          font-size: 24px;
+          font-size: 20px;
           color: #fff;
+          backdrop-filter: blur(5px) brightness(0.8);
         }
 
         .close{
@@ -2136,27 +2182,59 @@ main.details{
   }
 
   .room-options{
-    margin-top: 2em;
     color: #fff;
+    .loader-container:is(:only-child){
+      padding-block: 7em 9em;
+    }
 
     .room-options-header{
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 1em;
+      flex-wrap: wrap;
 
       h2{
         font-size: 2em;
         font-weight: 600;
-        margin: 0;
         text-align: left;
+      }
+
+      .room-options-controls{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75em;
+        align-items: center;
+        
+        .room-filter{
+          display: flex;
+          align-items: center;
+          gap: 0.5em;
+          color: #cbd5e1;
+          font-size: 0.9rem;
+          select:disabled{
+            opacity: 0.6;
+          }
+
+          select{
+            color: #e2e8f0;
+            font: inherit;
+            cursor: pointer;
+            background: #ffffff14;
+            border: 1px solid #fff3;
+            border-radius: 999px;
+            padding: .55em .9em;
+            box-shadow: 0 16px 30px -20px #0009;
+          }
+        }
       }
     }
 
     .room-options-empty,
     .room-options-error{
       color: #cbd5e1;
-      margin-top: 0.75em;
+      margin-top: 0.8em;
+      text-align: center;
     }
 
     .room-options-error{
@@ -2164,7 +2242,7 @@ main.details{
     }
 
     .room-options-list{
-      margin-top: 1.2em;
+      margin-top: 1.5em;
       display: grid;
       gap: 1em;
     }
@@ -2177,7 +2255,7 @@ main.details{
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 1.25em;
-      padding: 1.2em 1.4em;
+      padding: 1.25em 1.5em;
       box-shadow: 0 12px 30px -25px rgba(0, 0, 0, 0.6);
     }
 
@@ -2191,8 +2269,33 @@ main.details{
       min-width: 160px;
     }
 
+    .room-card-actions{
+      margin-top: 0.75em;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .room-book-button{
+      color: #052e2b;
+      background: linear-gradient(135deg, #7cf2d4, #34d399);
+      box-shadow: 0 12px 30px -20px rgba(52, 211, 153, 0.7);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+
+      &:hover{
+        transform: translateY(-1px);
+        box-shadow: 0 16px 30px -22px rgba(52, 211, 153, 0.85);
+      }
+
+      &:disabled{
+        cursor: not-allowed;
+        opacity: 0.55;
+        transform: none;
+        box-shadow: none;
+      }
+    }
+
     h3{
-      margin: 0 0 0.4em;
+      margin-bottom: 0.5em;
       font-size: 1.1rem;
       font-weight: 600;
     }
@@ -2206,10 +2309,11 @@ main.details{
     .room-chip{
       border: 1px solid rgba(255, 255, 255, 0.2);
       border-radius: 999px;
-      padding: 0.25em 0.65em;
-      font-size: 0.75rem;
+      padding: 0.5em 0.8em;
+      font-size: 0.85rem;
       color: #e2e8f0;
       background: rgba(255, 255, 255, 0.08);
+      line-height: normal;
     }
 
     .room-chip.refundable{
@@ -2235,11 +2339,30 @@ main.details{
       font-size: 1.2rem;
       font-weight: 600;
       color: #fff;
+      span{
+        font-size: 0.8em;
+        opacity: 0.6;
+      }
     }
 
     .room-price-muted{
       font-size: 0.95rem;
       color: #cbd5e1;
+    }
+
+    .room-breakdown{
+      margin-top: 0.5em;
+      display: flex;
+      justify-content: end;
+      gap: 0.5em;
+      font-size: 0.9rem;
+      color: #cbd5e1;
+    }
+
+    .room-breakdown-item{
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5em;
     }
 
     @media screen and (max-width: 640px){
@@ -2250,12 +2373,23 @@ main.details{
       .room-card-price{
         text-align: left;
       }
+
+      .room-card-actions{
+        justify-content: flex-start;
+      }
     }
   }
 
   .search{
     margin-block: 2em;
     gap: 1em;
+
+    form{
+      @media screen and (max-width: 450px) {
+        width: 100%;
+      }
+    }
+
     h2{
       color: #fff;
       font-weight: 600;
@@ -2264,8 +2398,341 @@ main.details{
     }
   }
 
+  .amenities-wrapper{
+    margin-block: 2em;
+
+    h2{
+      color: #fff;
+      font-weight: 600;
+      font-size: 2em;
+      margin-bottom: 0.5em;
+    }
+
+    .amenities{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75em;
+      line-height: normal;
+      max-height: 150px;
+      transition: max-height 0.35s ease;
+      &:has( + .amenities-toggle){
+        --bg-fade-size: 50px;
+        mask-image: linear-gradient(to bottom, #000, #000 var(--bg-fade-size), #000 calc(100% - var(--bg-fade-size)), transparent);
+      }
+
+      span{
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 999px;
+        padding: 0.35em 0.8em;
+        font-size: 0.95em;
+        color: #e2e8f0;
+        background: rgba(255, 255, 255, 0.08);
+        line-height: inherit;
+      }
+    }
+
+    .amenities.is-expanded{
+      max-height: 800px;
+    }
+
+    .amenities-wrapper{
+      margin: 1.5em 0;
+    }
+
+    .amenities-toggle{
+      color: #e2e8f0;
+      padding: 0;
+
+      &:hover{
+        color: #fff;
+      }
+
+      .material-symbols-rounded{
+        font-size: 1.5em;
+      }
+    }
+  }
+
+  .booking-popover{
+    padding: 1rem;
+
+    h2{
+      background: #ffffff14;
+      padding: 0.8em 3em 0.8em 1em;
+      border-radius: 1em;
+      box-shadow: 0 25px 20px -15px #0000008a;
+      z-index: 1;
+      position: relative;
+    }
+
+    .close{
+      top: 1.75em;
+      right: 1.75em;
+      z-index: 2;
+    }
+  }
+
+  .booking-body{
+    max-height: calc(90vh - 6rem);
+    overflow-y: auto;
+    padding-right: 0.25em;
+  }
+
+  .booking-room{
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 1em;
+    padding: 1em;
+    margin-top: 1em;
+  }
+
+  .booking-room legend{
+    font-weight: 600;
+    padding-inline: 1em;
+  }
+
+  .booking-guest{
+    display: grid;
+    grid-template-columns: 90px 1fr 1fr 90px;
+    gap: 1em;
+    align-items: center;
+
+    & + &{
+      margin-top: 1em;
+    }
+
+    input,
+    select{
+      width: 100%;
+      padding: 0.5em 0.8em;
+      border-radius: 0.5em;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    input::placeholder{
+      color: #94a3b8;
+    }
+  }
+
+  .booking-room-price{
+    margin-top: 1em;
+    font-size: 0.9rem;
+    color: #cbd5e1;
+  }
+
+  .booking-room-details{
+    margin-top: 1em;
+    display: grid;
+    gap: 1em;
+  }
+
+  .booking-detail-grid{
+    display: grid;
+    gap: 0.5em;
+    font-size: 0.9rem;
+    color: #e2e8f0;
+  }
+
+  .booking-policy,
+  .booking-remarks{
+    font-size: 0.9rem;
+    color: #cbd5e1;
+
+    h4{
+      font-size: 1rem;
+      color: #f8fafc;
+      margin-bottom: 0.5em;
+      font-weight: 600;
+    }
+  }
+
+  .remark-grid{
+    display: grid;
+    gap: 1em;
+  }
+
+  .remark-card{
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 1em;
+    padding: 1em;
+    background: rgba(15, 23, 42, 0.6);
+    display: grid;
+    gap: 0.5em;
+  }
+
+  .remark-chip{
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: #e2e8f0;
+    border-bottom: 1px solid #fff3;
+    align-items: center;
+    gap: .5em;
+    padding-bottom: 1em;
+    margin-bottom: 0.5em;
+    display: inline-flex;
+    line-height: normal;
+  }
+
+  .remark-card.mandatory{
+    border-color: rgba(248, 113, 113, 0.35);
+    background: rgba(248, 113, 113, 0.08);
+  }
+
+  .remark-card.warning{
+    border-color: rgba(253, 224, 71, 0.35);
+    background: rgba(253, 224, 71, 0.08);
+  }
+
+  .remark-card.info{
+    border-color: rgba(148, 163, 184, 0.35);
+    background: rgba(148, 163, 184, 0.08);
+  }
+
+  .remark-card.note{
+    border-color: rgba(56, 189, 248, 0.35);
+    background: rgba(56, 189, 248, 0.08);
+  }
+
+  .remark-card.mandatory .remark-chip{
+    color: #fecaca;
+    border-color: rgba(248, 113, 113, 0.45);
+  }
+
+  .remark-card.warning .remark-chip{
+    color: #fef08a;
+    border-color: rgba(253, 224, 71, 0.45);
+  }
+
+  .remark-card.note .remark-chip{
+    color: #bae6fd;
+    border-color: rgba(56, 189, 248, 0.45);
+  }
+
+  .policy-summary{
+    color: #e2e8f0;
+    margin: 0;
+  }
+
+  .policy-conditions{
+    padding-left: 1.1em;
+    display: grid;
+    gap: 0.35em;
+    color: #cbd5e1;
+  }
+
+  .remark-text{
+    color: #e2e8f0;
+    display: grid;
+    gap: 0.5em;
+
+    ul{
+      padding-left: 1.25em;
+      display: grid;
+      gap: 0.5em;
+      list-style: disc;
+    }
+  }
+
+  .booking-warning{
+    color: #fde68a;
+    margin-bottom: 0.75em;
+  }
+
+  .booking-confirm{
+    display: flex;
+    gap: 0.5em;
+    align-items: center;
+    margin-bottom: 1em;
+    color: #e2e8f0;
+  }
+
+  .booking-error{
+    color: #fecaca;
+    margin-bottom: 1em;
+  }
+
+  .booking-summary{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1.25em;
+    font-weight: 600;
+  }
+
+  .booking-note{
+    margin-top: 0.75em;
+    color: #94a3b8;
+    font-size: 0.85rem;
+  }
+
+  .booking-actions{
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75em;
+    margin-top: 1.25em;
+    flex-wrap: wrap;
+  }
+
+  .booking-primary,
+  .booking-secondary{
+    border-radius: 999px;
+    padding: 0.6em 1.6em;
+    font-weight: 600;
+  }
+
+  .booking-primary{
+    color: #052e2b;
+    background: linear-gradient(135deg, #7cf2d4, #34d399);
+  }
+
+  .booking-secondary{
+    color: #e2e8f0;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .booking-success{
+    margin-top: 0.5em;
+    color: #e2e8f0;
+    display: grid;
+    gap: 0.5em;
+  }
+
+  .payment-status{
+    padding: 4rem 0 6rem;
+    color: #e2e8f0;
+    display: grid;
+    gap: 0.75em;
+  }
+
+  .payment-link{
+    width: fit-content;
+    border-radius: 999px;
+    padding: 0.6em 1.6em;
+    font-weight: 600;
+    color: #052e2b;
+    background: linear-gradient(135deg, #7cf2d4, #34d399);
+    text-decoration: none;
+  }
+
+  @media screen and (max-width: 640px){
+    .booking-guest{
+      grid-template-columns: 1fr;
+    }
+
+    .booking-actions{
+      justify-content: stretch;
+    }
+
+    .booking-primary,
+    .booking-secondary{
+      width: 100%;
+      text-align: center;
+    }
+  }
+
   .popover{
-    width: min(900px, calc(100vw - 2rem));
+    width: min(1000px, calc(100vw - 2rem));
 
     iframe{
       width: 100%;

@@ -36,15 +36,12 @@ export default function AuthActions() {
             <div className="avatar-fallback">{initials(session.user.name)}</div>
           )}
         </div>
-        <div className="auth-meta">
-          <div className="auth-label">{t.auth.signedIn}</div>
-          <div className="auth-name">{session.user.name || "Traveler"}</div>
-        </div>
+        <div className="auth-name">{session.user.name || "Traveler"}</div>
         <button
           onClick={() => signOut({ callbackUrl: "/" })}
           type="button"
         >
-          {t.auth.signOut}
+          <span className={"material-symbols-rounded"}>logout</span>
         </button>
       </div>
     );

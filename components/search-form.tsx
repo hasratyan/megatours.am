@@ -42,6 +42,7 @@ export type SearchCopy = {
   defaultGuests: number;
   submitIdle: string;
   submitLoading: string;
+  roomsLabel?: string;
 };
 
 // API response type for destinations
@@ -166,6 +167,7 @@ type Props = {
   presetHotel?: { id: string; label?: string };
   initialDateRange?: { startDate: Date; endDate: Date };
   initialRooms?: RoomConfig[];
+  showRoomCount?: boolean;
   onSubmitSearch?: (
     payload: AoryxSearchParams,
     params: URLSearchParams
@@ -179,6 +181,7 @@ export default function SearchForm({
   presetHotel,
   initialDateRange,
   initialRooms,
+  showRoomCount = false,
   onSubmitSearch,
 }: Props) {
   const defaults = useMemo(() => buildDefaultDates(), []);
@@ -440,36 +443,71 @@ export default function SearchForm({
   const updateGuests = useCallback(
     (field: "adults" | "children", value: number) => {
       setRooms((prev) => {
-        const room = prev[0];
-        if (field === "children") {
-          const newChildCount = Math.max(0, Math.min(4, value));
-          const currentAges = room.childAges;
-          return [{
-            ...room,
-            children: newChildCount,
-            childAges:
-              newChildCount > currentAges.length
-                ? [...currentAges, ...Array(newChildCount - currentAges.length).fill(5)]
-                : currentAges.slice(0, newChildCount),
-          }];
-        } else {
-          return [{ ...room, adults: Math.max(1, Math.min(6, value)) }];
+        const room = prev[0] ?? { adults: 2, children: 0, childAges: [] };
+        const roomCount = Math.max(1, prev.length);
+        const updatedRoom =
+          field === "children"
+            ? (() => {
+                const newChildCount = Math.max(0, Math.min(4, value));
+                const currentAges = room.childAges;
+                return {
+                  ...room,
+                  children: newChildCount,
+                  childAges:
+                    newChildCount > currentAges.length
+                      ? [...currentAges, ...Array(newChildCount - currentAges.length).fill(5)]
+                      : currentAges.slice(0, newChildCount),
+                };
+              })()
+            : { ...room, adults: Math.max(1, Math.min(6, value)) };
+
+        if (!showRoomCount) {
+          return [updatedRoom, ...prev.slice(1)];
         }
+
+        return Array.from({ length: roomCount }, () => ({
+          ...updatedRoom,
+          childAges: [...updatedRoom.childAges],
+        }));
       });
     },
-    []
+    [showRoomCount]
   );
+
+  const updateRoomCount = useCallback((value: number) => {
+    const count = Math.max(1, Math.min(4, value));
+    setRooms((prev) => {
+      const room = prev[0] ?? { adults: 2, children: 0, childAges: [] };
+      const childCount = Math.max(0, room.children);
+      const childAges = room.childAges.slice(0, childCount);
+      return Array.from({ length: count }, () => ({
+        adults: room.adults,
+        children: childCount,
+        childAges: [...childAges],
+      }));
+    });
+  }, []);
 
   const updateChildAge = useCallback(
     (childIndex: number, age: number) => {
       setRooms((prev) => {
-        const room = prev[0];
+        const room = prev[0] ?? { adults: 2, children: 0, childAges: [] };
         const newAges = [...room.childAges];
         newAges[childIndex] = Math.max(0, Math.min(17, age));
-        return [{ ...room, childAges: newAges }];
+        const updatedRoom = { ...room, childAges: newAges };
+
+        if (!showRoomCount) {
+          return [updatedRoom, ...prev.slice(1)];
+        }
+
+        const roomCount = Math.max(1, prev.length);
+        return Array.from({ length: roomCount }, () => ({
+          ...updatedRoom,
+          childAges: [...updatedRoom.childAges],
+        }));
       });
     },
-    []
+    [showRoomCount]
   );
 
   // Submit handler
@@ -514,7 +552,7 @@ export default function SearchForm({
       if (searchPayload.hotelCode) params.set("hotelCode", searchPayload.hotelCode);
       params.set("countryCode", searchPayload.countryCode);
       params.set("nationality", searchPayload.nationality);
-      params.set("currency", searchPayload.currency);
+      params.set("currency", searchPayload.currency ?? "USD");
       params.set("checkInDate", searchPayload.checkInDate);
       params.set("checkOutDate", searchPayload.checkOutDate);
       params.set("rooms", JSON.stringify(searchPayload.rooms));
@@ -757,6 +795,26 @@ export default function SearchForm({
           </div>
         )}
       </div>
+      {showRoomCount && (
+        <div className="field">
+          <div className="rooms">
+            
+              <label>
+                <span className="material-symbols-rounded">hotel</span>
+                {copy.roomsLabel ?? "Rooms"}
+                <input
+                  type="number"
+                  name="rooms"
+                  min={1}
+                  max={4}
+                  value={rooms.length}
+                  onChange={(e) => updateRoomCount(parseInt(e.target.value) || 1)}
+                />
+              </label>
+        
+            </div>
+        </div>
+      )}
 
       {/* Error Message */}
       {searchError && (

@@ -12,12 +12,17 @@ Next.js 16 + Tailwind CSS landing for AORYX hotel bookings with Google sign-in v
 `npm install`
 
 2) Create a `.env.local` from the sample  
-See `.env.example` and set:
+Set:
 ```
 NEXTAUTH_SECRET=generated-secret
 NEXTAUTH_URL=http://localhost:3000
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
+MONGODB_URI=your-mongodb-uri
+MONGODB_DB=megatours_am
+IDRAM_REC_ACCOUNT=your-idram-id
+IDRAM_SECRET_KEY=your-idram-secret
+IDRAM_LANGUAGE=EN
 ```
 
 3) Start dev server  
@@ -28,6 +33,12 @@ GOOGLE_CLIENT_SECRET=your-client-secret
 - Authorized origin: `http://localhost:3000`
 - Authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
 - Copy the client ID/secret into `.env.local`.
+
+## Idram payment setup
+- Provide Idram with URLs to configure:
+  - RESULT_URL: `http://localhost:3000/api/payments/idram/result`
+  - SUCCESS_URL: `http://localhost:3000/payment/success`
+  - FAIL_URL: `http://localhost:3000/payment/fail`
 
 ## Scripts
 - `npm run dev` – start Next.js dev server.

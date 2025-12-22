@@ -131,6 +131,7 @@ export interface AoryxHotelInformation {
   CurrencyCode?: string | null;
   ImageUrl?: string | null;
   ImageUrls?: string[] | null;
+  MasterHotelAmenities?: unknown;
   [key: string]: unknown;
 }
 
@@ -154,10 +155,15 @@ export interface AoryxRoomDetailItem {
   RoomName?: string | null;
   RoomType?: string | null;
   RoomIndex?: string | number | null;
+  RoomIdentifier?: number | string | null;
+  RateType?: string | null;
   RateKey?: string | null;
+  GroupCode?: number | string | null;
+  SupplierGroupCode?: number | string | null;
   BoardType?: string | null;
   MealType?: string | null;
   MealPlan?: string | null;
+  Meal?: string | null;
   Refundable?: boolean | string | number | null;
   IsRefundable?: boolean | string | number | null;
   NonRefundable?: boolean | string | number | null;
@@ -167,6 +173,11 @@ export interface AoryxRoomDetailItem {
   Price?: unknown;
   NetRate?: unknown;
   RoomRate?: unknown;
+  Adult?: number | string | null;
+  Children?: AoryxRoomChildren | null;
+  BedTypes?: unknown;
+  Policies?: unknown;
+  Remarks?: unknown;
   AvailableRooms?: number | string | null;
   CancellationPolicy?: unknown;
   [key: string]: unknown;
@@ -297,6 +308,7 @@ export interface AoryxHotelInfoResult {
   currencyCode: string | null;
   imageUrl: string | null;
   imageUrls: string[];
+  masterHotelAmenities: string[] | null;
   address: {
     line1: string | null;
     line2: string | null;
@@ -326,4 +338,110 @@ export interface AoryxRoomOption {
   totalPrice: number | null;
   availableRooms: number | null;
   cancellationPolicy: string | null;
+  meal?: string | null;
+  rateKey?: string | null;
+  groupCode?: number | null;
+  roomIdentifier?: number | null;
+  rateType?: string | null;
+  price?: AoryxRoomPrice | null;
+  adultCount?: number | null;
+  childCount?: number | null;
+  childAges?: number[] | null;
+  bedTypes?: string[];
+  inclusions?: string[];
+  policies?: AoryxRoomPolicy[];
+  remarks?: AoryxRoomRemark[];
+}
+
+export interface AoryxRoomPrice {
+  gross: number | null;
+  net: number | null;
+  tax: number | null;
+}
+
+export interface AoryxRoomPolicyCondition {
+  fromDate: string | null;
+  toDate: string | null;
+  timezone: string | null;
+  unit: number | null;
+  text: string | null;
+  fromTime: string | null;
+  toTime: string | null;
+  percentage: number | null;
+  nights: number | null;
+  fixed: number | null;
+  applicableOn: string | null;
+}
+
+export interface AoryxRoomPolicy {
+  type: string | null;
+  textCondition: string | null;
+  currency: string | null;
+  conditions: AoryxRoomPolicyCondition[];
+}
+
+export interface AoryxRoomRemark {
+  type: string | null;
+  text: string | null;
+}
+
+export interface AoryxRoomDetailsResult {
+  sessionId: string;
+  currency: string | null;
+  rooms: AoryxRoomOption[];
+}
+
+export interface AoryxPreBookResult {
+  sessionId: string;
+  isBookable: boolean | null;
+  isSoldOut: boolean | null;
+  isPriceChanged: boolean | null;
+  currency: string | null;
+  rooms: AoryxRoomOption[];
+}
+
+export interface AoryxBookingGuestPayload {
+  title?: string | null;
+  titleCode?: string | null;
+  firstName: string;
+  lastName: string;
+  isLeadGuest?: boolean;
+  type: "Adult" | "Child";
+  age: number;
+}
+
+export interface AoryxBookingRoomPayload {
+  roomIdentifier: number;
+  adults: number;
+  childrenAges: number[];
+  rateKey: string;
+  guests: AoryxBookingGuestPayload[];
+  price: AoryxRoomPrice;
+}
+
+export interface AoryxBookingPayload {
+  sessionId: string;
+  hotelCode: string;
+  destinationCode: string;
+  countryCode: string;
+  currency: string;
+  nationality: string;
+  customerRefNumber: string;
+  groupCode: number;
+  rooms: AoryxBookingRoomPayload[];
+  acknowledgePriceChange?: boolean;
+}
+
+export interface AoryxBookingResult {
+  sessionId: string;
+  status: string | null;
+  hotelConfirmationNumber: string | null;
+  adsConfirmationNumber: string | null;
+  supplierConfirmationNumber: string | null;
+  customerRefNumber: string | null;
+  rooms: Array<{
+    roomIdentifier: number | null;
+    rateKey: string | null;
+    status: string | null;
+  }>;
 }
