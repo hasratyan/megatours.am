@@ -6985,6 +6985,7 @@ main.payment-status{
 }
 
 .results-notice,  .error-container, .results-empty{
+  min-height: 50vh;
   color: #e2e8f0;
   display: flex;
   flex-direction: column;
@@ -6992,6 +6993,7 @@ main.payment-status{
   gap: 1em;
   text-align: center;
   place-self: center;
+  justify-content: center;
   p{
     padding: 1em;
     border-radius: 1em;
@@ -7293,6 +7295,24 @@ select:focus-visible {
       }
     }
 
+    .package-builder__toggle-loading{
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: 999px;
+      background: rgba(14, 116, 144, 0.25);
+      border: 1px solid rgba(56, 189, 248, 0.5);
+      font-size: 0.7em;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+
+      .material-symbols-rounded{
+        font-size: 1em;
+        animation: package-builder-spin 1s linear infinite;
+      }
+    }
+
     &:hover{
       background: #199e70;
       box-shadow: 0 20px 40px #189e7085;
@@ -7535,6 +7555,12 @@ select:focus-visible {
     }
   }
 
+  .package-builder__item.is-loading .package-builder__item-button{
+    border-color: rgba(56, 189, 248, 0.8);
+    box-shadow: 0 20px 50px -30px rgba(56, 189, 248, 0.7);
+    cursor: progress;
+  }
+
   .package-builder__item.is-locked .package-builder__item-button{
     opacity: 0.5;
     cursor: not-allowed;
@@ -7621,6 +7647,29 @@ select:focus-visible {
     }
   }
 
+  .package-builder__actions.is-loading{
+    opacity: 1;
+    pointer-events: none;
+  }
+
+  .package-builder__action-loading{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.75rem 1rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    background: rgba(15, 118, 110, 0.35);
+    border: 1px solid rgba(45, 212, 191, 0.45);
+  }
+
+  .package-builder__action-spinner{
+    animation: package-builder-spin 1s linear infinite;
+  }
+
   .package-builder__view{
     color: #bfdbfe;
     background: #10233aeb;
@@ -7662,6 +7711,15 @@ select:focus-visible {
     &.is-open{
       top: calc(env(safe-area-inset-bottom) + 1rem)
     }
+  }
+}
+
+@keyframes package-builder-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(1turn);
   }
 }
 
@@ -7981,6 +8039,9 @@ select:focus-visible {
   color: rgba(226, 232, 240, 0.9);
   input[value="idram"]{
     accent-color: #f97316;
+  }
+  input[value="card"]{
+    accent-color: #38bdf8;
   }
 }
 

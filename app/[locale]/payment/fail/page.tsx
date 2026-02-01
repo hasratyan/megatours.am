@@ -49,7 +49,10 @@ export default async function PaymentFailPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const { EDP_BILL_NO } = await searchParams;
+  const { EDP_BILL_NO, orderId, orderNumber, mdOrder } = await searchParams;
+  const orderIdParam =
+    typeof orderId === "string" ? orderId : typeof mdOrder === "string" ? mdOrder : null;
+  const orderNumberParam = typeof orderNumber === "string" ? orderNumber : null;
   const locale = await resolveLocaleFromCookie();
   const t = getTranslations(locale);
   const session = await getServerSession(authOptions);
@@ -58,11 +61,17 @@ export default async function PaymentFailPage({
   let hotelName = null;
   let errorKey: keyof typeof t.payment.errors | null = null;
 
-  if (typeof EDP_BILL_NO !== "string") {
+  if (typeof EDP_BILL_NO !== "string" && !orderIdParam && !orderNumberParam) {
     errorKey = "invalidBill";
   } else {
     const db = await getDb();
-    bookingRecord = await db.collection("idram_payments").findOne({ billNo: EDP_BILL_NO });
+    if (typeof EDP_BILL_NO === "string") {
+      bookingRecord = await db.collection("idram_payments").findOne({ billNo: EDP_BILL_NO });
+    } else if (orderIdParam) {
+      bookingRecord = await db.collection("vpos_payments").findOne({ orderId: orderIdParam });
+    } else if (orderNumberParam) {
+      bookingRecord = await db.collection("vpos_payments").findOne({ orderNumber: orderNumberParam });
+    }
 
     if (!bookingRecord) {
       errorKey = "invalidBill";

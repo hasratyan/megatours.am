@@ -65,6 +65,12 @@ type IdramCheckoutResponse = {
   billNo: string;
 };
 
+type VposCheckoutResponse = {
+  formUrl: string;
+  orderId: string;
+  orderNumber: string;
+};
+
 const intlLocales: Record<AppLocale, string> = {
   hy: "hy-AM",
   en: "en-GB",
@@ -497,12 +503,6 @@ export default function PackageCheckoutClient() {
   const guestNameSyncRef = useRef(new Map<string, { first: string; last: string }>());
   const insuranceSyncRef = useRef<string | null>(null);
   const efesRaStatesLoadedRef = useRef(false);
-  const [card, setCard] = useState({
-    name: "",
-    number: "",
-    expiry: "",
-    cvc: "",
-  });
   const isDevEnvironment = process.env.NODE_ENV === "development";
   const countryOptions = useMemo(
     () => (isMounted ? getCountryOptions(intlLocale) : []),
@@ -1383,11 +1383,6 @@ export default function PackageCheckoutClient() {
       return;
     }
 
-    if (paymentMethod !== "idram") {
-      setPaymentError(t.packageBuilder.checkout.errors.cardUnavailable);
-      return;
-    }
-
     let insuranceTravelersPayload: BookingInsuranceTraveler[] | null = null;
     let insuranceQuote: EfesQuoteResult | null = null;
     if (insuranceActive) {
@@ -1596,25 +1591,37 @@ export default function PackageCheckoutClient() {
     setPaymentLoading(true);
     try {
       const requestPayload = { ...payload, locale };
-      const checkout = await postJson<IdramCheckoutResponse>(
-        "/api/payments/idram/checkout",
+      if (paymentMethod === "idram") {
+        const checkout = await postJson<IdramCheckoutResponse>(
+          "/api/payments/idram/checkout",
+          requestPayload
+        );
+        if (typeof document === "undefined") {
+          throw new Error(t.packageBuilder.checkout.errors.paymentFailed);
+        }
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = checkout.action;
+        Object.entries(checkout.fields).forEach(([name, value]) => {
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = name;
+          input.value = value;
+          form.appendChild(input);
+        });
+        document.body.appendChild(form);
+        form.submit();
+        return;
+      }
+
+      const checkout = await postJson<VposCheckoutResponse>(
+        "/api/payments/vpos/checkout",
         requestPayload
       );
-      if (typeof document === "undefined") {
+      if (typeof window === "undefined") {
         throw new Error(t.packageBuilder.checkout.errors.paymentFailed);
       }
-      const form = document.createElement("form");
-      form.method = "POST";
-      form.action = checkout.action;
-      Object.entries(checkout.fields).forEach(([name, value]) => {
-        const input = document.createElement("input");
-        input.type = "hidden";
-        input.name = name;
-        input.value = value;
-        form.appendChild(input);
-      });
-      document.body.appendChild(form);
-      form.submit();
+      window.location.assign(checkout.formUrl);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : t.packageBuilder.checkout.errors.paymentFailed;
@@ -2184,11 +2191,6 @@ export default function PackageCheckoutClient() {
       guestDetailsValid &&
       insuranceDetailsValid &&
       !insuranceQuoteLoading &&
-      (paymentMethod === "idram" ||
-        (card.name.trim() &&
-          card.number.trim() &&
-          card.expiry.trim() &&
-          card.cvc.trim())) &&
       !paymentLoading
   );
 
@@ -3068,7 +3070,7 @@ export default function PackageCheckoutClient() {
                   />
                   <span>{t.packageBuilder.checkout.methodIdram}</span>
                 </label>
-                {/* <label className="checkout-radio">
+                <label className="checkout-radio">
                   <input
                     type="radio"
                     name="payment-method"
@@ -3077,66 +3079,7 @@ export default function PackageCheckoutClient() {
                     onChange={() => setPaymentMethod("card")}
                   />
                   <span>{t.packageBuilder.checkout.methodCard}</span>
-                </label> */}
-                {paymentMethod === "card" && (
-                  <div className="checkout-card-grid">
-                    <label className="checkout-field checkout-field--full">
-                      <span>{t.packageBuilder.checkout.cardName}</span>
-                      <input
-                        className="checkout-input"
-                        type="text"
-                        value={card.name}
-                        onChange={(event) =>
-                          setCard((prev) => ({ ...prev, name: event.target.value }))
-                        }
-                        autoComplete="cc-name"
-                        required
-                      />
-                    </label>
-                    <label className="checkout-field checkout-field--full">
-                      <span>{t.packageBuilder.checkout.cardNumber}</span>
-                      <input
-                        className="checkout-input"
-                        type="text"
-                        value={card.number}
-                        onChange={(event) =>
-                          setCard((prev) => ({ ...prev, number: event.target.value }))
-                        }
-                        autoComplete="cc-number"
-                        inputMode="numeric"
-                        required
-                      />
-                    </label>
-                    <label className="checkout-field">
-                      <span>{t.packageBuilder.checkout.cardExpiry}</span>
-                      <input
-                        className="checkout-input"
-                        type="text"
-                        value={card.expiry}
-                        onChange={(event) =>
-                          setCard((prev) => ({ ...prev, expiry: event.target.value }))
-                        }
-                        autoComplete="cc-exp"
-                        inputMode="numeric"
-                        required
-                      />
-                    </label>
-                    <label className="checkout-field">
-                      <span>{t.packageBuilder.checkout.cardCvc}</span>
-                      <input
-                        className="checkout-input"
-                        type="text"
-                        value={card.cvc}
-                        onChange={(event) =>
-                          setCard((prev) => ({ ...prev, cvc: event.target.value }))
-                        }
-                        autoComplete="cc-csc"
-                        inputMode="numeric"
-                        required
-                      />
-                    </label>
-                  </div>
-                )}
+                </label>
               </div>
               <label className="checkout-terms">
                 <input
