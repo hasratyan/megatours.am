@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useLanguage } from "@/components/language-provider";
@@ -35,6 +35,9 @@ type ServiceItem = {
 
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
+const NAVIGATION_CHECK_MS = 200;
+const MIN_LOADING_TICKS = 2;
+const MAX_LOADING_TICKS = 20;
 
 type SessionWarningKey = "ten" | "five" | "expired";
 
@@ -66,9 +69,14 @@ export default function PackageBuilder() {
   const [serviceFlags, setServiceFlags] = useState<ServiceFlags>(DEFAULT_SERVICE_FLAGS);
   const [sessionRemainingMs, setSessionRemainingMs] = useState<number | null>(null);
   const [sessionWarningKey, setSessionWarningKey] = useState<SessionWarningKey | null>(null);
+  const [pendingServiceId, setPendingServiceId] = useState<PackageBuilderService | null>(null);
+  const [isNavigating, startNavigation] = useTransition();
   const sessionWarningRef = useRef<"none" | SessionWarningKey>("none");
   const lastScrollYRef = useRef(0);
   const hotelSelectionRef = useRef<string | null>(null);
+  const navigationTimerRef = useRef<number | null>(null);
+  const navigationAttemptRef = useRef(0);
+  const isNavigatingRef = useRef(false);
   const pluralRules = useMemo(() => new Intl.PluralRules(intlLocale), [intlLocale]);
   const formatPlural = (count: number, forms: PluralForms) => {
     const category = pluralRules.select(count);
@@ -356,6 +364,20 @@ export default function PackageBuilder() {
   const sessionTenPopover =
     sessionWarningKey === "ten" ? t.packageBuilder.sessionWarningTen : null;
 
+  const isPendingNavigation = isNavigating || pendingServiceId !== null;
+
+  useEffect(() => {
+    return () => {
+      if (navigationTimerRef.current) {
+        window.clearTimeout(navigationTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    isNavigatingRef.current = isNavigating;
+  }, [isNavigating]);
+
   const checkoutTotal = (() => {
     let missingPrice = false;
     const totals: { amount: number; currency: string }[] = [];
@@ -481,7 +503,38 @@ export default function PackageBuilder() {
     setIsOpen((prev) => !prev);
   };
 
+  const beginNavigation = (serviceId: PackageBuilderService | null, target: string) => {
+    if (isPendingNavigation) return;
+    setShowHotelWarning(false);
+    setDisabledServiceId(null);
+    setPendingServiceId(serviceId);
+    startNavigation(() => {
+      router.push(target);
+    });
+    if (typeof window !== "undefined") {
+      if (navigationTimerRef.current) {
+        window.clearTimeout(navigationTimerRef.current);
+      }
+      navigationAttemptRef.current = 0;
+      const waitForNavigation = () => {
+        navigationAttemptRef.current += 1;
+        const attempts = navigationAttemptRef.current;
+        const shouldWait = isNavigatingRef.current || attempts < MIN_LOADING_TICKS;
+        if (shouldWait && attempts < MAX_LOADING_TICKS) {
+          navigationTimerRef.current = window.setTimeout(waitForNavigation, NAVIGATION_CHECK_MS);
+          return;
+        }
+        navigationTimerRef.current = null;
+        navigationAttemptRef.current = 0;
+        setPendingServiceId(null);
+        setIsOpen(false);
+      };
+      navigationTimerRef.current = window.setTimeout(waitForNavigation, NAVIGATION_CHECK_MS);
+    }
+  };
+
   const handleSelect = (service: ServiceItem) => {
+    if (isPendingNavigation) return;
     if (serviceFlags[service.id] === false) {
       setShowHotelWarning(false);
       setDisabledServiceId(service.id);
@@ -495,11 +548,8 @@ export default function PackageBuilder() {
       return;
     }
 
-    setShowHotelWarning(false);
-    setDisabledServiceId(null);
     const target = service.id === "hotel" ? `/${locale}` : `/${locale}/services/${service.id}`;
-    setIsOpen(false);
-    router.push(target);
+    beginNavigation(service.id, target);
   };
 
   const handleRemove = (serviceId: PackageBuilderService) => {
@@ -530,10 +580,7 @@ export default function PackageBuilder() {
       setShowHotelWarning(true);
       return;
     }
-    setShowHotelWarning(false);
-    setDisabledServiceId(null);
-    setIsOpen(false);
-    router.push(`/${locale}/checkout`);
+    beginNavigation(null, `/${locale}/checkout`);
   };
 
   const toggleLabel = hasAnySelection
@@ -557,7 +604,14 @@ export default function PackageBuilder() {
               auto_awesome
             </span>
             {t.packageBuilder.toggleOpen}
-            {hasAnySelection ? (
+            {isPendingNavigation ? (
+              <span className="package-builder__toggle-loading" role="status" aria-live="polite">
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  progress_activity
+                </span>
+                {t.packageBuilder.toggleInProgress}
+              </span>
+            ) : hasAnySelection ? (
               <span className="package-builder__toggle-status">
                 <span className="package-builder__toggle-dot" aria-hidden="true" />
                 {t.packageBuilder.toggleInProgress}
@@ -672,16 +726,18 @@ export default function PackageBuilder() {
                 const showChange = service.id === "hotel" && isSelected;
                 const canRemove = isSelected;
                 const showActions = showView || showChange || canRemove;
+                const isPendingService = isPendingNavigation && pendingServiceId === service.id;
                 return (
                   <div
                     key={service.id}
                     role="listitem"
-                    className={`package-builder__item${isSelected ? " is-selected" : ""}${isLocked ? " is-locked" : ""}${isDisabled ? " is-disabled" : ""}`}
+                    className={`package-builder__item${isSelected ? " is-selected" : ""}${isLocked ? " is-locked" : ""}${isDisabled ? " is-disabled" : ""}${isPendingService ? " is-loading" : ""}`}
                   >
                     <button
                       type="button"
                       className="package-builder__item-button"
-                      aria-disabled={isLocked || isDisabled}
+                      aria-disabled={isLocked || isDisabled || isPendingNavigation}
+                      aria-busy={isPendingService}
                       onClick={() => handleSelect(service)}
                     >
                       <span
@@ -706,48 +762,65 @@ export default function PackageBuilder() {
                       <span className="package-builder__status">{statusLabel}</span>
                     </button>
                     {showActions ? (
-                      <div className="package-builder__actions">
-                        {showView ? (
-                          <button
-                            type="button"
-                            className="package-builder__view"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              if (viewHref) {
-                                setIsOpen(false);
-                                router.push(viewHref);
-                              }
-                            }}
-                          >
-                            {t.packageBuilder.viewService}
-                          </button>
-                        ) : null}
-                        {showChange ? (
-                          <button
-                            type="button"
-                            className="package-builder__change"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setShowHotelWarning(false);
-                              setIsOpen(false);
-                              router.push(`/${locale}`);
-                            }}
-                          >
-                            {t.packageBuilder.changeHotel}
-                          </button>
-                        ) : null}
-                        {canRemove ? (
-                          <button
-                            type="button"
-                            className="package-builder__remove"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleRemove(service.id);
-                            }}
-                          >
-                            {t.packageBuilder.removeTag}
-                          </button>
-                        ) : null}
+                      <div
+                        className={`package-builder__actions${isPendingService ? " is-loading" : ""}`}
+                        aria-live="polite"
+                      >
+                        {isPendingService ? (
+                          <div className="package-builder__action-loading" role="status">
+                            <span
+                              className="material-symbols-rounded package-builder__action-spinner"
+                              aria-hidden="true"
+                            >
+                              progress_activity
+                            </span>
+                            <span>{t.packageBuilder.toggleInProgress}</span>
+                          </div>
+                        ) : (
+                          <>
+                            {showView ? (
+                              <button
+                                type="button"
+                                className="package-builder__view"
+                                disabled={isPendingNavigation}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  if (viewHref) {
+                                    beginNavigation(service.id, viewHref);
+                                  }
+                                }}
+                              >
+                                {t.packageBuilder.viewService}
+                              </button>
+                            ) : null}
+                            {showChange ? (
+                              <button
+                                type="button"
+                                className="package-builder__change"
+                                disabled={isPendingNavigation}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  beginNavigation(service.id, `/${locale}`);
+                                }}
+                              >
+                                {t.packageBuilder.changeHotel}
+                              </button>
+                            ) : null}
+                            {canRemove ? (
+                              <button
+                                type="button"
+                                className="package-builder__remove"
+                                disabled={isPendingNavigation}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleRemove(service.id);
+                                }}
+                              >
+                                {t.packageBuilder.removeTag}
+                              </button>
+                            ) : null}
+                          </>
+                        )}
                       </div>
                     ) : null}
                   </div>
@@ -767,6 +840,7 @@ export default function PackageBuilder() {
                   <button
                     type="button"
                     className="package-builder__checkout"
+                    disabled={isPendingNavigation}
                     onClick={handleCheckout}
                   >
                     <span className="material-symbols-rounded" aria-hidden="true">payments</span>

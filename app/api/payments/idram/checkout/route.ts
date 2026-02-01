@@ -115,7 +115,11 @@ export async function POST(request: NextRequest) {
 
     try {
       const rates = await getAmdRates();
-      const convertAmount = (amount: number, currency: string | null | undefined, ratesValue: typeof rates) => {
+      const convertAmount = (
+        amount: number,
+        currency: string | null | undefined,
+        ratesValue: typeof rates
+      ) => {
         if (!Number.isFinite(amount) || amount <= 0) return 0;
         const converted = convertToAmd(amount, currency, ratesValue);
         if (converted === null) {

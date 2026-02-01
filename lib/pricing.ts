@@ -122,6 +122,25 @@ export async function getAmdRates(): Promise<AmdRates> {
   return rates;
 }
 
+export async function getAmdRateForCurrency(currency: string): Promise<number | null> {
+  const normalized = currency.trim().toUpperCase();
+  if (!normalized) return null;
+  if (normalized === "AMD") return 1;
+  if (normalized === "USD" || normalized === "EUR") {
+    const rates = await getAmdRates();
+    return normalized === "USD" ? rates.USD : rates.EUR;
+  }
+  const url = buildCurrencyUrl(normalized);
+  if (!url) return null;
+  try {
+    const data = await fetchRatesFrom(url);
+    return toAmdRate(readRateValue(data, normalized), 0, 1);
+  } catch (error) {
+    console.error("[ExchangeRates] Failed to load rate", error);
+    return null;
+  }
+}
+
 export async function getAoryxHotelPlatformFee(): Promise<number> {
 
   try {
