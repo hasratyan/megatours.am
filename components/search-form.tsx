@@ -55,6 +55,16 @@ type RoomConfig = {
   childAges: number[];
 };
 
+type ReferrerPreset = {
+  id: string;
+  label: string;
+};
+
+const referrerDestinationMap: Record<string, ReferrerPreset> = {
+  "sharjah.am": { id: "605-0", label: "Sharjah" },
+  "godubai.am": { id: "160-0", label: "Dubai" },
+};
+
 export type SearchCopy = {
   wherePlaceholder: string;
   loadingDestinations: string;
@@ -303,6 +313,8 @@ export default function SearchForm({
     () => `map-picker-${reactSelectId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
     [reactSelectId],
   );
+  const [referrerPreset, setReferrerPreset] = useState<ReferrerPreset | null>(null);
+  const [referrerChecked, setReferrerChecked] = useState(false);
   const [rooms, setRooms] = useState<RoomConfig[]>(() => {
     if (initialRooms && initialRooms.length > 0) {
       return initialRooms.map((room) => {
@@ -328,6 +340,35 @@ export default function SearchForm({
   const useAbbreviations = useGuestAbbreviations && !canToggleCompact;
   const adultsLabel = useAbbreviations ? copy.adultsShort : copy.adultsLabel;
   const childrenLabel = useAbbreviations ? copy.childrenShort : copy.childrenLabel;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const candidates = new Set<string>();
+      if (window.location.hostname) {
+        candidates.add(window.location.hostname.toLowerCase());
+      }
+      if (document.referrer) {
+        try {
+          candidates.add(new URL(document.referrer).hostname.toLowerCase());
+        } catch (error) {
+          // Ignore invalid referrer values.
+        }
+      }
+      for (const hostname of candidates) {
+        const normalized = hostname.replace(/^www\./, "");
+        const preset = referrerDestinationMap[hostname] ?? referrerDestinationMap[normalized];
+        if (preset) {
+          setReferrerPreset(preset);
+          break;
+        }
+      }
+    } catch (error) {
+      // Ignore invalid referrer values.
+    } finally {
+      setReferrerChecked(true);
+    }
+  }, []);
 
   const persistSelectedLocation = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -414,13 +455,28 @@ export default function SearchForm({
       });
   }, [hideLocationFields, copy.unknownHotel]);
 
-  // Set default destination (Dubai) once destinations are loaded
+  // Set default destination (referrer > Dubai) once destinations are loaded
   useEffect(() => {
     if (hideLocationFields) return;
     if (destinationsInitialized) return;
+    if (!referrerChecked) return;
     if (destinations.length === 0) return;
 
-    const preferred =
+    const referrerDestination = referrerPreset
+      ? destinations.find(
+          (d) =>
+            d.rawId === referrerPreset.id ||
+            d.value === referrerPreset.id ||
+            d.value === referrerPreset.id.split("-")[0]
+        ) ?? {
+          value: referrerPreset.id,
+          label: referrerPreset.label,
+          rawId: referrerPreset.id,
+          type: "destination" as const,
+        }
+      : null;
+
+    const preferred = referrerDestination ??
       destinations.find((d) => d.label.toLowerCase() === "dubai") ??
       destinations.find((d) => d.value === "160") ??
       destinations[0];
@@ -431,7 +487,7 @@ export default function SearchForm({
         setDestinationsInitialized(true);
       });
     }
-  }, [destinationsInitialized, destinations, hideLocationFields]);
+  }, [destinationsInitialized, destinations, hideLocationFields, referrerChecked, referrerPreset]);
 
   // Load hotels for preset destination on mount (even if a hotel is pre-selected)
   useEffect(() => {
