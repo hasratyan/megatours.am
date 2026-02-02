@@ -287,6 +287,7 @@ export type Translation = {
         insuranceDetailsRequired: string;
         insuranceQuoteFailed: string;
         cardUnavailable: string;
+        prebookInvalid: string;
         paymentFailed: string;
       };
         labels: {
@@ -1383,6 +1384,7 @@ const translations: Record<Locale, Translation> = {
           insuranceDetailsRequired: "Լրացրեք ապահովագրության բոլոր անհրաժեշտ տվյալները։",
           insuranceQuoteFailed: "Չհաջողվեց հաշվարկել ապահովագրության արժեքը։",
           cardUnavailable: "Քարտով վճարումը դեռ հասանելի չէ։",
+          prebookInvalid: "Ընտրված սակագինը այլևս հասանելի չէ։ Խնդրում ենք կրկին ընտրել սենյակը։",
           paymentFailed: "Չհաջողվեց սկսել վճարումը։ Խնդրում ենք կրկին փորձել։",
         },
         labels: {
@@ -2689,6 +2691,7 @@ const translations: Record<Locale, Translation> = {
           insuranceDetailsRequired: "Please complete all required insurance details.",
           insuranceQuoteFailed: "Failed to calculate the insurance premium.",
           cardUnavailable: "Card payments are not available yet.",
+          prebookInvalid: "Your selected rate is no longer available. Please search again and reselect the room.",
           paymentFailed: "Failed to start payment. Please try again.",
         },
         labels: {
@@ -4002,6 +4005,7 @@ const translations: Record<Locale, Translation> = {
           insuranceDetailsRequired: "Пожалуйста, заполните все обязательные данные страховки.",
           insuranceQuoteFailed: "Не удалось рассчитать стоимость страховки.",
           cardUnavailable: "Оплата картой пока недоступна.",
+          prebookInvalid: "Выбранный тариф больше недоступен. Повторите поиск и выберите номер заново.",
           paymentFailed: "Не удалось начать оплату. Пожалуйста, попробуйте снова.",
         },
         labels: {
