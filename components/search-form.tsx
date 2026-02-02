@@ -63,6 +63,13 @@ type ReferrerPreset = {
 const referrerDestinationMap: Record<string, ReferrerPreset> = {
   "sharjah.am": { id: "605-0", label: "Sharjah" },
   "godubai.am": { id: "160-0", label: "Dubai" },
+  "abudhabi.am": { id: "604-0", label: "Abu Dhabi" },
+};
+
+const srcDestinationMap: Record<string, ReferrerPreset> = {
+  sharjah: { id: "605-0", label: "Sharjah" },
+  dubai: { id: "160-0", label: "Dubai" },
+  abudhabi: { id: "604-0", label: "Abu Dhabi" },
 };
 
 export type SearchCopy = {
@@ -344,6 +351,12 @@ export default function SearchForm({
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
+      const params = new URLSearchParams(window.location.search);
+      const src = params.get("src")?.trim().toLowerCase();
+      if (src && srcDestinationMap[src]) {
+        setReferrerPreset(srcDestinationMap[src]);
+        return;
+      }
       const candidates = new Set<string>();
       if (window.location.hostname) {
         candidates.add(window.location.hostname.toLowerCase());

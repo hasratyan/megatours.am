@@ -8290,7 +8290,8 @@ select:focus-visible {
   z-index: 1;
 }
 
-.promo-popup-thumb img{
+.promo-popup-thumb img,
+.promo-popup-thumb__image{
   width: 100%;
   height: 100%;
   object-fit: cover;
