@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     const amountFormatted = formatAmount(amountValue);
     const billNo = buildBillNo();
     const language = normalizeLanguage(process.env.IDRAM_LANGUAGE);
-    const description = `Hotel booking ${payload.hotelCode} (${payload.customerRefNumber})`;
+    const description = `Booking ${payload.hotelCode} (${payload.customerRefNumber})`;
 
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id ?? null;
