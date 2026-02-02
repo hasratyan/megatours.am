@@ -12,6 +12,7 @@ const body = Google_Sans({
   variable: "--font-body",
   weight: ["400", "500", "600", "700"],
   display: "swap",
+  fallback: ["sans-serif"],
 });
 
 export const metadata: Metadata = {

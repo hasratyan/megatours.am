@@ -2777,6 +2777,7 @@ export default function PackageCheckoutClient() {
                             />
                           </label>
                         </div>
+                        <h3>{t.packageBuilder.checkout.contactTitle}</h3>
                         <div className="checkout-field-grid">
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.mobilePhone}</span>

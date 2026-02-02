@@ -514,6 +514,7 @@ export type Translation = {
         searches: string;
         favorites: string;
         services: string;
+        promoPopup: string;
       };
     };
     services: {
@@ -580,6 +581,33 @@ export type Translation = {
       errors: {
         saveFailed: string;
         removeFailed: string;
+      };
+    };
+    promoPopup: {
+      title: string;
+      subtitle: string;
+      panelTitle: string;
+      note: string;
+      saved: string;
+      actions: {
+        save: string;
+        saving: string;
+      };
+      status: {
+        enabled: string;
+        disabled: string;
+      };
+      fields: {
+        enabled: string;
+        campaignKey: string;
+        imageUrl: string;
+        imageAlt: string;
+        eventTicketUrl: string;
+        locationSearchUrl: string;
+        delayMs: string;
+      };
+      errors: {
+        saveFailed: string;
       };
     };
     users: {
@@ -731,6 +759,12 @@ export type Translation = {
       missingSearchDetails: string;
       loadFailed: string;
     };
+  };
+  promoPopup: {
+    ariaLabel: string;
+    closeLabel: string;
+    eventTicketCta: string;
+    locationSearchCta: string;
   };
   common: {
     backToSearch: string;
@@ -1274,7 +1308,7 @@ const translations: Record<Locale, Translation> = {
         latinHint: "(Լատինատառ)",
         armenianHint: "(Հայատառ)",
         email: "Էլ․ հասցե",
-        phone: "Հեռախոս",
+        phone: "Հեռախոսահամար",
         guestTitle: "Հյուրերի տվյալներ",
         guestHint: "Լրացրեք յուրաքանչյուր հյուրի անունը, ազգանունը և տարիքը։",
         guestEmpty: "Հյուրերի տվյալները կհայտնվեն հյուրանոց ընտրելուց հետո։",
@@ -1290,7 +1324,7 @@ const translations: Record<Locale, Translation> = {
         city: "Քաղաք",
         address: "Հասցե",
         zip: "Փոստային ինդեքս",
-        insuranceTitle: "Ապահովագրության տվյալներ",
+        insuranceTitle: "Ճանապարհորդական ապահովագրության համար անհրաժեշտ տվյալներ",
         insuranceHint: "Լրացրեք յուրաքանչյուր ճանապարհորդի անձնագրային և կոնտակտային տվյալները։",
         insuranceEmpty: "Ապահովագրությունը ընտրելուց հետո կլրացվեն տվյալները։",
         insuranceTravelerLabel: "Ճանապարհորդ {index}",
@@ -1310,9 +1344,9 @@ const translations: Record<Locale, Translation> = {
           citizenship: "Քաղաքացիություն",
           socialCard: "Սոց․ քարտ",
           mobilePhone: "Բջջային հեռ․",
-          phone: "Հեռախոս",
+          phone: "Հեռախոսահամար",
           email: "Էլ․ հասցե",
-          address: "Գրանցման հասցե",
+          address: "Հասցե",
           country: "Երկիր",
           region: "Տարածաշրջան",
           city: "Քաղաք",
@@ -1769,6 +1803,7 @@ const translations: Record<Locale, Translation> = {
         searches: "Վերահսկեք օգտատերերի որոնումները։",
         favorites: "Դիտեք պահպանված հյուրանոցները։",
         services: "Կառավարեք ծառայությունների հասանելիությունը։",
+        promoPopup: "Կառավարեք գլխավոր էջի առաջխաղացման պատուհանը։",
       },
     },
     services: {
@@ -1835,6 +1870,33 @@ const translations: Record<Locale, Translation> = {
       errors: {
         saveFailed: "Չհաջողվեց պահպանել հյուրանոցը։",
         removeFailed: "Չհաջողվեց հեռացնել հյուրանոցը։",
+      },
+    },
+    promoPopup: {
+      title: "Պրոմո պատուհան",
+      subtitle: "Կառավարեք առաջխաղացման պատուհանի պատկերը և հղումները։",
+      panelTitle: "Պատուհանի կարգավորումներ",
+      note: "Փոխեք արշավի բանալին՝ կրկին ցուցադրելու համար։",
+      saved: "Պահպանված է",
+      actions: {
+        save: "Պահպանել",
+        saving: "Պահպանվում է...",
+      },
+      status: {
+        enabled: "Ակտիվ",
+        disabled: "Անջատված",
+      },
+      fields: {
+        enabled: "Միացված է",
+        campaignKey: "Արշավի բանալի",
+        imageUrl: "Պատկերի հղում",
+        imageAlt: "Պատկերի alt տեքստ",
+        eventTicketUrl: "Միջոցառման տոմսերի հղում",
+        locationSearchUrl: "Տեղանքի որոնման հղում",
+        delayMs: "Հետաձգում (մվ)",
+      },
+      errors: {
+        saveFailed: "Չհաջողվեց պահպանել կարգավորումները։",
       },
     },
     users: {
@@ -1971,12 +2033,18 @@ const translations: Record<Locale, Translation> = {
         locationFallback: "ԱՄԷ",
       },
       viewOptions: "Դիտել տարբերակները",
-      errors: {
-        missingSearchDetails: "Բացակայում են որոնման տվյալները։",
-        loadFailed: "Այս պահին արդյունքները բեռնել չհաջողվեց։",
-      },
+    errors: {
+      missingSearchDetails: "Բացակայում են որոնման տվյալները։",
+      loadFailed: "Այս պահին արդյունքները բեռնել չհաջողվեց։",
     },
-    common: {
+  },
+  promoPopup: {
+    ariaLabel: "Առաջխաղացման պատուհան",
+    closeLabel: "Փակել",
+    eventTicketCta: "Միջոցառման տոմսեր",
+    locationSearchCta: "Փաթեթ դեպի Աբու Դաբի",
+  },
+  common: {
       backToSearch: "Վերադառնալ որոնմանը",
       scrollTop: "Վերև գնալ",
       contact: "Կապվել",
@@ -2562,7 +2630,7 @@ const translations: Record<Locale, Translation> = {
         city: "City",
         address: "Street address",
         zip: "ZIP / Postal code",
-        insuranceTitle: "Insurance details",
+        insuranceTitle: "Information required to obtain travel insurance",
         insuranceHint: "Provide passport and contact details for each traveler.",
         insuranceEmpty: "Insurance travelers will appear after you select insurance.",
         insuranceTravelerLabel: "Traveler {index}",
@@ -2584,7 +2652,7 @@ const translations: Record<Locale, Translation> = {
           mobilePhone: "Mobile phone",
           phone: "Phone",
           email: "Email",
-          address: "Registered address",
+          address: "Address",
           country: "Country",
           region: "Region",
           city: "City",
@@ -3045,6 +3113,7 @@ const translations: Record<Locale, Translation> = {
         searches: "Monitor recent searches across the site.",
         favorites: "Review saved hotels by users.",
         services: "Control which services are available to users.",
+        promoPopup: "Manage the promotional popup content.",
       },
     },
     services: {
@@ -3111,6 +3180,33 @@ const translations: Record<Locale, Translation> = {
       errors: {
         saveFailed: "Failed to save hotel.",
         removeFailed: "Failed to remove hotel.",
+      },
+    },
+    promoPopup: {
+      title: "Promo Popup",
+      subtitle: "Manage the promo popup image and links.",
+      panelTitle: "Popup settings",
+      note: "Change the campaign key to show the popup again.",
+      saved: "Changes saved.",
+      actions: {
+        save: "Save changes",
+        saving: "Saving...",
+      },
+      status: {
+        enabled: "Enabled",
+        disabled: "Disabled",
+      },
+      fields: {
+        enabled: "Enabled",
+        campaignKey: "Campaign key",
+        imageUrl: "Image URL",
+        imageAlt: "Image alt text",
+        eventTicketUrl: "Event ticket URL",
+        locationSearchUrl: "Location search URL",
+        delayMs: "Delay (ms)",
+      },
+      errors: {
+        saveFailed: "Failed to save promo popup settings.",
       },
     },
     users: {
@@ -3247,12 +3343,18 @@ const translations: Record<Locale, Translation> = {
         locationFallback: "UAE",
       },
       viewOptions: "View Options",
-      errors: {
-        missingSearchDetails: "Search details are missing. Please try again.",
-        loadFailed: "We’re unable to load results at this time.",
-      },
+    errors: {
+      missingSearchDetails: "Search details are missing. Please try again.",
+      loadFailed: "We’re unable to load results at this time.",
     },
-    common: {
+  },
+  promoPopup: {
+    ariaLabel: "Promotional popup",
+    closeLabel: "Close",
+    eventTicketCta: "Event tickets",
+    locationSearchCta: "Package for Abu Dhabi",
+  },
+  common: {
       backToSearch: "Back to Search",
       scrollTop: "Scroll to top",
       contact: "Contact",
@@ -3825,7 +3927,7 @@ const translations: Record<Locale, Translation> = {
         latinHint: "(На английском)",
         armenianHint: "(На армянском)",
         email: "Эл. почта",
-        phone: "Телефон",
+        phone: "Номер телефона",
         guestTitle: "Данные гостей",
         guestHint: "Укажите имя, фамилию и возраст каждого гостя.",
         guestEmpty: "Данные гостей появятся после выбора номера.",
@@ -3841,7 +3943,7 @@ const translations: Record<Locale, Translation> = {
         city: "Город",
         address: "Адрес",
         zip: "Индекс",
-        insuranceTitle: "Данные страховки",
+        insuranceTitle: "Информация, необходимая для оформления туристической страховки.",
         insuranceHint: "Укажите паспортные и контактные данные каждого путешественника.",
         insuranceEmpty: "Путешественники для страховки появятся после выбора страховки.",
         insuranceTravelerLabel: "Путешественник {index}",
@@ -3860,10 +3962,10 @@ const translations: Record<Locale, Translation> = {
           residency: "Резидент",
           citizenship: "Гражданство",
           socialCard: "Соц. карта",
-          mobilePhone: "Мобильный телефон",
-          phone: "Телефон",
+          mobilePhone: "Номер мобильного телефона",
+          phone: "Номер телефона",
           email: "Эл. почта",
-          address: "Адрес регистрации",
+          address: "Адрес",
           country: "Страна",
           region: "Регион",
           city: "Город",
@@ -4324,6 +4426,7 @@ const translations: Record<Locale, Translation> = {
         searches: "Отслеживайте последние поиски.",
         favorites: "Сохраненные отели пользователей.",
         services: "Управляйте доступностью услуг.",
+        promoPopup: "Управляйте промо-попапом на сайте.",
       },
     },
     services: {
@@ -4390,6 +4493,33 @@ const translations: Record<Locale, Translation> = {
       errors: {
         saveFailed: "Не удалось сохранить отель.",
         removeFailed: "Не удалось удалить отель.",
+      },
+    },
+    promoPopup: {
+      title: "Промо-попап",
+      subtitle: "Настройте изображение и ссылки в промо-попапе.",
+      panelTitle: "Настройки попапа",
+      note: "Измените ключ кампании, чтобы показать попап снова.",
+      saved: "Изменения сохранены.",
+      actions: {
+        save: "Сохранить",
+        saving: "Сохранение...",
+      },
+      status: {
+        enabled: "Включено",
+        disabled: "Отключено",
+      },
+      fields: {
+        enabled: "Включено",
+        campaignKey: "Ключ кампании",
+        imageUrl: "URL изображения",
+        imageAlt: "Alt текст",
+        eventTicketUrl: "URL билетов на событие",
+        locationSearchUrl: "URL поиска локации",
+        delayMs: "Задержка (мс)",
+      },
+      errors: {
+        saveFailed: "Не удалось сохранить настройки попапа.",
       },
     },
     users: {
@@ -4528,12 +4658,18 @@ const translations: Record<Locale, Translation> = {
         locationFallback: "ОАЭ",
       },
       viewOptions: "Смотреть варианты",
-      errors: {
-        missingSearchDetails: "Не хватает данных поиска.",
-        loadFailed: "Не удалось загрузить результаты.",
-      },
+    errors: {
+      missingSearchDetails: "Не хватает данных поиска.",
+      loadFailed: "Не удалось загрузить результаты.",
     },
-    common: {
+  },
+  promoPopup: {
+    ariaLabel: "Промо-попап",
+    closeLabel: "Закрыть",
+    eventTicketCta: "Билеты на событие",
+    locationSearchCta: "Пакет для Абу-Даби",
+  },
+  common: {
       backToSearch: "Вернуться к поиску",
       scrollTop: "Наверх",
       contact: "Связаться",

@@ -108,6 +108,12 @@ export default async function AdminHomePage({ params }: PageProps) {
       title: t.admin.services.title,
       body: t.admin.dashboard.cards.services,
     },
+    {
+      href: "/admin/promo-popup",
+      icon: "campaign",
+      title: t.admin.promoPopup.title,
+      body: t.admin.dashboard.cards.promoPopup,
+    },
   ];
 
   return (
