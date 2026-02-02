@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
 
     const orderNumber = buildOrderNumber(payload.customerRefNumber ?? null);
     const description = sanitizeDescription(
-      `Hotel booking ${payload.hotelCode} (${orderNumber})`
+      `Booking ${payload.hotelCode}`
     );
     const language = normalizeLanguage(process.env.VPOS_LANGUAGE ?? locale ?? undefined);
     const returnUrl = buildReturnUrl(request);
@@ -253,7 +253,7 @@ export async function POST(request: NextRequest) {
       body: params.toString(),
     });
 
-    let responseBody: any = null;
+    let responseBody: Record<string, unknown> | null = null;
     try {
       responseBody = await response.json();
     } catch (parseError) {
