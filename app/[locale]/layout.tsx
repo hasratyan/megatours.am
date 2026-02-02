@@ -2,6 +2,7 @@ import * as React from "react";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import PackageBuilder from "@/components/package-builder";
+import PromoPopup from "@/components/promo-popup";
 import { locales, Locale } from "@/lib/i18n";
 
 // Generate static params for all locales
@@ -26,6 +27,7 @@ export default async function LocaleLayout({ children, params }: LayoutProps) {
     <div className="page">
       <Header />
       {children}
+      <PromoPopup />
       <Footer locale={locale} />
       <PackageBuilder />
     </div>

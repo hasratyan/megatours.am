@@ -2263,7 +2263,7 @@ export default function HotelClient({
                 )}
                 {roomDetailsPayload && !roomsLoading && roomsError && (
                   <div className="error-container">
-                    <Image src="/images/icons/error.gif" alt={t.results.errorAlt} width={100} height={100} />
+                    <Image src="/images/icons/error.gif" alt={t.results.errorAlt} width={100} height={100} unoptimized/>
                     <p>{roomsError}</p>
                   </div>
                 )}
