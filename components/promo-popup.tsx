@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import { locales, type Locale } from "@/lib/i18n";
@@ -96,17 +97,12 @@ export default function PromoPopup() {
     };
   }, [isOpen]);
 
-  const eventUrl = useMemo(
-    () => (config?.eventTicketUrl ? config.eventTicketUrl.trim() : ""),
-    [config?.eventTicketUrl]
-  );
-  const locationUrl = useMemo(
-    () => (config?.locationSearchUrl ? normalizeInternalUrl(config.locationSearchUrl, locale) : ""),
-    [config?.locationSearchUrl, locale]
-  );
-
   if (!config || !config.enabled || !config.imageUrl) return null;
   const promo = config;
+  const eventUrl = promo.eventTicketUrl ? promo.eventTicketUrl.trim() : "";
+  const locationUrl = promo.locationSearchUrl
+    ? normalizeInternalUrl(promo.locationSearchUrl, locale)
+    : "";
 
   const hasActions = Boolean(eventUrl || locationUrl);
 
@@ -119,10 +115,14 @@ export default function PromoPopup() {
           onClick={() => setIsOpen(true)}
           aria-label={t.promoPopup.ariaLabel}
         >
-          <img
+          <Image
             src={promo.imageUrl}
             alt={promo.imageAlt || t.promoPopup.ariaLabel}
-            loading="lazy"
+            width={72}
+            height={72}
+            className="promo-popup-thumb__image"
+            sizes="72px"
+            unoptimized
           />
         </button>
       )}
@@ -147,11 +147,14 @@ export default function PromoPopup() {
             >
               <span className="material-symbols-outlined">close</span>
             </button>
-            <img
+            <Image
               className="promo-popup-image"
               src={promo.imageUrl}
               alt={promo.imageAlt || t.promoPopup.ariaLabel}
-              loading="lazy"
+              width={1200}
+              height={800}
+              sizes="(max-width: 720px) 90vw, 720px"
+              unoptimized
             />
           </div>
           {hasActions && (
