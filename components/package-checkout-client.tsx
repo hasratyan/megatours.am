@@ -1383,6 +1383,16 @@ export default function PackageCheckoutClient() {
       return;
     }
 
+    const resolveCheckoutError = (error: unknown) => {
+      const message =
+        error instanceof Error ? error.message : t.packageBuilder.checkout.errors.paymentFailed;
+      const normalized = message.toLowerCase();
+      if (normalized.includes("prebook") || normalized.includes("bookable")) {
+        return t.packageBuilder.checkout.errors.prebookInvalid;
+      }
+      return message;
+    };
+
     let insuranceTravelersPayload: BookingInsuranceTraveler[] | null = null;
     let insuranceQuote: EfesQuoteResult | null = null;
     if (insuranceActive) {
@@ -1582,9 +1592,7 @@ export default function PackageCheckoutClient() {
             : undefined,
       };
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : t.packageBuilder.checkout.errors.paymentFailed;
-      setPaymentError(message);
+      setPaymentError(resolveCheckoutError(error));
       return;
     }
 
@@ -1623,9 +1631,7 @@ export default function PackageCheckoutClient() {
       }
       window.location.assign(checkout.formUrl);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : t.packageBuilder.checkout.errors.paymentFailed;
-      setPaymentError(message);
+      setPaymentError(resolveCheckoutError(error));
       setPaymentLoading(false);
     }
   };

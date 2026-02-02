@@ -8178,7 +8178,6 @@ select:focus-visible {
 
     input{
       flex: 1;
-      border-radius: .75rem;
     }
     button{
       border-radius: .75rem;
@@ -8192,12 +8191,16 @@ select:focus-visible {
   }
 
   .checkout-pay{
-    padding: 0.75rem 1.4rem;
+    padding: 0.9rem 1.1rem;
     border: 1px solid rgba(124, 242, 212, 0.7);
     background: rgba(12, 28, 35, 0.9);
     color: #7cf2d4;
     font-weight: 700;
     border-radius: .75rem;
+    &:not(:disabled):hover{
+      background: #168a6c;
+      color: #fff;
+    }
   }
 
   .checkout-pay:disabled{
