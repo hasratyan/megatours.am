@@ -32,6 +32,7 @@ export type PackageBuilderHotelSelection = {
   roomCount?: number | null;
   guestCount?: number | null;
   mealPlan?: string | null;
+  nonRefundable?: boolean | null;
   rooms?: AoryxRoomSearch[] | null;
   roomSelections?: Array<{
     roomIdentifier: number;

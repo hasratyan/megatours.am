@@ -3476,28 +3476,20 @@ main.details{
       display: flex;
       flex-wrap: wrap;
       justify-content: space-between;
+      align-items: center;
       gap: 1em;
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 1.25em;
       padding: 1.25em 1.5em;
-      box-shadow: 0 12px 30px -25px rgba(0, 0, 0, 0.6);
-    }
-
-    .room-card-main{
-      flex: 1 1 260px;
+      box-shadow: 0 15px 30px -25px rgba(0, 0, 0, 0.6);
     }
 
     .room-card-price{
-      align-self: center;
-      text-align: right;
-      min-width: 160px;
-    }
-
-    .room-card-actions{
-      margin-top: 0.75em;
       display: flex;
-      justify-content: flex-end;
+      gap: 0.5em 1em;
+      flex-direction: column;
+      align-items: end;
     }
 
     .room-book-button{
@@ -3567,6 +3559,7 @@ main.details{
       span{
         font-size: 0.8em;
         opacity: 0.6;
+        text-wrap-mode: nowrap;
       }
     }
 
@@ -3590,17 +3583,18 @@ main.details{
       gap: 0.5em;
     }
 
-    @media screen and (max-width: 640px){
+    @media screen and (max-width: 768px){
       .room-card{
         padding: 1em;
       }
 
       .room-card-price{
-        text-align: left;
-      }
-
-      .room-card-actions{
-        justify-content: flex-start;
+        flex-direction: row;
+        align-items: center;
+        width: 100%;
+        justify-content: space-between;
+        border-top: 1px solid #fff3;
+        padding-top: 1em;
       }
     }
   }
@@ -3727,42 +3721,20 @@ main.details{
     padding-top: 0.5em;
     padding-inline: 0.5em;
     position: relative;
-  }
+    @media screen and (max-width: 600px){
+      padding-inline: 0;
+    }
 
-  .booking-room{
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 1.5em;
-    padding: 1em;
-    margin-top: 1em;
-  }
-
-  .booking-room legend{
-    font-weight: 600;
-    padding-inline: 1em;
-  }
-
-  .booking-guest{
-    display: grid;
-    grid-template-columns: 90px 1fr 1fr 90px;
-    gap: 1em;
-    align-items: center;
-
-    & + &{
+    .booking-room{
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 1.5em;
+      padding: 1em;
       margin-top: 1em;
-    }
 
-    input,
-    select{
-      width: 100%;
-      padding: 0.5em 0.8em;
-      border-radius: 0.75em;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      background: rgba(255, 255, 255, 0.08);
-      color: #fff;
-    }
-
-    input::placeholder{
-      color: #94a3b8;
+      legend{
+        font-weight: 600;
+        padding-inline: 1em;
+      }
     }
   }
 
@@ -4287,6 +4259,46 @@ main.details{
     color: #e2e8f0;
   }
 
+  .booking-warning-overlay{
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.92);
+    display: grid;
+    place-items: center;
+    padding: 1.50em;
+    z-index: 5;
+  }
+
+  .booking-warning-card{
+    max-width: 460px;
+    text-align: center;
+    display: grid;
+    gap: 0.75em;
+    padding: 1.1em 1.25em;
+    border-radius: 1em;
+    border: 2px solid rgba(250, 204, 21, 0.45);
+    background: rgba(15, 23, 42, 0.9);
+    color: #f8fafc;
+
+    .material-symbols-rounded{
+      color: #fde68a;
+      font-size: 2rem;
+      background: #0e1729;
+      justify-self: center;
+      margin-top: calc(-1.35em - 4px);
+      padding: 0.25em;
+      border: 2px solid rgba(250, 204, 21, 0.45);
+      border-radius: 0.5em;
+    }
+  }
+
+  .booking-warning-actions{
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.75em;
+  }
+
   .booking-error{
     color: #fecaca;
     margin-bottom: 1em;
@@ -4403,9 +4415,6 @@ main.details{
   }
 
   @media screen and (max-width: 640px){
-    .booking-guest{
-      grid-template-columns: 1fr;
-    }
 
     .booking-addons-header{
       flex-direction: column;
@@ -7772,6 +7781,11 @@ select:focus-visible {
   display: grid;
   gap: 1.5rem;
   flex: 1 1 30%;
+  @media (max-width: 1024px) {
+    & {
+      flex: 1 1 100%;
+    }
+  }
 }
 
 .checkout-section{
@@ -7804,6 +7818,25 @@ select:focus-visible {
 
 .checkout-empty{
   color: rgba(203, 213, 225, 0.8);
+}
+
+.checkout-non-refundable-warning{
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  background: rgba(250, 204, 21, 0.12);
+  color: #fde68a;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.95em;
+
+  .material-symbols-rounded{
+    font-size: 1.15rem;
+    margin-top: 1px;
+  }
 }
 
 .checkout-service-list{
