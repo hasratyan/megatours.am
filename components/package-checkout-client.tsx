@@ -1759,6 +1759,17 @@ export default function PackageCheckoutClient() {
     const mealPlanLabel = localizeMealPlan(hotel?.mealPlan ?? null, t.hotel.roomOptions.mealPlans);
     const mealPlanLine = buildDetailLine(t.hotel.booking.mealPlanLabel, mealPlanLabel);
     if (mealPlanLine) hotelDetails.push(mealPlanLine);
+    const refundabilityLabel =
+      hotel?.nonRefundable === true
+        ? t.hotel.roomOptions.nonRefundable
+        : hotel?.nonRefundable === false
+          ? t.hotel.roomOptions.refundable
+          : null;
+    const cancellationLine = buildDetailLine(
+      t.hotel.policies.types.cancellation,
+      refundabilityLabel
+    );
+    if (cancellationLine) hotelDetails.push(cancellationLine);
     const guestLine = buildDetailLine(
       t.packageBuilder.checkout.labels.guests,
       typeof hotel?.guestCount === "number" ? hotel.guestCount.toString() : null
@@ -2222,6 +2233,14 @@ export default function PackageCheckoutClient() {
                 <h2>{t.packageBuilder.checkout.summaryTitle}</h2>
                 <p className="checkout-section__hint">{t.packageBuilder.checkout.summaryHint}</p>
               </div>
+              {hotel?.selected && hotel.nonRefundable === true ? (
+                <p className="checkout-non-refundable-warning">
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    warning
+                  </span>
+                  {t.packageBuilder.checkout.nonRefundableWarning}
+                </p>
+              ) : null}
               {serviceCards.length === 0 ? (
                 <p className="checkout-empty">{t.packageBuilder.checkout.emptySummary}</p>
               ) : (

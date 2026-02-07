@@ -118,6 +118,189 @@ const localizeRefundability = (value: string | null, labels: RefundabilityLabels
   return value;
 };
 
+const parseNonRefundableFromText = (value: string | null | undefined): boolean | null => {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (/non[\s_-]*refund/.test(normalized) || /no\s+refund/.test(normalized)) {
+    return true;
+  }
+  if (
+    /refundable/.test(normalized) ||
+    /free\s*cancell/.test(normalized) ||
+    /cancell(?:ation)?\s*free/.test(normalized) ||
+    /no\s*cancell(?:ation)?\s*charge/.test(normalized)
+  ) {
+    return false;
+  }
+  return null;
+};
+
+const parsePenaltyAmountFromText = (value: string | null | undefined): number | null => {
+  if (!value) return null;
+  const normalized = value.trim().replace(/[%\s,]+/g, "");
+  if (!/^[-+]?\d+(?:\.\d+)?$/.test(normalized)) {
+    return null;
+  }
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parsePolicyConditionTimestamp = (
+  dateValue: string | null | undefined,
+  timeValue: string | null | undefined
+): number | null => {
+  if (!dateValue) return null;
+  const raw = dateValue.includes("T")
+    ? dateValue
+    : `${dateValue}T${typeof timeValue === "string" && timeValue.trim() ? timeValue.trim() : "00:00"}:00`;
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.getTime();
+  }
+  const dateOnly = dateValue.split("T")[0]?.trim();
+  if (!dateOnly) return null;
+  const fallbackTime = typeof timeValue === "string" && timeValue.trim() ? timeValue.trim() : "00:00";
+  const fallback = new Date(`${dateOnly}T${fallbackTime}:00`);
+  return Number.isNaN(fallback.getTime()) ? null : fallback.getTime();
+};
+
+type RefundabilityPolicyConditionSource = {
+  fromDate?: string | null;
+  toDate?: string | null;
+  fromTime?: string | null;
+  toTime?: string | null;
+  text?: string | null;
+  percentage?: number | null;
+  fixed?: number | null;
+};
+
+const parseNonRefundableFromCondition = (
+  condition: RefundabilityPolicyConditionSource | null | undefined
+): { status: boolean | null; from: number | null; to: number | null } => {
+  const from = parsePolicyConditionTimestamp(condition?.fromDate, condition?.fromTime);
+  const to = parsePolicyConditionTimestamp(condition?.toDate, condition?.toTime);
+  if (!condition) {
+    return { status: null, from, to };
+  }
+
+  let hasRefundableSignal = false;
+  if (typeof condition.percentage === "number" && Number.isFinite(condition.percentage)) {
+    if (condition.percentage > 0) {
+      return { status: true, from, to };
+    }
+    hasRefundableSignal = true;
+  }
+  if (typeof condition.fixed === "number" && Number.isFinite(condition.fixed)) {
+    if (condition.fixed > 0) {
+      return { status: true, from, to };
+    }
+    hasRefundableSignal = true;
+  }
+
+  const textSignal = parseNonRefundableFromText(condition.text);
+  if (textSignal === true) {
+    return { status: true, from, to };
+  }
+  if (textSignal === false) {
+    hasRefundableSignal = true;
+  }
+
+  const numericTextPenalty = parsePenaltyAmountFromText(condition.text);
+  if (numericTextPenalty !== null) {
+    if (numericTextPenalty > 0) {
+      return { status: true, from, to };
+    }
+    hasRefundableSignal = true;
+  }
+
+  return { status: hasRefundableSignal ? false : null, from, to };
+};
+
+type RefundabilitySignalSource = {
+  refundable?: boolean | null;
+  rateType?: string | null;
+  cancellationPolicy?: string | null;
+  policies?: Array<{
+    type?: string | null;
+    textCondition?: string | null;
+    conditions?: Array<RefundabilityPolicyConditionSource | null> | null;
+  }> | null;
+  remarks?: Array<{ text?: string | null } | null> | null;
+};
+
+const resolveRoomNonRefundable = (room: RefundabilitySignalSource): boolean | null => {
+  if (room.refundable === false) return true;
+  if (room.refundable === true) return false;
+
+  const conditionSignals: Array<{ status: boolean; from: number | null; to: number | null }> = [];
+  for (const policy of room.policies ?? []) {
+    if (!policy) continue;
+    for (const condition of policy.conditions ?? []) {
+      const parsed = parseNonRefundableFromCondition(condition);
+      if (parsed.status === null) continue;
+      conditionSignals.push({
+        status: parsed.status,
+        from: parsed.from,
+        to: parsed.to,
+      });
+    }
+  }
+
+  if (conditionSignals.length > 0) {
+    const now = Date.now();
+    let activeNonRefundable = false;
+    let activeRefundable = false;
+    for (const signal of conditionSignals) {
+      const startsBeforeNow = signal.from === null || signal.from <= now;
+      const endsAfterNow = signal.to === null || signal.to > now;
+      if (!startsBeforeNow || !endsAfterNow) continue;
+      if (signal.status) {
+        activeNonRefundable = true;
+      } else {
+        activeRefundable = true;
+      }
+    }
+    if (activeNonRefundable) return true;
+    if (activeRefundable) return false;
+    if (conditionSignals.some((signal) => signal.status === false)) return false;
+    if (conditionSignals.some((signal) => signal.status === true)) return true;
+  }
+
+  const textCandidates: Array<string | null | undefined> = [room.rateType, room.cancellationPolicy];
+  for (const policy of room.policies ?? []) {
+    if (!policy) continue;
+    textCandidates.push(policy.type, policy.textCondition);
+    for (const condition of policy.conditions ?? []) {
+      textCandidates.push(condition?.text);
+    }
+  }
+  for (const remark of room.remarks ?? []) {
+    textCandidates.push(remark?.text);
+  }
+
+  let hasRefundableSignal = false;
+  for (const candidate of textCandidates) {
+    const parsed = parseNonRefundableFromText(candidate);
+    if (parsed === true) return true;
+    if (parsed === false) hasRefundableSignal = true;
+  }
+
+  return hasRefundableSignal ? false : null;
+};
+
+const summarizeNonRefundable = (statuses: Array<boolean | null | undefined>): boolean | null => {
+  if (statuses.some((status) => status === true)) {
+    return true;
+  }
+  const hasExplicitRefundable = statuses.some((status) => status === false);
+  const hasUnknown = statuses.some((status) => status === null || status === undefined);
+  if (hasUnknown) {
+    return null;
+  }
+  return hasExplicitRefundable ? false : null;
+};
+
 const buildHotelSelectionKey = (selection?: PackageBuilderHotelSelection | null) =>
   selection
     ? [
@@ -577,7 +760,28 @@ const describePolicyPenalty = (
     if (formatted) parts.push(formatted);
   }
   if (condition.text) {
-    parts.push(condition.text);
+    const trimmedText = condition.text.trim();
+    const parsedTextPenalty = parsePenaltyAmountFromText(trimmedText);
+    const parsedFixedPenalty =
+      typeof condition.fixed === "number" && Number.isFinite(condition.fixed) ? condition.fixed : null;
+    const parsedPercentagePenalty =
+      typeof condition.percentage === "number" && Number.isFinite(condition.percentage)
+        ? condition.percentage
+        : null;
+    const duplicatesFixed =
+      parsedTextPenalty !== null &&
+      parsedFixedPenalty !== null &&
+      Math.abs(parsedTextPenalty - parsedFixedPenalty) < 0.000001;
+    const duplicatesPercentage =
+      trimmedText.includes("%") &&
+      parsedTextPenalty !== null &&
+      parsedPercentagePenalty !== null &&
+      Math.abs(parsedTextPenalty - parsedPercentagePenalty) < 0.000001;
+    const isZeroTextPenalty = parsedTextPenalty !== null && parsedTextPenalty === 0;
+
+    if (trimmedText && !isZeroTextPenalty && !duplicatesFixed && !duplicatesPercentage) {
+      parts.push(trimmedText);
+    }
   }
   return parts.length > 0 ? parts.join(" + ") : freeCancellationLabel;
 };
@@ -684,6 +888,7 @@ export default function HotelClient({
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingPreparing, setBookingPreparing] = useState(false);
+  const [showNonRefundableWarning, setShowNonRefundableWarning] = useState(false);
   const [bookingResult, setBookingResult] = useState<AoryxBookingResult | null>(null);
   const [requiresResetConfirmation, setRequiresResetConfirmation] = useState(false);
   const [resetConfirmed, setResetConfirmed] = useState(false);
@@ -1759,6 +1964,9 @@ export default function HotelClient({
         : null;
       const checkInDate = parsed.payload?.checkInDate ?? null;
       const checkOutDate = parsed.payload?.checkOutDate ?? null;
+      const selectionNonRefundable = summarizeNonRefundable(
+        group.items.map((item) => resolveRoomNonRefundable(item))
+      );
       const nextHotel: PackageBuilderHotelSelection = {
         selected: true,
         hotelCode,
@@ -1772,6 +1980,7 @@ export default function HotelClient({
         roomCount,
         guestCount,
         mealPlan: selectionMealPlan,
+        nonRefundable: selectionNonRefundable,
         rooms: selectionRooms,
         roomSelections: selectionRoomSelections,
         price: selectionPrice,
@@ -1798,6 +2007,7 @@ export default function HotelClient({
       setBookingResult(null);
       setConfirmPriceChange(false);
       setBookingOpen(false);
+      setShowNonRefundableWarning(false);
       setBookingGuests([]);
       setActivePrebook(null);
       setPendingHotelSelection(null);
@@ -1814,6 +2024,15 @@ export default function HotelClient({
           setBookingError(t.hotel.errors.unableBuildGuests);
           return;
         }
+        const prebookNonRefundable = summarizeNonRefundable(
+          mergedRooms.map((room) => resolveRoomNonRefundable(room))
+        );
+        const resolvedNonRefundable =
+          prebookNonRefundable !== null ? prebookNonRefundable : selectionNonRefundable;
+        const nextHotelSelection: PackageBuilderHotelSelection = {
+          ...nextHotel,
+          nonRefundable: resolvedNonRefundable,
+        };
         setActivePrebook({
           rateKeys,
           isBookable: result.isBookable ?? null,
@@ -1824,10 +2043,10 @@ export default function HotelClient({
         const builderSnapshot = readPackageBuilderState();
         const shouldReset =
           builderSnapshot.hotel?.selected === true &&
-          buildHotelSelectionKey(builderSnapshot.hotel) !== buildHotelSelectionKey(nextHotel);
+          buildHotelSelectionKey(builderSnapshot.hotel) !== buildHotelSelectionKey(nextHotelSelection);
         setRequiresResetConfirmation(shouldReset);
         setResetConfirmed(false);
-        setPendingHotelSelection(nextHotel);
+        setPendingHotelSelection(nextHotelSelection);
         setBookingGuests(guests);
         setBookingOpen(true);
       } catch (err) {
@@ -1861,6 +2080,7 @@ export default function HotelClient({
 
   const handleCloseBooking = useCallback(() => {
     setBookingOpen(false);
+    setShowNonRefundableWarning(false);
     setBookingError(null);
     setBookingResult(null);
     setActivePrebook(null);
@@ -1899,7 +2119,7 @@ export default function HotelClient({
     });
   }, []);
 
-  const handleSelectRoom = useCallback(() => {
+  const proceedWithSelectedRoom = useCallback(() => {
     if (!pendingHotelSelection) return;
     if (requiresResetConfirmation && !resetConfirmed) return;
     applyHotelSelection(pendingHotelSelection, {
@@ -1915,6 +2135,30 @@ export default function HotelClient({
     requiresResetConfirmation,
     resetConfirmed,
   ]);
+
+  const handleSelectRoom = useCallback(() => {
+    if (!pendingHotelSelection) return;
+    if (requiresResetConfirmation && !resetConfirmed) return;
+    if (pendingHotelSelection.nonRefundable === true) {
+      setShowNonRefundableWarning(true);
+      return;
+    }
+    proceedWithSelectedRoom();
+  }, [
+    pendingHotelSelection,
+    proceedWithSelectedRoom,
+    requiresResetConfirmation,
+    resetConfirmed,
+  ]);
+
+  const handleDismissNonRefundableWarning = useCallback(() => {
+    setShowNonRefundableWarning(false);
+  }, []);
+
+  const handleConfirmNonRefundableSelection = useCallback(() => {
+    setShowNonRefundableWarning(false);
+    proceedWithSelectedRoom();
+  }, [proceedWithSelectedRoom]);
 
   const handleBook = useCallback(async () => {
     if (!activePrebook || !hotelCode) return;
@@ -2334,6 +2578,9 @@ export default function HotelClient({
                             group.option.cancellationPolicy,
                             t.hotel.roomOptions
                           );
+                          const groupNonRefundable = summarizeNonRefundable(
+                            group.items.map((item) => resolveRoomNonRefundable(item))
+                          );
                           const rateKeys = group.items
                             .map((item) => item.rateKey)
                             .filter((key): key is string => typeof key === "string" && key.length > 0);
@@ -2347,15 +2594,15 @@ export default function HotelClient({
                                   {mealPlanLabel && (
                                     <span className="room-chip">{mealPlanLabel}</span>
                                   )}
-                                  {group.option.refundable !== null && (
+                                  {groupNonRefundable !== null && (
                                     <span
                                       className={`room-chip ${
-                                        group.option.refundable ? "refundable" : "non-refundable"
+                                        groupNonRefundable ? "non-refundable" : "refundable"
                                       }`}
                                     >
-                                      {group.option.refundable
-                                        ? t.hotel.roomOptions.refundable
-                                        : t.hotel.roomOptions.nonRefundable}
+                                      {groupNonRefundable
+                                        ? t.hotel.roomOptions.nonRefundable
+                                        : t.hotel.roomOptions.refundable}
                                     </span>
                                   )}
                                   {typeof group.option.availableRooms === "number" && (
@@ -2460,6 +2707,36 @@ export default function HotelClient({
                       </div>
                     </div>
                   )}
+                  {showNonRefundableWarning && (
+                    <div
+                      className="booking-warning-overlay"
+                      role="alertdialog"
+                      aria-modal="true"
+                    >
+                      <div className="booking-warning-card">
+                        <span className="material-symbols-rounded" aria-hidden="true">
+                          warning
+                        </span>
+                        <p>{t.hotel.booking.nonRefundableWarning}</p>
+                        <div className="booking-warning-actions">
+                          <button
+                            type="button"
+                            className="booking-secondary"
+                            onClick={handleDismissNonRefundableWarning}
+                          >
+                            {t.common.close}
+                          </button>
+                          <button
+                            type="button"
+                            className="booking-primary"
+                            onClick={handleConfirmNonRefundableSelection}
+                          >
+                            {t.hotel.booking.selectRoom}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {bookingGuests.map((room) => {
                     const mealPlanLabel = localizeMealPlan(
                       room.meal,
@@ -2469,6 +2746,9 @@ export default function HotelClient({
                       room.rateType,
                       t.hotel.roomOptions
                     );
+                    const roomNonRefundable = resolveRoomNonRefundable(room);
+                    const rateTypeRefundability = parseNonRefundableFromText(room.rateType);
+                    const shouldShowRateTypeLabel = Boolean(rateTypeLabel) && rateTypeRefundability === null;
                     return (
                       <fieldset key={room.roomIdentifier} className="booking-room">
                       <legend>
@@ -2488,13 +2768,14 @@ export default function HotelClient({
                             </span>
                           )}
                           {mealPlanLabel && <span><span className="material-symbols-rounded" aria-hidden="true">restaurant</span>{t.hotel.booking.mealPlanLabel}: {mealPlanLabel}</span>}
-                          {rateTypeLabel && <span><span className="material-symbols-rounded" aria-hidden="true">star</span>{t.hotel.booking.rateTypeLabel}: {rateTypeLabel}</span>}
-                          {room.refundable !== null && (
+                          {shouldShowRateTypeLabel && <span><span className="material-symbols-rounded" aria-hidden="true">star</span>{t.hotel.booking.rateTypeLabel}: {rateTypeLabel}</span>}
+                          {roomNonRefundable !== null && (
                             <span>
-                              <span className="material-symbols-rounded" aria-hidden="true">refund</span>
-                              {room.refundable
-                                ? t.hotel.roomOptions.refundable
-                                : t.hotel.roomOptions.nonRefundable}
+                              <span className="material-symbols-rounded" aria-hidden="true">attach_money</span>
+                              {t.hotel.booking.rateTypeLabel}:&nbsp;
+                              {roomNonRefundable
+                                ? t.hotel.roomOptions.nonRefundable
+                                : t.hotel.roomOptions.refundable}
                             </span>
                           )}
                           {room.bedTypes.length > 0 && (

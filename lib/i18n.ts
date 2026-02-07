@@ -280,6 +280,7 @@ export type Translation = {
       payCard: string;
       totalTitle: string;
       totalLabel: string;
+      nonRefundableWarning: string;
       errors: {
         missingHotel: string;
         missingDetails: string;
@@ -928,6 +929,7 @@ export type Translation = {
       priceChangeConfirm: string;
       resetPackageWarning: string;
       resetPackageConfirm: string;
+      nonRefundableWarning: string;
       titles: { mr: string; ms: string; mrs: string; master: string };
       firstNamePlaceholder: string;
       lastNamePlaceholder: string;
@@ -1377,6 +1379,8 @@ const translations: Record<Locale, Translation> = {
         payCard: "Վճարել քարտով",
         totalTitle: "Վճարման ամփոփում",
         totalLabel: "Ընդհանուր",
+        nonRefundableWarning:
+          "Ընտրված հյուրանոցային սակագինը չվերադարձվող է։ Չեղարկման դեպքում վերադարձ չի կատարվի։",
         errors: {
           missingHotel: "Խնդրում ենք ընտրել հյուրանոցը շարունակելու համար։",
           missingDetails: "Սենյակների տվյալները բացակայում են։ Խնդրում ենք կրկին ընտրել հյուրանոցը։",
@@ -2219,6 +2223,8 @@ const translations: Record<Locale, Translation> = {
         priceChangeConfirm: "Հաստատում եմ նոր գինը և ցանկանում եմ շարունակել։",
         resetPackageWarning: "Նախապես ընտրված տարբերակը փոխելիս փաթեթը կվերագործարկվի",
         resetPackageConfirm: "Հաստատում եմ՝ վերակայել փաթեթը։",
+        nonRefundableWarning:
+          "Ընտրված սենյակի սակագինը չվերադարձվող է։ Չեղարկման կամ չներկայացման դեպքում վերադարձ չի կատարվի։",
         titles: {
           mr: "Պրն.",
           ms: "Տիկ.",
@@ -2684,6 +2690,8 @@ const translations: Record<Locale, Translation> = {
         payCard: "Pay by card",
         totalTitle: "Payment summary",
         totalLabel: "Total",
+        nonRefundableWarning:
+          "The selected hotel rate is non-refundable. Cancellations are not eligible for a refund.",
         errors: {
           missingHotel: "Select a hotel to continue.",
           missingDetails: "Room details are missing. Please reselect the hotel.",
@@ -3530,6 +3538,8 @@ const translations: Record<Locale, Translation> = {
         priceChangeConfirm: "I accept the updated price and wish to proceed with the booking.",
         resetPackageWarning: "Changing the already selected option will reset your package selections.",
         resetPackageConfirm: "I understand — reset my package selections.",
+        nonRefundableWarning:
+          "This selected room rate is non-refundable. Cancellations or no-shows are not eligible for a refund.",
         titles: {
           mr: "Mr.",
           ms: "Ms.",
@@ -3998,6 +4008,8 @@ const translations: Record<Locale, Translation> = {
         payCard: "Оплатить картой",
         totalTitle: "Сумма к оплате",
         totalLabel: "Итого",
+        nonRefundableWarning:
+          "Выбранный тариф отеля невозвратный. При отмене возврат средств не предусмотрен.",
         errors: {
           missingHotel: "Выберите отель, чтобы продолжить.",
           missingDetails: "Данные по номерам отсутствуют. Пожалуйста, выберите отель заново.",
@@ -4852,6 +4864,8 @@ const translations: Record<Locale, Translation> = {
         priceChangeConfirm: "Подтверждаю новую цену и хочу продолжить.",
         resetPackageWarning: "Изменение уже выбранного параметра приведет к сбросу выбранных вами пакетов.",
         resetPackageConfirm: "Подтверждаю сброс выбранных услуг пакета.",
+        nonRefundableWarning:
+          "Выбранный тариф номера невозвратный. При отмене или незаезде возврат средств не предусмотрен.",
         titles: {
           mr: "Г-н",
           ms: "Г-жа",
