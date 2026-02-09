@@ -270,6 +270,7 @@ export type Translation = {
       paymentHint: string;
       methodIdram: string;
       methodCard: string;
+      methodCardAmeria: string;
       cardName: string;
       cardNumber: string;
       cardExpiry: string;
@@ -278,6 +279,7 @@ export type Translation = {
       termsConnector: string;
       payIdram: string;
       payCard: string;
+      payCardAmeria: string;
       totalTitle: string;
       totalLabel: string;
       nonRefundableWarning: string;
@@ -289,6 +291,7 @@ export type Translation = {
         insuranceQuoteFailed: string;
         cardUnavailable: string;
         prebookInvalid: string;
+        duplicatePaymentAttempt: string;
         paymentFailed: string;
       };
         labels: {
@@ -419,7 +422,7 @@ export type Translation = {
       labels: {
         bookingId: string;
         confirmation: string;
-        hotelCode: string;
+        hotelName: string;
         destination: string;
         rooms: string;
         guests: string;
@@ -472,7 +475,7 @@ export type Translation = {
       labels: {
         rating: string;
         savedOn: string;
-        code: string;
+        name: string;
       };
     };
     insights: {
@@ -684,6 +687,8 @@ export type Translation = {
       dates: string;
       guests: string;
       total: string;
+      net: string;
+      profit: string;
       status: string;
       createdAt: string;
       source: string;
@@ -708,6 +713,11 @@ export type Translation = {
     };
     actions: {
       details: string;
+      cancelAndRefund: string;
+      cancelAndRefundLoading: string;
+      cancelAndRefundSuccess: string;
+      cancelAndRefundFailed: string;
+      confirmCancelAndRefund: string;
     };
     details: {
       payload: string;
@@ -997,6 +1007,7 @@ export type Translation = {
       roomMissingPrice: string;
       redirectPayment: string;
       startPaymentFailed: string;
+      duplicatePaymentAttempt: string;
       loadHotelFailed: string;
       loadRoomOptionsFailed: string;
     };
@@ -1367,8 +1378,9 @@ const translations: Record<Locale, Translation> = {
         devInsuranceSuccess: "Ապահովագրությունը հաջողությամբ ուղարկվեց։",
         paymentTitle: "Վճարման եղանակ",
         paymentHint: "Ընտրեք վճարման տարբերակը։",
-        methodIdram: "Վճարել Idram-ով",
-        methodCard: "Վճարել քարտով",
+        methodIdram: "idram",
+        methodCard: "IDBank-ի վճարային տերմինալ",
+        methodCardAmeria: "Ameriabank-ի վճարային տերմինալ",
         cardName: "Քարտի վրա նշված անուն",
         cardNumber: "Քարտի համար",
         cardExpiry: "Վավերականություն (MM/YY)",
@@ -1376,7 +1388,8 @@ const translations: Record<Locale, Translation> = {
         termsLabel: "Համաձայն եմ",
         termsConnector: "և",
         payIdram: "Վճարել Idram-ով",
-        payCard: "Վճարել քարտով",
+        payCard: "Վճարել IDBank-ի վճարային տերմինալով",
+        payCardAmeria: "Վճարել Ameriabank-ի վճարային տերմինալով",
         totalTitle: "Վճարման ամփոփում",
         totalLabel: "Ընդհանուր",
         nonRefundableWarning:
@@ -1389,6 +1402,8 @@ const translations: Record<Locale, Translation> = {
           insuranceQuoteFailed: "Չհաջողվեց հաշվարկել ապահովագրության արժեքը։",
           cardUnavailable: "Քարտով վճարումը դեռ հասանելի չէ։",
           prebookInvalid: "Ընտրված սակագինը այլևս հասանելի չէ։ Խնդրում ենք կրկին ընտրել սենյակը։",
+          duplicatePaymentAttempt:
+            "Այս նախնական ամրագրման համար արդեն կա ակտիվ կամ ավարտված վճարում։ Խնդրում ենք ստուգել ամրագրման կարգավիճակը։",
           paymentFailed: "Չհաջողվեց սկսել վճարումը։ Խնդրում ենք կրկին փորձել։",
         },
         labels: {
@@ -1427,7 +1442,7 @@ const translations: Record<Locale, Translation> = {
           title: "Աբու Դաբի",
           badge: "Մշակույթ և ընտանիք",
           description: "Մշակութային տեսարժան վայրեր, Yas Island, թեմատիկ այգիներ և հանգիստ լողափեր։",
-          cta: "Դիտել Աբու Դաբի առաջարկները",
+          cta: "Դիտել Աբու Դաբիի առաջարկները",
           soon: "Շուտով"
         },
         {
@@ -1530,14 +1545,14 @@ const translations: Record<Locale, Translation> = {
     },
     payment: {
       success: {
-        title: "Վճարումը ստացվել է",
-        body: "Շնորհակալություն վճարման համար։ Այժմ հաստատում ենք ձեր ամրագրումը։",
-        note: "Եթե հաստատումը մոտ ժամանակում չստանաք, դիմեք աջակցությանը։",
+        title: "Ամրագրումը հաստատվել է",
+        body: "Շնորհակալություն MEGATOURS ընտրելու համար։",
+        note: "Շուտով կստանաք հաստատման նամակ ձեր էլ․ հասցեին։",
         cta: "Անձնական էջ",
       },
       failure: {
-        title: "Վճարումը չի հաջողվել",
-        body: "Չհաջողվեց ավարտել վճարումը։ Խնդրում ենք փորձել կրկին կամ դիմել աջակցությանը։",
+        title: "Ամրագրումը չի հաստատվել",
+        body: "Չհաջողվեց ավարտել ամրագրումը։ Խնդրում ենք փորձել կրկին կամ դիմել աջակցությանը։",
         cta: "Վերադառնալ գլխավոր էջ",
       },
       errors: {
@@ -1694,13 +1709,13 @@ const translations: Record<Locale, Translation> = {
         status: {
           confirmed: "Հաստատված",
           pending: "Մշակման մեջ",
-          failed: "Չհաջողված",
+          failed: "Չեղարկված",
           unknown: "Սպասման մեջ",
         },
         labels: {
           bookingId: "Ամրագրման ID",
           confirmation: "Հաստատում",
-          hotelCode: "Հյուրանոցի կոդ",
+          hotelName: "Անվանում",
           destination: "Ուղղություն",
           rooms: "Սենյակներ",
           guests: "Հյուրեր",
@@ -1713,7 +1728,7 @@ const translations: Record<Locale, Translation> = {
       },
       voucher: {
         title: "Ամրագրման վաուչեր",
-        subtitle: "Պահպանեք վաուչերը՝ հյուրանոցում և ծառայություններում ներկայացնելու համար։",
+        subtitle: "Պահպանեք վաուչերը՝ հյուրանոցում ներկայացնելու և ճանապարգորդական այլ ծառայություններից օգտվելու համար։",
         downloadPdf: "Ներբեռնել PDF",
         backToProfile: "Վերադառնալ պրոֆիլ",
         issuedOn: "Տրված է",
@@ -1753,7 +1768,7 @@ const translations: Record<Locale, Translation> = {
         labels: {
           rating: "Կատեգորիա",
           savedOn: "Պահպանված է",
-          code: "Հյուրանոցի կոդ",
+          name: "Հյուրանոցի անվանում",
         },
       },
       insights: {
@@ -1977,6 +1992,8 @@ const translations: Record<Locale, Translation> = {
       dates: "Ամսաթվեր",
       guests: "Հյուրեր",
       total: "Ընդհանուր",
+      net: "Զուտ",
+      profit: "Շահույթ",
       status: "Կարգավիճակ",
       createdAt: "Ստեղծվել է",
       source: "Աղբյուր",
@@ -1987,7 +2004,7 @@ const translations: Record<Locale, Translation> = {
       totalGuests: "Ընդհանուր հյուրեր",
       confirmed: "Հաստատված",
       pending: "Մշակման մեջ",
-      failed: "Չհաջողված",
+      failed: "Չեղարկված",
       unknown: "Անհայտ",
     },
     access: {
@@ -2001,6 +2018,11 @@ const translations: Record<Locale, Translation> = {
     },
     actions: {
       details: "Մանրամասներ",
+      cancelAndRefund: "Չեղարկել և վերադարձնել",
+      cancelAndRefundLoading: "Ընթացքի մեջ է...",
+      cancelAndRefundSuccess: "Ամրագրումը չեղարկվեց և վերադարձը ուղարկվեց։",
+      cancelAndRefundFailed: "Չհաջողվեց չեղարկել/վերադարձնել ամրագրումը։",
+      confirmCancelAndRefund: "Չեղարկե՞լ ամրագրումը և կատարել վերադարձ (առանց ապահովագրության գումարի)։",
     },
     details: {
       payload: "Պատվերի տվյալներ",
@@ -2224,7 +2246,7 @@ const translations: Record<Locale, Translation> = {
         resetPackageWarning: "Նախապես ընտրված տարբերակը փոխելիս փաթեթը կվերագործարկվի",
         resetPackageConfirm: "Հաստատում եմ՝ վերակայել փաթեթը։",
         nonRefundableWarning:
-          "Ընտրված սենյակի սակագինը չվերադարձվող է։ Չեղարկման կամ չներկայացման դեպքում վերադարձ չի կատարվի։",
+          "Ընտրված տարբերակի սակագինը վերադարձվող չէ։ Չեղարկման կամ չներկայացման դեպքում վերադարձ չի կատարվի։",
         titles: {
           mr: "Պրն.",
           ms: "Տիկ.",
@@ -2297,6 +2319,8 @@ const translations: Record<Locale, Translation> = {
         roomMissingPrice: "Սենյակ {room}-ի գնի տվյալները բացակայում են։",
         redirectPayment: "Չհաջողվեց անցնել վճարման էջին։",
         startPaymentFailed: "Չհաջողվեց սկսել վճարումը։",
+        duplicatePaymentAttempt:
+          "Այս նախնական ամրագրման համար արդեն կա ակտիվ կամ ավարտված վճարում։ Խնդրում ենք ստուգել ամրագրման կարգավիճակը։",
         loadHotelFailed: "Չհաջողվեց բեռնել հյուրանոցի տվյալները։",
         loadRoomOptionsFailed: "Չհաջողվեց բեռնել սենյակների տարբերակները։",
       },
@@ -2678,8 +2702,9 @@ const translations: Record<Locale, Translation> = {
         devInsuranceSuccess: "Insurance submitted successfully.",
         paymentTitle: "Payment method",
         paymentHint: "Choose how you want to pay.",
-        methodIdram: "Pay by Idram",
-        methodCard: "Pay by credit card",
+        methodIdram: "Idram",
+        methodCard: "ID Bank payment terminal",
+        methodCardAmeria: "Ameriabank payment terminal",
         cardName: "Cardholder name",
         cardNumber: "Card number",
         cardExpiry: "Expiry (MM/YY)",
@@ -2687,7 +2712,8 @@ const translations: Record<Locale, Translation> = {
         termsLabel: "I agree to the",
         termsConnector: "and",
         payIdram: "Pay with Idram",
-        payCard: "Pay by card",
+        payCard: "Pay via IDBank VPOS",
+        payCardAmeria: "Pay via Ameriabank VPOS",
         totalTitle: "Payment summary",
         totalLabel: "Total",
         nonRefundableWarning:
@@ -2700,6 +2726,8 @@ const translations: Record<Locale, Translation> = {
           insuranceQuoteFailed: "Failed to calculate the insurance premium.",
           cardUnavailable: "Card payments are not available yet.",
           prebookInvalid: "Your selected rate is no longer available. Please search again and reselect the room.",
+          duplicatePaymentAttempt:
+            "There is already an active or completed payment for this prebook session. Please check your booking status.",
           paymentFailed: "Failed to start payment. Please try again.",
         },
         labels: {
@@ -2845,10 +2873,10 @@ const translations: Record<Locale, Translation> = {
     },
     payment: {
       success: {
-        title: "Payment Received",
-        body: "Thank you for your payment. We are currently confirming your booking.",
-        note: "If you don't receive a confirmation email shortly, please contact our support team.",
-        cta: "Back to Home",
+        title: "Booking Confirmed",
+        body: "Thanks for choosing MEGATOURS.",
+        note: "You will receive a confirmation email shortly.",
+        cta: "Go to My Account",
       },
       failure: {
         title: "Payment Failed",
@@ -3009,13 +3037,13 @@ const translations: Record<Locale, Translation> = {
         status: {
           confirmed: "Confirmed",
           pending: "Processing",
-          failed: "Failed",
+          failed: "Cancelled",
           unknown: "Pending",
         },
         labels: {
           bookingId: "Booking ID",
           confirmation: "Confirmation",
-          hotelCode: "Hotel Code",
+          hotelName: "Name",
           destination: "Destination",
           rooms: "Rooms",
           guests: "Guests",
@@ -3028,7 +3056,7 @@ const translations: Record<Locale, Translation> = {
       },
       voucher: {
         title: "Booking voucher",
-        subtitle: "Keep this voucher for check-in, transfers, and excursions.",
+        subtitle: "Keep this voucher to present at the hotel and access other travel services.",
         downloadPdf: "Download PDF",
         backToProfile: "Back to profile",
         issuedOn: "Issued on",
@@ -3068,7 +3096,7 @@ const translations: Record<Locale, Translation> = {
         labels: {
           rating: "Rating",
           savedOn: "Saved on",
-          code: "Hotel Code",
+          name: "Hotel name",
         },
       },
       insights: {
@@ -3292,6 +3320,8 @@ const translations: Record<Locale, Translation> = {
       dates: "Dates",
       guests: "Guests",
       total: "Total",
+      net: "Net",
+      profit: "Profit",
       status: "Status",
       createdAt: "Created",
       source: "Source",
@@ -3302,7 +3332,7 @@ const translations: Record<Locale, Translation> = {
       totalGuests: "Total guests",
       confirmed: "Confirmed",
       pending: "Pending",
-      failed: "Failed",
+      failed: "Cancelled",
       unknown: "Unknown",
     },
     access: {
@@ -3316,6 +3346,11 @@ const translations: Record<Locale, Translation> = {
     },
     actions: {
       details: "Details",
+      cancelAndRefund: "Cancel & Refund",
+      cancelAndRefundLoading: "Processing...",
+      cancelAndRefundSuccess: "Booking canceled and refund requested successfully.",
+      cancelAndRefundFailed: "Failed to cancel/refund this booking.",
+      confirmCancelAndRefund: "Cancel this booking and request refund (excluding insurance amount)?",
     },
     details: {
       payload: "Payload",
@@ -3612,6 +3647,8 @@ const translations: Record<Locale, Translation> = {
         roomMissingPrice: "Price details are missing for Room {room}.",
         redirectPayment: "Unable to redirect to the payment gateway.",
         startPaymentFailed: "Failed to initiate the payment process.",
+        duplicatePaymentAttempt:
+          "There is already an active or completed payment for this prebook session. Please check your booking status.",
         loadHotelFailed: "We are unable to load this hotel's details right now.",
         loadRoomOptionsFailed: "Unable to load available room options.",
       },
@@ -3996,8 +4033,9 @@ const translations: Record<Locale, Translation> = {
         devInsuranceSuccess: "Страховка отправлена.",
         paymentTitle: "Способ оплаты",
         paymentHint: "Выберите удобный способ оплаты.",
-        methodIdram: "Оплата через Idram",
-        methodCard: "Оплата картой",
+        methodIdram: "Idram",
+        methodCard: "Платежный терминал ID Bank.",
+        methodCardAmeria: "Платежный терминал Ameriabank.",
         cardName: "Имя на карте",
         cardNumber: "Номер карты",
         cardExpiry: "Срок действия (MM/YY)",
@@ -4005,7 +4043,8 @@ const translations: Record<Locale, Translation> = {
         termsLabel: "Я соглашаюсь с",
         termsConnector: "и",
         payIdram: "Оплатить через Idram",
-        payCard: "Оплатить картой",
+        payCard: "Оплатить через IDBank VPOS",
+        payCardAmeria: "Оплатить через Ameriabank VPOS",
         totalTitle: "Сумма к оплате",
         totalLabel: "Итого",
         nonRefundableWarning:
@@ -4018,6 +4057,8 @@ const translations: Record<Locale, Translation> = {
           insuranceQuoteFailed: "Не удалось рассчитать стоимость страховки.",
           cardUnavailable: "Оплата картой пока недоступна.",
           prebookInvalid: "Выбранный тариф больше недоступен. Повторите поиск и выберите номер заново.",
+          duplicatePaymentAttempt:
+            "Для этой сессии предбронирования уже есть активный или завершенный платеж. Проверьте статус бронирования.",
           paymentFailed: "Не удалось начать оплату. Пожалуйста, попробуйте снова.",
         },
         labels: {
@@ -4163,10 +4204,10 @@ const translations: Record<Locale, Translation> = {
     },
     payment: {
       success: {
-        title: "Платеж получен",
-        body: "Спасибо за оплату. Мы подтверждаем ваше бронирование.",
-        note: "Если подтверждение не придет в ближайшее время, свяжитесь с поддержкой.",
-        cta: "На главную",
+        title: "Бронирование подтверждено",
+        body: "Спасибо, что выбрали MEGATOURS.",
+        note: "Скоро вы получите подтверждение на вашу электронную почту.",
+        cta: "Личный кабинет",
       },
       failure: {
         title: "Платеж не прошел",
@@ -4327,13 +4368,13 @@ const translations: Record<Locale, Translation> = {
         status: {
           confirmed: "Подтверждено",
           pending: "В обработке",
-          failed: "Не удалось",
+          failed: "Отменено",
           unknown: "Ожидание",
         },
         labels: {
           bookingId: "ID бронирования",
           confirmation: "Подтверждение",
-          hotelCode: "Код отеля",
+          hotelName: "Название",
           destination: "Направление",
           rooms: "Номера",
           guests: "Гости",
@@ -4346,7 +4387,7 @@ const translations: Record<Locale, Translation> = {
       },
       voucher: {
         title: "Ваучер бронирования",
-        subtitle: "Сохраните ваучер для заселения и услуг.",
+        subtitle: "Сохраните ваучер для предъявления в отеле и использования других услуг во время поездки.",
         downloadPdf: "Скачать PDF",
         backToProfile: "Назад в профиль",
         issuedOn: "Дата выдачи",
@@ -4386,7 +4427,7 @@ const translations: Record<Locale, Translation> = {
         labels: {
           rating: "Рейтинг",
           savedOn: "Сохранено",
-          code: "Код отеля",
+          name: "Название отеля",
         },
       },
       insights: {
@@ -4610,6 +4651,8 @@ const translations: Record<Locale, Translation> = {
       dates: "Даты",
       guests: "Гости",
       total: "Итого",
+      net: "Нетто",
+      profit: "Прибыль",
       status: "Статус",
       createdAt: "Создано",
       source: "Источник",
@@ -4620,7 +4663,7 @@ const translations: Record<Locale, Translation> = {
       totalGuests: "Всего гостей",
       confirmed: "Подтверждено",
       pending: "В обработке",
-      failed: "Ошибка",
+      failed: "Отменено",
       unknown: "Неизвестно",
     },
     access: {
@@ -4634,6 +4677,11 @@ const translations: Record<Locale, Translation> = {
     },
     actions: {
       details: "Детали",
+      cancelAndRefund: "Отменить и вернуть",
+      cancelAndRefundLoading: "Обработка...",
+      cancelAndRefundSuccess: "Бронирование отменено, запрос на возврат отправлен.",
+      cancelAndRefundFailed: "Не удалось отменить бронирование/выполнить возврат.",
+      confirmCancelAndRefund: "Отменить бронирование и отправить возврат (без суммы страховки)?",
     },
     details: {
       payload: "Данные запроса",
@@ -4938,6 +4986,8 @@ const translations: Record<Locale, Translation> = {
         roomMissingPrice: "В номере {room} нет данных о цене.",
         redirectPayment: "Не удалось перейти к оплате.",
         startPaymentFailed: "Не удалось начать оплату.",
+        duplicatePaymentAttempt:
+          "Для этой сессии предбронирования уже есть активный или завершенный платеж. Проверьте статус бронирования.",
         loadHotelFailed: "Не удалось загрузить информацию об отеле.",
         loadRoomOptionsFailed: "Не удалось загрузить варианты номеров.",
       },

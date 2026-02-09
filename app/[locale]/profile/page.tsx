@@ -16,6 +16,7 @@ type BookingRecord = {
   source?: string | null;
   displayTotal?: number | null;
   displayCurrency?: string | null;
+  destinationName?: string | null;
 };
 
 type SearchRecord = {
@@ -70,6 +71,12 @@ const serializeDate = (value?: Date | string | null) => {
   return value;
 };
 
+const normalizeText = (value?: string | null) => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 const sanitizeBookingPayload = (payload?: AoryxBookingPayload | null): AoryxBookingPayload | null => {
   if (!payload) return null;
   return {
@@ -114,6 +121,7 @@ export default async function ProfilePage() {
   let searchCount = 0;
   let favoriteCount = 0;
   let hasError = false;
+  const destinationNameByCode = new Map<string, string>();
 
   try {
     const db = await getDb();
@@ -140,6 +148,45 @@ export default async function ProfilePage() {
     bookingCount = bookingTotal;
     searchCount = searchTotal;
     favoriteCount = favoriteTotal;
+
+    searches.forEach((entry) => {
+      const destinationCode = normalizeText(entry.resultSummary?.destinationCode);
+      const destinationName = normalizeText(entry.resultSummary?.destinationName);
+      if (!destinationCode || !destinationName) return;
+      if (destinationNameByCode.has(destinationCode)) return;
+      destinationNameByCode.set(destinationCode, destinationName);
+    });
+
+    const bookingDestinationCodes = Array.from(
+      new Set(
+        bookings
+          .map((entry) => normalizeText(entry.payload?.destinationCode))
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+    const unresolvedDestinationCodes = bookingDestinationCodes.filter((code) => !destinationNameByCode.has(code));
+    if (unresolvedDestinationCodes.length > 0) {
+      const destinationSearchDocs = (await searchesCollection
+        .find(
+          {
+            userIdString,
+            "resultSummary.destinationCode": { $in: unresolvedDestinationCodes },
+          },
+          {
+            projection: { resultSummary: 1 },
+            sort: { createdAt: -1 },
+          }
+        )
+        .toArray()) as SearchRecord[];
+
+      destinationSearchDocs.forEach((entry) => {
+        const destinationCode = normalizeText(entry.resultSummary?.destinationCode);
+        const destinationName = normalizeText(entry.resultSummary?.destinationName);
+        if (!destinationCode || !destinationName) return;
+        if (destinationNameByCode.has(destinationCode)) return;
+        destinationNameByCode.set(destinationCode, destinationName);
+      });
+    }
   } catch (error) {
     console.error("[Profile] Failed to load user data", error);
     hasError = true;
@@ -164,6 +211,10 @@ export default async function ProfilePage() {
 
   const serializedBookings = bookings.map((item) => {
     const payload = sanitizeBookingPayload(item.payload ?? null);
+    const destinationCode = normalizeText(payload?.destinationCode);
+    const destinationName =
+      (destinationCode ? destinationNameByCode.get(destinationCode) ?? null : null) ??
+      normalizeText(payload?.transferSelection?.destination?.name);
     const displayTotal =
       payload && rates
         ? resolveBookingDisplayTotal(payload, rates, { hotelMarkup })
@@ -177,6 +228,7 @@ export default async function ProfilePage() {
       source: item.source ?? null,
       displayTotal: displayTotal?.amount ?? null,
       displayCurrency: displayTotal?.currency ?? null,
+      destinationName,
     };
   });
 

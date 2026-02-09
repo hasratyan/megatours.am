@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import type { Locale } from "@/lib/i18n";
+import { resolveBookingStatusKey, type BookingStatusKey } from "@/lib/booking-status";
+import { ApiError, postJson } from "@/lib/api-helpers";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
 type AdminBookingRecord = {
@@ -15,8 +17,13 @@ type AdminBookingRecord = {
   source: string | null;
   payload: AoryxBookingPayload | null;
   booking: AoryxBookingResult | null;
+  refundState?: string | null;
   displayTotal?: number | null;
   displayCurrency?: string | null;
+  displayNet?: number | null;
+  displayNetCurrency?: string | null;
+  displayProfit?: number | null;
+  displayProfitCurrency?: string | null;
 };
 
 type AdminBookingsClientProps = {
@@ -24,7 +31,15 @@ type AdminBookingsClientProps = {
   initialBookings: AdminBookingRecord[];
 };
 
-type BookingStatusKey = "confirmed" | "pending" | "failed" | "unknown";
+type CancelBookingResponse = {
+  message?: string;
+  bookingStatus?: string | null;
+  refund?: {
+    status?: string | null;
+  } | null;
+};
+
+const ADMIN_BOOKINGS_COLUMN_COUNT = 12;
 
 const intlLocales: Record<Locale, string> = {
   hy: "hy-AM",
@@ -85,18 +100,37 @@ const formatPrice = (amount: number, currency: string, locale: string) => {
   }
 };
 
-const getStatusKey = (status?: string | null): BookingStatusKey => {
-  const normalized = (status ?? "").toLowerCase();
-  if (normalized.includes("confirm") || normalized.includes("complete")) return "confirmed";
-  if (normalized.includes("fail") || normalized.includes("cancel")) return "failed";
-  if (normalized.includes("pending") || normalized.includes("process")) return "pending";
-  return "unknown";
-};
-
 const countGuestsFromRooms = (rooms: Array<{ adults: number; childrenAges: number[] }>) =>
   rooms.reduce((sum, room) => sum + room.adults + room.childrenAges.length, 0);
 
 const normalizeText = (value: string) => value.trim().toLowerCase();
+
+const resolveRefundStateKey = (value?: string | null) => {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "already_refunded") return "already_refunded";
+  if (normalized.includes("refunded")) return "refunded";
+  if (
+    normalized.includes("in_progress") ||
+    normalized.includes("requested") ||
+    normalized.includes("processing")
+  ) {
+    return "in_progress";
+  }
+  if (normalized.includes("fail") || normalized.includes("error")) return "failed";
+  return "unknown";
+};
+
+const REFUND_LABELS: Record<
+  "refunded" | "already_refunded" | "in_progress" | "failed" | "unknown",
+  string
+> = {
+  refunded: "Refunded",
+  already_refunded: "Already refunded",
+  in_progress: "Refund in progress",
+  failed: "Refund failed",
+  unknown: "Refund",
+};
 
 export default function AdminBookingsClient({
   adminUser,
@@ -105,37 +139,51 @@ export default function AdminBookingsClient({
   const t = useTranslations();
   const { locale } = useLanguage();
   const intlLocale = intlLocales[locale] ?? "en-GB";
+  const [bookings, setBookings] = useState(initialBookings);
   const [hydrated, setHydrated] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<BookingStatusKey | "all">("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+  const [cancelingBookingId, setCancelingBookingId] = useState<string | null>(null);
+  const [cancelFeedback, setCancelFeedback] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
 
   useEffect(() => {
     setHydrated(true);
   }, []);
 
+  useEffect(() => {
+    setBookings(initialBookings);
+  }, [initialBookings]);
+
   const sources = useMemo(() => {
     const values = new Set<string>();
-    initialBookings.forEach((booking) => {
+    bookings.forEach((booking) => {
       if (booking.source && booking.source.trim().length > 0) {
         values.add(booking.source.trim());
       }
     });
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [initialBookings]);
+  }, [bookings]);
 
   const normalizedQuery = normalizeText(query);
 
   const filteredBookings = useMemo(() => {
-    const entries = initialBookings.map((entry) => {
+    const entries = bookings.map((entry) => {
       const payload = entry.payload;
       const booking = entry.booking;
       const total =
         typeof entry.displayTotal === "number" ? entry.displayTotal : null;
       const totalCurrency = entry.displayCurrency ?? payload?.currency ?? "USD";
+      const net =
+        typeof entry.displayNet === "number" ? entry.displayNet : null;
+      const netCurrency = entry.displayNetCurrency ?? totalCurrency;
+      const profit =
+        typeof entry.displayProfit === "number" ? entry.displayProfit : null;
+      const profitCurrency = entry.displayProfitCurrency ?? totalCurrency;
       const guestsCount = payload ? countGuestsFromRooms(payload.rooms) : 0;
-      const statusKey = getStatusKey(booking?.status ?? null);
+      const statusKey = resolveBookingStatusKey(booking?.status ?? null);
       const createdTimestamp = entry.createdAt ? parseDate(entry.createdAt)?.getTime() ?? 0 : 0;
       const searchParts = [
         payload?.hotelName,
@@ -160,6 +208,10 @@ export default function AdminBookingsClient({
         booking,
         total,
         totalCurrency,
+        net,
+        netCurrency,
+        profit,
+        profitCurrency,
         guestsCount,
         statusKey,
         createdTimestamp,
@@ -185,7 +237,7 @@ export default function AdminBookingsClient({
     });
 
     return filtered;
-  }, [initialBookings, normalizedQuery, sortBy, sourceFilter, statusFilter]);
+  }, [bookings, normalizedQuery, sortBy, sourceFilter, statusFilter]);
 
   const stats = useMemo(() => {
     const counts: Record<BookingStatusKey, number> = {
@@ -216,6 +268,74 @@ export default function AdminBookingsClient({
     setStatusFilter("all");
     setSourceFilter("all");
     setSortBy("newest");
+    setExpandedBookingId(null);
+  };
+
+  const handleCancelAndRefund = async (bookingId: string) => {
+    if (!bookingId || cancelingBookingId) return;
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(t.admin.actions.confirmCancelAndRefund);
+      if (!confirmed) return;
+    }
+
+    setCancelingBookingId(bookingId);
+    setCancelFeedback((prev) => {
+      const next = { ...prev };
+      delete next[bookingId];
+      return next;
+    });
+
+    try {
+      const response = await postJson<CancelBookingResponse>(
+        `/api/admin/bookings/${encodeURIComponent(bookingId)}/cancel`,
+        {}
+      );
+      const message =
+        typeof response.message === "string" && response.message.trim().length > 0
+          ? response.message
+          : t.admin.actions.cancelAndRefundSuccess;
+      const bookingStatus =
+        typeof response.bookingStatus === "string" && response.bookingStatus.trim().length > 0
+          ? response.bookingStatus
+          : "4";
+
+      setBookings((prev) =>
+        prev.map((entry) =>
+          entry.id === bookingId
+            ? {
+                ...entry,
+                booking: entry.booking
+                  ? {
+                      ...entry.booking,
+                      status: bookingStatus,
+                    }
+                  : entry.booking,
+                refundState:
+                  typeof response.refund?.status === "string" && response.refund.status.trim().length > 0
+                    ? response.refund.status
+                    : entry.refundState ?? "refunded",
+              }
+            : entry
+        )
+      );
+      setCancelFeedback((prev) => ({
+        ...prev,
+        [bookingId]: { ok: true, message },
+      }));
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : t.admin.actions.cancelAndRefundFailed;
+      setCancelFeedback((prev) => ({
+        ...prev,
+        [bookingId]: { ok: false, message },
+      }));
+    } finally {
+      setCancelingBookingId(null);
+    }
   };
 
   return (
@@ -327,6 +447,8 @@ export default function AdminBookingsClient({
                   <th>{t.admin.columns.dates}</th>
                   <th>{t.admin.columns.guests}</th>
                   <th>{t.admin.columns.total}</th>
+                  <th>{t.admin.columns.net}</th>
+                  <th>{t.admin.columns.profit}</th>
                   <th>{t.admin.columns.status}</th>
                   <th>{t.admin.columns.createdAt}</th>
                   <th>{t.admin.columns.source}</th>
@@ -338,9 +460,24 @@ export default function AdminBookingsClient({
                   const payload = item.payload;
                   const booking = item.booking;
                   const statusLabel = t.profile.bookings.status[item.statusKey];
+                  const isCanceling = cancelingBookingId === item.entry.id;
+                  const isExpanded = expandedBookingId === item.entry.id;
+                  const isVposSource = (item.entry.source ?? "").toLowerCase().includes("vpos");
+                  const canCancelAndRefund = item.statusKey === "confirmed" && isVposSource;
+                  const actionFeedback = cancelFeedback[item.entry.id] ?? null;
+                  const refundStateKey = resolveRefundStateKey(item.entry.refundState);
+                  const refundLabel = refundStateKey ? REFUND_LABELS[refundStateKey] : null;
                   const totalLabel =
                     payload && item.total !== null
                       ? formatPrice(item.total, item.totalCurrency, intlLocale)
+                      : "—";
+                  const netLabel =
+                    payload && item.net !== null
+                      ? formatPrice(item.net, item.netCurrency, intlLocale)
+                      : "—";
+                  const profitLabel =
+                    payload && item.profit !== null
+                      ? formatPrice(item.profit, item.profitCurrency, intlLocale)
                       : "—";
                   const bookingId =
                     payload?.customerRefNumber ??
@@ -362,73 +499,124 @@ export default function AdminBookingsClient({
                     item.entry.userIdString ??
                     "—";
                   return (
-                    <tr key={item.entry.id}>
-                      <td>{bookingId}</td>
-                      <td>
-                        <div className="admin-cell-stack">
-                          <span>{hotelLabel}</span>
-                          {payload?.hotelCode && (
-                            <small>{payload.hotelCode}</small>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="admin-cell-stack">
-                          <span>{userLabel}</span>
-                          {item.entry.userEmail && item.entry.userName && (
-                            <small>{item.entry.userEmail}</small>
-                          )}
-                        </div>
-                      </td>
-                      <td>{dateRange ?? "—"}</td>
-                      <td>{item.guestsCount}</td>
-                      <td>{totalLabel}</td>
-                      <td>
-                        <span className={`status-chip status-${item.statusKey}`}>{statusLabel}</span>
-                      </td>
-                      <td>{createdLabel ?? "—"}</td>
-                      <td>{item.entry.source ?? "—"}</td>
-                      <td>
-                        <details className="admin-detail">
-                          <summary>{t.admin.actions.details}</summary>
-                          <div className="admin-detail-body">
-                            <div className="admin-detail-grid">
-                              <div>
-                                <span>{t.profile.bookings.labels.confirmation}</span>
-                                <strong>{confirmation}</strong>
-                              </div>
-                              <div>
-                                <span>{t.profile.bookings.labels.rooms}</span>
-                                <strong>{payload?.rooms.length ?? 0}</strong>
-                              </div>
-                              <div>
-                                <span>{t.profile.bookings.labels.destination}</span>
-                                <strong>{payload?.destinationCode ?? "—"}</strong>
-                              </div>
-                              <div>
-                                <span>{t.profile.bookings.labels.bookedOn}</span>
-                                <strong>{createdLabel ?? "—"}</strong>
-                              </div>
-                            </div>
-                            <div className="admin-json-grid">
-                              <div>
-                                <span>{t.admin.details.payload}</span>
-                                <pre>{JSON.stringify(payload, null, 2)}</pre>
-                              </div>
-                              <div>
-                                <span>{t.admin.details.booking}</span>
-                                <pre>{JSON.stringify(booking, null, 2)}</pre>
-                              </div>
-                            </div>
+                    <Fragment key={item.entry.id}>
+                      <tr>
+                        <td>{bookingId}</td>
+                        <td>
+                          <div className="admin-cell-stack">
+                            <span>{hotelLabel}</span>
                             {payload?.hotelCode && (
-                              <Link className="profile-link" href={`/${locale}/hotels/${payload.hotelCode}`}>
-                                {t.profile.bookings.viewHotel}
-                              </Link>
+                              <small>{payload.hotelCode}</small>
                             )}
                           </div>
-                        </details>
-                      </td>
-                    </tr>
+                        </td>
+                        <td>
+                          <div className="admin-cell-stack">
+                            <span>{userLabel}</span>
+                            {item.entry.userEmail && item.entry.userName && (
+                              <small>{item.entry.userEmail}</small>
+                            )}
+                          </div>
+                        </td>
+                        <td>{dateRange ?? "—"}</td>
+                        <td>{item.guestsCount}</td>
+                        <td>{totalLabel}</td>
+                        <td>{netLabel}</td>
+                        <td>{profitLabel}</td>
+                        <td>
+                          <div className="admin-status-stack">
+                            <span className={`status-chip status-${item.statusKey}`}>{statusLabel}</span>
+                            {refundStateKey && (
+                              <span className={`refund-chip refund-${refundStateKey}`}>{refundLabel}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td>{createdLabel ?? "—"}</td>
+                        <td>{item.entry.source ?? "—"}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="admin-detail-toggle"
+                            onClick={() =>
+                              setExpandedBookingId((current) =>
+                                current === item.entry.id ? null : item.entry.id
+                              )
+                            }
+                            aria-expanded={isExpanded}
+                          >
+                            {t.admin.actions.details}
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="admin-detail-row">
+                          <td colSpan={ADMIN_BOOKINGS_COLUMN_COUNT}>
+                            <div className="admin-detail-body">
+                              <div className="admin-detail-grid">
+                                <div>
+                                  <span>{t.profile.bookings.labels.confirmation}</span>
+                                  <strong>{confirmation}</strong>
+                                </div>
+                                <div>
+                                  <span>{t.profile.bookings.labels.rooms}</span>
+                                  <strong>{payload?.rooms.length ?? 0}</strong>
+                                </div>
+                                <div>
+                                  <span>{t.profile.bookings.labels.destination}</span>
+                                  <strong>{payload?.destinationCode ?? "—"}</strong>
+                                </div>
+                                <div>
+                                  <span>{t.profile.bookings.labels.bookedOn}</span>
+                                  <strong>{createdLabel ?? "—"}</strong>
+                                </div>
+                                <div>
+                                  <span>{t.admin.columns.net}</span>
+                                  <strong>{netLabel}</strong>
+                                </div>
+                                <div>
+                                  <span>{t.admin.columns.profit}</span>
+                                  <strong>{profitLabel}</strong>
+                                </div>
+                              </div>
+                              <div className="admin-json-grid">
+                                <div>
+                                  <span>{t.admin.details.payload}</span>
+                                  <pre>{JSON.stringify(payload, null, 2)}</pre>
+                                </div>
+                                <div>
+                                  <span>{t.admin.details.booking}</span>
+                                  <pre>{JSON.stringify(booking, null, 2)}</pre>
+                                </div>
+                              </div>
+                              {payload?.hotelCode && (
+                                <Link className="profile-link" href={`/${locale}/hotels/${payload.hotelCode}`}>
+                                  {t.profile.bookings.viewHotel}
+                                </Link>
+                              )}
+                              {canCancelAndRefund && (
+                                <div className="admin-action-row">
+                                  <button
+                                    type="button"
+                                    className="admin-danger"
+                                    onClick={() => handleCancelAndRefund(item.entry.id)}
+                                    disabled={isCanceling}
+                                  >
+                                    {isCanceling
+                                      ? t.admin.actions.cancelAndRefundLoading
+                                      : t.admin.actions.cancelAndRefund}
+                                  </button>
+                                  {actionFeedback && (
+                                    <p className={actionFeedback.ok ? "admin-inline-success" : "admin-inline-error"}>
+                                      {actionFeedback.message}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>

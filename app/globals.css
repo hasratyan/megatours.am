@@ -5439,6 +5439,7 @@ main.service-builder{
 }
 
 main.payment-status{
+  min-height: 90vh;
   padding-top: 7em;
   color: #e2e8f0;
   gap: 0.75em;
@@ -5624,6 +5625,7 @@ main.payment-status{
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+  justify-content: center;
 }
 
 .profile-action{
@@ -5635,7 +5637,7 @@ main.payment-status{
   border-radius: 1.5em;
   align-items: center;
   gap: .5em;
-  padding: .7em .9em;
+  padding: .8em 1em;
   font-size: .9rem;
   font-weight: 600;
   line-height: normal;
@@ -5701,18 +5703,20 @@ main.payment-status{
   display: grid;
   gap: 1.25rem;
 
+  @media screen and (max-width:450px) {
+    & {
+      padding: 1em;
+    }
+  
+  }
+
   .profile-card-header{
     display: grid;
     gap: 0.5rem;
-  }
-
-  h2{
-    font-size: 1.35rem;
-    font-weight: 600;
-    color: #f8fafc;
-
-    & + p{
-      color: #cbd5e1;
+    h2{
+      color: #f8fafc;
+      font-size: 1.35rem;
+      font-weight: 600;
     }
   }
 }
@@ -5794,6 +5798,9 @@ main.payment-status{
     font-size: 1.1rem;
     color: #f8fafc;
     font-weight: 600;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
   }
 }
 
@@ -5861,7 +5868,13 @@ main.payment-status{
 
 .voucher-shell{
   display: grid;
-  gap: 2rem;
+  gap: 1.5rem;
+
+  h2{
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: #f8fafc;
+  }
 }
 
 .voucher-hero{
@@ -5870,6 +5883,10 @@ main.payment-status{
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
+
+  .company-information{
+    display: none;
+  }
 
   h1{
     margin-bottom: .5rem;
@@ -5981,8 +5998,14 @@ main.payment-status{
   display: grid;
   gap: 1rem;
 
+  div{
+    display: flex;
+    gap: 0.5em;
+    align-items: center;
+  }
+
   strong{
-    font-size: 1.6rem;
+    font-size: 1.5rem;
     color: #7cf2d4;
   }
 
@@ -5998,25 +6021,43 @@ main.payment-status{
 }
 
 .voucher-service{
-  border-radius: 1.5rem;
-  padding: 1rem;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  /* background: rgba(2, 6, 23, 0.55); */
+  border: 1px solid #94a3b833;
+  border-radius: 1rem;
+  padding: 1rem 1rem 1rem 1.5rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1.5em;
+
+  @media screen and (max-width: 768px) {
+    & {
+      flex-direction: column;
+      .voucher-service__price{
+        align-self: end;
+      }
+    }
+    
+  }
+
   legend{
     color: #fff;
     font-size: 1rem;
     padding-inline: 1em;
+    font-weight: 600;
   }
 }
 
 .voucher-service__price{
-  color: #7cf2d4;
+  color: #000;
   font-weight: 600;
+  background: #7cf2d4;
+  padding: 0.5em 0.8em;
+  border-radius: 1em;
+  margin-top: -0.5rem;
 }
 
 .voucher-service__details{
-  margin-top: 0.75rem;
-  padding-left: 1.2rem;
   color: rgba(226, 232, 240, 0.75);
   display: grid;
   gap: 0.35rem;
@@ -6123,6 +6164,55 @@ main.payment-status{
 
   .voucher-shell{
     padding: 0;
+
+    .voucher-hero{
+      gap: 1.5rem;
+
+      .company-information{
+        flex-direction: column;
+        flex: 1;
+        align-items: center;
+        gap: 1.5em;
+        display: flex;
+        border-bottom: 1px solid #7cf2d4;
+        padding-bottom: 1em;
+        justify-content: space-evenly;
+        width: 100%;
+
+        svg{
+          max-width: 200px;
+          height: auto;
+        }
+
+        .contacts{
+          text-wrap: nowrap;
+          gap: 1em 3em;
+          font-size: .9em;
+          display: flex;
+          flex-wrap: wrap;
+          column-rule: 1px solid #374151;
+          column-rule-break: intersection;
+          column-rule-outset: -3px;
+          
+          span{
+            color: #374151;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+          }
+        }
+      }
+
+      h1{
+        font-size: 2rem;
+      }
+      .voucher-subtitle{
+        max-width: none;
+      }
+      .voucher-meta{
+        background: #7cf2d4;
+      }
+    }
   }
 
   .voucher-hero,
@@ -6132,6 +6222,12 @@ main.payment-status{
     background: #fff;
     border-color: #d4d4d4;
     box-shadow: none;
+  }
+
+  .voucher-card:not(:has(h2)){
+    padding: 0;
+    border: 0;
+    border-radius: 0;
   }
 
   .voucher-service__price,
@@ -6532,11 +6628,12 @@ main.payment-status{
   }
 
   th{
-    font-size: 0.7rem;
-    letter-spacing: 0.16em;
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: #94a3b8;
     background: rgba(15, 23, 42, 0.8);
+    text-wrap: nowrap;
   }
 
   tbody tr{
@@ -6554,27 +6651,94 @@ main.payment-status{
   }
 }
 
-.admin-detail{
-  summary{
-    cursor: pointer;
-    list-style: none;
-    color: #7cf2d4;
-    font-weight: 600;
-  }
+.admin-status-stack{
+  display: grid;
+  gap: 0.5rem;
+}
 
-  summary::-webkit-details-marker{
-    display: none;
-  }
+.admin-status-stack .status-chip{
+  margin-bottom: 0;
+}
+
+.refund-chip{
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.2em 0.6em;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.refund-refunded,
+.refund-already_refunded{
+  background: rgba(52, 211, 153, 0.16);
+  color: #a7f3d0;
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+.refund-in_progress{
+  background: rgba(251, 191, 36, 0.16);
+  color: #fde68a;
+  border-color: rgba(251, 191, 36, 0.42);
+}
+
+.refund-failed{
+  background: rgba(248, 113, 113, 0.18);
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.refund-unknown{
+  background: rgba(148, 163, 184, 0.16);
+  color: #e2e8f0;
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+.admin-detail-toggle{
+  border: 1px solid rgba(124, 242, 212, 0.45);
+  background: transparent;
+  color: #7cf2d4;
+  border-radius: 0.75em;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.admin-detail-toggle:hover{
+  background: rgba(124, 242, 212, 0.12);
+  border-color: rgba(124, 242, 212, 0.8);
 }
 
 .admin-detail-body{
-  margin-top: 0.75rem;
   display: grid;
   gap: 1rem;
   border-radius: 1em;
   padding: 0.9rem;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-action-row{
+  display: grid;
+  gap: 0.45rem;
+}
+
+.admin-inline-success{
+  margin: 0;
+  color: #4ade80;
+  font-size: 0.8rem;
+}
+
+.admin-inline-error{
+  margin: 0;
+  color: #fda4af;
+  font-size: 0.8rem;
 }
 
 .admin-detail-grid{
@@ -6585,7 +6749,7 @@ main.payment-status{
   span{
     display: block;
     color: #94a3b8;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.12em;
     margin-bottom: 0.3rem;

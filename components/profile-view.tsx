@@ -7,6 +7,7 @@ import { buildSearchQuery } from "@/lib/search-query";
 import type { AoryxBookingPayload, AoryxBookingResult, AoryxSearchParams } from "@/types/aoryx";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import type { Locale } from "@/lib/i18n";
+import { resolveBookingStatusKey } from "@/lib/booking-status";
 
 type BookingRecord = {
   createdAt?: string | null;
@@ -15,6 +16,7 @@ type BookingRecord = {
   source?: string | null;
   displayTotal?: number | null;
   displayCurrency?: string | null;
+  destinationName?: string | null;
 };
 
 type SearchRecord = {
@@ -117,16 +119,6 @@ const formatPrice = (amount: number, currency: string, locale: string) => {
   } catch {
     return `${safeCurrency} ${amount}`;
   }
-};
-
-type BookingStatusKey = "confirmed" | "pending" | "failed" | "unknown";
-
-const getStatusKey = (status?: string | null): BookingStatusKey => {
-  const normalized = (status ?? "").toLowerCase();
-  if (normalized.includes("confirm") || normalized.includes("complete")) return "confirmed";
-  if (normalized.includes("fail") || normalized.includes("cancel")) return "failed";
-  if (normalized.includes("pending") || normalized.includes("process")) return "pending";
-  return "unknown";
 };
 
 const countGuestsFromRooms = (rooms: Array<{ adults: number; childrenAges: number[] }>) =>
@@ -380,8 +372,8 @@ export default function ProfileView({
                             <strong>{item.savedAt ? formatDateSafe(item.savedAt) ?? "—" : "—"}</strong>
                           </div>
                           <div>
-                            <span>{t.profile.favorites.labels.code}</span>
-                            <strong>{item.hotelCode ?? "—"}</strong>
+                            <span>{t.profile.favorites.labels.name}</span>
+                            <strong>{item.name ?? item.hotelCode ?? "—"}</strong>
                           </div>
                         </div>
                       </div>
@@ -407,11 +399,12 @@ export default function ProfileView({
                 {bookings.map((item, index) => {
                   const payload = item.payload ?? null;
                   const booking = item.booking ?? null;
-                  const statusKey = getStatusKey(booking?.status ?? null);
+                  const statusKey = resolveBookingStatusKey(booking?.status ?? null);
                   const statusLabel = t.profile.bookings.status[statusKey];
                   const totalLabel = formatBookingTotal(item) ?? "—";
                   const roomsCount = payload?.rooms.length ?? 0;
                   const guestsCount = payload ? countGuestsFromRooms(payload.rooms) : 0;
+                  const destinationLabel = item.destinationName ?? payload?.destinationCode ?? null;
                   const confirmation =
                     booking?.hotelConfirmationNumber ??
                     booking?.supplierConfirmationNumber ??
@@ -422,10 +415,10 @@ export default function ProfileView({
                       <div className="profile-item-header">
                         <div>
                           <span className={`status-chip status-${statusKey}`}>{statusLabel}</span>
-                          <h3>{payload?.hotelName ?? t.profile.bookings.labels.hotelCode}</h3>
+                          <h3>{payload?.hotelName ?? t.profile.bookings.labels.hotelName}</h3>
                           <p className="profile-item-meta">
                             {t.profile.bookings.labels.bookingId}: {payload?.customerRefNumber ?? "—"}
-                            {payload?.destinationCode ? ` • ${t.profile.bookings.labels.destination}: ${payload.destinationCode}` : ""}
+                            {destinationLabel ? ` • ${t.profile.bookings.labels.destination}: ${destinationLabel}` : ""}
                           </p>
                           <p className="profile-item-meta">
                             {t.profile.bookings.labels.confirmation}: {confirmation}

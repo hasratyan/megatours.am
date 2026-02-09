@@ -6,7 +6,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { signIn, useSession } from "next-auth/react";
 import SearchForm from "@/components/search-form";
 import Loader from "@/components/loader";
-import { postJson } from "@/lib/api-helpers";
+import { ApiError, postJson } from "@/lib/api-helpers";
 import { parseSearchParams } from "@/lib/search-query";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
@@ -2330,6 +2330,11 @@ export default function HotelClient({
       document.body.appendChild(form);
       form.submit();
     } catch (err) {
+      if (err instanceof ApiError && err.code === "duplicate_payment_attempt") {
+        setBookingError(t.hotel.errors.duplicatePaymentAttempt);
+        setBookingLoading(false);
+        return;
+      }
       const message = err instanceof Error ? err.message : t.hotel.errors.startPaymentFailed;
       setBookingError(message);
       setBookingLoading(false);

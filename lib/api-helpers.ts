@@ -1,3 +1,45 @@
+type ErrorResponseData = {
+  error?: unknown;
+  code?: unknown;
+  [key: string]: unknown;
+};
+
+type ApiErrorOptions = {
+  status: number;
+  code: string | null;
+  data: ErrorResponseData | null;
+};
+
+export class ApiError extends Error {
+  status: number;
+  code: string | null;
+  data: ErrorResponseData | null;
+
+  constructor(message: string, options: ApiErrorOptions) {
+    super(message);
+    this.name = "ApiError";
+    this.status = options.status;
+    this.code = options.code;
+    this.data = options.data;
+  }
+}
+
+const parseErrorData = async (response: Response): Promise<ErrorResponseData | null> => {
+  const parsed = await response.json().catch(() => null);
+  if (!parsed || typeof parsed !== "object") {
+    return null;
+  }
+  return parsed as ErrorResponseData;
+};
+
+const extractErrorMessage = (data: ErrorResponseData | null, status: number) =>
+  typeof data?.error === "string" && data.error.trim().length > 0
+    ? data.error
+    : `HTTP error ${status}`;
+
+const extractErrorCode = (data: ErrorResponseData | null) =>
+  typeof data?.code === "string" && data.code.trim().length > 0 ? data.code.trim() : null;
+
 /**
  * Helper function to make POST requests with JSON body
  */
@@ -9,9 +51,12 @@ export async function postJson<T>(url: string, payload: unknown): Promise<T> {
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = typeof errorData.error === "string" ? errorData.error : `HTTP error ${response.status}`;
-    throw new Error(message);
+    const errorData = await parseErrorData(response);
+    throw new ApiError(extractErrorMessage(errorData, response.status), {
+      status: response.status,
+      code: extractErrorCode(errorData),
+      data: errorData,
+    });
   }
 
   return response.json() as Promise<T>;
@@ -27,9 +72,12 @@ export async function getJson<T>(url: string): Promise<T> {
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = typeof errorData.error === "string" ? errorData.error : `HTTP error ${response.status}`;
-    throw new Error(message);
+    const errorData = await parseErrorData(response);
+    throw new ApiError(extractErrorMessage(errorData, response.status), {
+      status: response.status,
+      code: extractErrorCode(errorData),
+      data: errorData,
+    });
   }
 
   return response.json() as Promise<T>;
