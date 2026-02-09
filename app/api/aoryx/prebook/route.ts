@@ -9,9 +9,13 @@ const parseRateKeys = (input: unknown): string[] => {
   if (!Array.isArray(input) || input.length === 0) {
     throw new Error("rateKeys must be a non-empty array");
   }
-  return input
+  const parsed = input
     .map((value) => (typeof value === "string" ? value.trim() : ""))
     .filter((value) => value.length > 0);
+  if (parsed.length === 0) {
+    throw new Error("rateKeys must contain at least one non-empty value");
+  }
+  return parsed;
 };
 
 export async function POST(request: NextRequest) {

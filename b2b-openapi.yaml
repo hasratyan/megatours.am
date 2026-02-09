@@ -4,6 +4,9 @@ info:
   version: 1.0.0
   description: |
     Public B2B gateway for Megatours suppliers. All supplier calls are brokered by Megatours.
+  license:
+    name: Proprietary
+    url: https://megatours.cloud
 servers:
   - url: https://megatours.cloud
 security:
@@ -11,6 +14,7 @@ security:
 paths:
   /v1/health:
     get:
+      operationId: getHealth
       summary: Health status
       security: []
       responses:
@@ -35,8 +39,270 @@ paths:
                         type: boolean
                       efes:
                         type: boolean
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/ErrorResponse"
+  /v1/destinations:
+    get:
+      operationId: getDestinations
+      summary: List supplier destination codes for hotel search
+      x-required-scope: hotels:search
+      parameters:
+        - name: countryCode
+          in: query
+          required: false
+          schema:
+            type: string
+            default: AE
+            pattern: "^[A-Za-z]{2}$"
+          description: ISO 2-letter country code filter (default AE)
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Free text search by destination name/code
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 200
+      responses:
+        "200":
+          description: Destination code list
+          headers:
+            x-request-id:
+              schema:
+                type: string
+            x-ratelimit-limit:
+              schema:
+                type: string
+            x-ratelimit-remaining:
+              schema:
+                type: string
+            x-ratelimit-reset:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/DestinationLookupResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
+  /v1/hotels/room-details:
+    post:
+      operationId: postHotelRoomDetails
+      summary: Get room options with policies and meal/cancellation facets
+      x-required-scope: hotels:search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HotelRoomDetailsRequest"
+      responses:
+        "200":
+          description: Room options and filter facets
+          headers:
+            x-request-id:
+              schema:
+                type: string
+            x-ratelimit-limit:
+              schema:
+                type: string
+            x-ratelimit-remaining:
+              schema:
+                type: string
+            x-ratelimit-reset:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/HotelRoomDetailsResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
+  /v1/hotels/info:
+    post:
+      operationId: postHotelInfo
+      summary: Get detailed hotel metadata
+      x-required-scope: hotels:search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HotelInfoRequest"
+      responses:
+        "200":
+          description: Hotel information
+          headers:
+            x-request-id:
+              schema:
+                type: string
+            x-ratelimit-limit:
+              schema:
+                type: string
+            x-ratelimit-remaining:
+              schema:
+                type: string
+            x-ratelimit-reset:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/HotelInfoResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+  /v1/hotels/prebook:
+    post:
+      operationId: postHotelPrebook
+      summary: Validate selected room rates and return bookable result
+      x-required-scope: hotels:search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HotelsPrebookRequest"
+      responses:
+        "200":
+          description: Prebook result with refreshed room options/facets
+          headers:
+            x-request-id:
+              schema:
+                type: string
+            x-ratelimit-limit:
+              schema:
+                type: string
+            x-ratelimit-remaining:
+              schema:
+                type: string
+            x-ratelimit-reset:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/HotelsPrebookResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
+  /v1/hotels/book:
+    post:
+      operationId: postHotelBook
+      summary: Complete hotel booking with selected rates and guests
+      x-required-scope: hotels:book
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HotelsBookRequest"
+      responses:
+        "200":
+          description: Booking result
+          headers:
+            x-request-id:
+              schema:
+                type: string
+            x-ratelimit-limit:
+              schema:
+                type: string
+            x-ratelimit-remaining:
+              schema:
+                type: string
+            x-ratelimit-reset:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/HotelsBookResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
   /v1/hotels/search:
     post:
+      operationId: postHotelSearch
       summary: Search hotels through Aoryx
       x-required-scope: hotels:search
       requestBody:
@@ -82,8 +348,99 @@ paths:
           $ref: "#/components/responses/ErrorResponse"
         "502":
           $ref: "#/components/responses/ErrorResponse"
+  /v1/transfers/search:
+    post:
+      operationId: postTransferSearch
+      summary: Search transfer options with facets
+      x-required-scope: hotels:search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransfersSearchRequest"
+      responses:
+        "200":
+          description: Transfer search result
+          headers:
+            x-request-id:
+              schema:
+                type: string
+            x-ratelimit-limit:
+              schema:
+                type: string
+            x-ratelimit-remaining:
+              schema:
+                type: string
+            x-ratelimit-reset:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/TransfersSearchResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+  /v1/excursions/search:
+    post:
+      operationId: postExcursionSearch
+      summary: Search excursions with facets
+      x-required-scope: hotels:search
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExcursionsSearchRequest"
+      responses:
+        "200":
+          description: Excursion search result
+          headers:
+            x-request-id:
+              schema:
+                type: string
+            x-ratelimit-limit:
+              schema:
+                type: string
+            x-ratelimit-remaining:
+              schema:
+                type: string
+            x-ratelimit-reset:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/ExcursionsSearchResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
   /v1/insurance/quote:
     post:
+      operationId: postInsuranceQuote
       summary: Get travel insurance quote through Efes
       x-required-scope: insurance:quote
       requestBody:
@@ -148,8 +505,7 @@ components:
               requestId:
                 type: string
               code:
-                type: string
-                nullable: true
+                type: [string, "null"]
   schemas:
     Room:
       type: object
@@ -170,11 +526,425 @@ components:
         - roomIdentifier
         - adults
         - childrenAges
+    FacetItem:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        count:
+          type: integer
+      required:
+        - key
+        - label
+        - count
+    RoomPolicyCondition:
+      type: object
+      properties:
+        fromDate:
+          type: [string, "null"]
+        toDate:
+          type: [string, "null"]
+        timezone:
+          type: [string, "null"]
+        unit:
+          type: [number, "null"]
+        text:
+          type: [string, "null"]
+        fromTime:
+          type: [string, "null"]
+        toTime:
+          type: [string, "null"]
+        percentage:
+          type: [number, "null"]
+        nights:
+          type: [number, "null"]
+        fixed:
+          type: [number, "null"]
+        applicableOn:
+          type: [string, "null"]
+    RoomPolicy:
+      type: object
+      properties:
+        type:
+          type: [string, "null"]
+        textCondition:
+          type: [string, "null"]
+        currency:
+          type: [string, "null"]
+        conditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoomPolicyCondition"
+    RoomRemark:
+      type: object
+      properties:
+        type:
+          type: [string, "null"]
+        text:
+          type: [string, "null"]
+    RoomOption:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: [string, "null"]
+        boardType:
+          type: [string, "null"]
+        refundable:
+          type: [boolean, "null"]
+        currency:
+          type: [string, "null"]
+        totalPrice:
+          type: [number, "null"]
+        displayTotalPrice:
+          type: [number, "null"]
+        availableRooms:
+          type: [number, "null"]
+        cancellationPolicy:
+          type: [string, "null"]
+        meal:
+          type: [string, "null"]
+        rateKey:
+          type: [string, "null"]
+          description: Opaque token. Send unchanged to /v1/hotels/prebook.
+        groupCode:
+          type: [number, "null"]
+        roomIdentifier:
+          type: [number, "null"]
+        rateType:
+          type: [string, "null"]
+        bedTypes:
+          type: array
+          items:
+            type: string
+        inclusions:
+          type: array
+          items:
+            type: string
+        policies:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoomPolicy"
+        remarks:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoomRemark"
+      required:
+        - id
+    RoomFacets:
+      type: object
+      properties:
+        mealPlans:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacetItem"
+        cancellationPolicies:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacetItem"
+        rateTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacetItem"
+        refundability:
+          type: object
+          properties:
+            refundable:
+              type: integer
+            nonRefundable:
+              type: integer
+            unknown:
+              type: integer
+          required:
+            - refundable
+            - nonRefundable
+            - unknown
+        priceRange:
+          type: object
+          properties:
+            min:
+              type: [number, "null"]
+            max:
+              type: [number, "null"]
+            currency:
+              type: [string, "null"]
+          required:
+            - min
+            - max
+            - currency
+      required:
+        - mealPlans
+        - cancellationPolicies
+        - rateTypes
+        - refundability
+        - priceRange
+    HotelRoomDetailsRequest:
+      type: object
+      properties:
+        hotelCode:
+          type: string
+        destinationCode:
+          type: string
+          description: Supplier destination code, usually in `<number>-0` format.
+          example: "160-0"
+        countryCode:
+          type: string
+          default: AE
+        nationality:
+          type: string
+          default: AM
+        currency:
+          type: string
+          default: USD
+        checkInDate:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        checkOutDate:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        rooms:
+          type: array
+          items:
+            $ref: "#/components/schemas/Room"
+      required:
+        - hotelCode
+        - checkInDate
+        - checkOutDate
+    HotelRoomDetailsResponse:
+      type: object
+      properties:
+        currency:
+          type: [string, "null"]
+        rooms:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoomOption"
+        facets:
+          $ref: "#/components/schemas/RoomFacets"
+      required:
+        - rooms
+        - facets
+    HotelInfoRequest:
+      type: object
+      properties:
+        hotelCode:
+          type: string
+      required:
+        - hotelCode
+    HotelInfoResponse:
+      type: object
+      additionalProperties: true
+      description: |
+        Normalized hotel metadata including destinationId, systemId, name, rating,
+        imageUrl/imageUrls, amenities, address, geoCode, and contact details.
+    HotelsPrebookRequest:
+      type: object
+      properties:
+        sessionId:
+          type: [string, "null"]
+          description: Required when using raw rate keys; optional when using rate tokens.
+        hotelCode:
+          type: string
+        groupCode:
+          type: [number, "null"]
+          description: Required when using raw rate keys; optional when using rate tokens.
+        rateKeys:
+          type: array
+          items:
+            type: string
+          description: |
+            Rate key tokens returned from /v1/hotels/room-details.
+            Raw supplier rate keys are also supported if sessionId and groupCode are provided.
+        currency:
+          type: [string, "null"]
+      required:
+        - hotelCode
+        - rateKeys
+    HotelsPrebookResponse:
+      type: object
+      properties:
+        isBookable:
+          type: [boolean, "null"]
+        isSoldOut:
+          type: [boolean, "null"]
+        isPriceChanged:
+          type: [boolean, "null"]
+        currency:
+          type: [string, "null"]
+        rooms:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoomOption"
+        facets:
+          $ref: "#/components/schemas/RoomFacets"
+      required:
+        - rooms
+        - facets
+    HotelsBookGuest:
+      type: object
+      properties:
+        title:
+          type: string
+        titleCode:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        isLeadGuest:
+          type: boolean
+        type:
+          type: string
+          enum:
+            - Adult
+            - Child
+        age:
+          type: number
+      required:
+        - firstName
+        - lastName
+        - type
+        - age
+    HotelsBookRoomPrice:
+      type: object
+      properties:
+        gross:
+          type: number
+        net:
+          type: number
+        tax:
+          type: number
+      required:
+        - gross
+        - net
+    HotelsBookRoom:
+      type: object
+      properties:
+        roomIdentifier:
+          type: integer
+          minimum: 1
+        adults:
+          type: integer
+          minimum: 1
+        childrenAges:
+          type: array
+          items:
+            type: number
+        rateKey:
+          type: string
+          description: Opaque rate token from /v1/hotels/room-details or /v1/hotels/prebook.
+        guests:
+          type: array
+          items:
+            $ref: "#/components/schemas/HotelsBookGuest"
+        price:
+          $ref: "#/components/schemas/HotelsBookRoomPrice"
+      required:
+        - roomIdentifier
+        - adults
+        - rateKey
+        - guests
+        - price
+    HotelsBookRequest:
+      type: object
+      properties:
+        sessionId:
+          type: [string, "null"]
+          description: Optional when rateKey tokens contain the session.
+        hotelCode:
+          type: string
+        hotelName:
+          type: [string, "null"]
+        destinationCode:
+          type: string
+        checkInDate:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        checkOutDate:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        countryCode:
+          type: string
+          default: AE
+        nationality:
+          type: string
+          default: AM
+        currency:
+          type: string
+          default: USD
+        customerRefNumber:
+          type: string
+        groupCode:
+          type: [number, "null"]
+          description: Optional when rateKey tokens contain the group.
+        rooms:
+          type: array
+          items:
+            $ref: "#/components/schemas/HotelsBookRoom"
+        transferSelection:
+          type: [object, "null"]
+          additionalProperties: true
+        excursions:
+          type: [object, "null"]
+          additionalProperties: true
+        insurance:
+          type: [object, "null"]
+          additionalProperties: true
+        airTickets:
+          type: [object, "null"]
+          additionalProperties: true
+        acknowledgePriceChange:
+          type: boolean
+      required:
+        - hotelCode
+        - destinationCode
+        - rooms
+    HotelsBookRoomResult:
+      type: object
+      properties:
+        roomIdentifier:
+          type: [integer, "null"]
+        rateKey:
+          type: [string, "null"]
+        status:
+          type: [string, "null"]
+      required:
+        - roomIdentifier
+        - rateKey
+        - status
+    HotelsBookResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        status:
+          type: [string, "null"]
+        hotelConfirmationNumber:
+          type: [string, "null"]
+        adsConfirmationNumber:
+          type: [string, "null"]
+        supplierConfirmationNumber:
+          type: [string, "null"]
+        customerRefNumber:
+          type: [string, "null"]
+        rooms:
+          type: array
+          items:
+            $ref: "#/components/schemas/HotelsBookRoomResult"
+      required:
+        - sessionId
+        - rooms
     HotelSearchRequest:
       type: object
       properties:
         destinationCode:
           type: string
+          description: Supplier destination code, usually in `<number>-0` format.
+          examples:
+            - "160-0"
         hotelCode:
           type: string
         countryCode:
@@ -203,57 +973,200 @@ components:
       type: object
       properties:
         code:
+          type: [string, "null"]
+        name:
+          type: [string, "null"]
+        minPrice:
+          type: [number, "null"]
+        currency:
+          type: [string, "null"]
+        rating:
+          type: [number, "null"]
+        address:
+          type: [string, "null"]
+        city:
+          type: [string, "null"]
+        imageUrl:
+          type: [string, "null"]
+        latitude:
+          type: [number, "null"]
+        longitude:
+          type: [number, "null"]
+    Destination:
+      type: object
+      properties:
+        destinationCode:
           type: string
-          nullable: true
+          example: "160-0"
         name:
           type: string
-          nullable: true
-        minPrice:
-          type: number
-          nullable: true
-        currency:
+          example: Dubai
+      required:
+        - destinationCode
+        - name
+    DestinationLookupResponse:
+      type: object
+      properties:
+        countryCode:
           type: string
-          nullable: true
-        rating:
+          example: AE
+        count:
+          type: integer
+          example: 20
+        destinations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Destination"
+      required:
+        - countryCode
+        - count
+        - destinations
+    TransferRate:
+      type: object
+      additionalProperties: true
+      description: Transfer rate object from Megatours transfer inventory.
+    TransferFacets:
+      type: object
+      properties:
+        transferTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacetItem"
+        chargeTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacetItem"
+        vehicleCategories:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacetItem"
+        priceRange:
+          type: object
+          properties:
+            minOneWay:
+              type: [number, "null"]
+            maxOneWay:
+              type: [number, "null"]
+            currency:
+              type: [string, "null"]
+          required:
+            - minOneWay
+            - maxOneWay
+            - currency
+      required:
+        - transferTypes
+        - chargeTypes
+        - vehicleCategories
+        - priceRange
+    TransfersSearchRequest:
+      type: object
+      properties:
+        destinationLocationCode:
+          type: [string, "null"]
+          example: "160-0"
+        destinationName:
+          type: [string, "null"]
+          example: Dubai
+        transferType:
+          type: [string, "null"]
+          enum:
+            - INDIVIDUAL
+            - GROUP
+        paxCount:
+          type: [number, "null"]
+        travelDate:
+          type: [string, "null"]
+      description: destinationLocationCode or destinationName is required.
+    TransfersSearchResponse:
+      type: object
+      properties:
+        destinationLocationCode:
+          type: [string, "null"]
+        destinationName:
+          type: [string, "null"]
+        transfers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransferRate"
+        facets:
+          $ref: "#/components/schemas/TransferFacets"
+      required:
+        - transfers
+        - facets
+    ExcursionTicket:
+      type: object
+      additionalProperties: true
+      description: Excursion object from Megatours excursion inventory.
+    ExcursionFacets:
+      type: object
+      properties:
+        productTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacetItem"
+        cities:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacetItem"
+        priceRange:
+          type: object
+          properties:
+            minAdult:
+              type: [number, "null"]
+            maxAdult:
+              type: [number, "null"]
+            currency:
+              type: [string, "null"]
+          required:
+            - minAdult
+            - maxAdult
+            - currency
+      required:
+        - productTypes
+        - cities
+        - priceRange
+    ExcursionsSearchRequest:
+      type: object
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 200
+    ExcursionsSearchResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        excursionFee:
           type: number
-          nullable: true
-        address:
-          type: string
-          nullable: true
-        city:
-          type: string
-          nullable: true
-        imageUrl:
-          type: string
-          nullable: true
-        latitude:
-          type: number
-          nullable: true
-        longitude:
-          type: number
-          nullable: true
+        excursions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExcursionTicket"
+        facets:
+          $ref: "#/components/schemas/ExcursionFacets"
+      required:
+        - count
+        - excursionFee
+        - excursions
+        - facets
     HotelSearchResponse:
       type: object
       properties:
         currency:
-          type: string
-          nullable: true
+          type: [string, "null"]
         propertyCount:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
         responseTime:
-          type: string
-          nullable: true
+          type: [string, "null"]
         destination:
-          type: object
-          nullable: true
+          type: [object, "null"]
           properties:
             code:
-              type: string
-              nullable: true
+              type: [string, "null"]
             name:
-              type: string
-              nullable: true
+              type: [string, "null"]
         hotels:
           type: array
           items:
@@ -262,16 +1175,13 @@ components:
       type: object
       properties:
         id:
-          type: string
-          nullable: true
+          type: [string, "null"]
         age:
           type: number
         passportNumber:
-          type: string
-          nullable: true
+          type: [string, "null"]
         socialCard:
-          type: string
-          nullable: true
+          type: [string, "null"]
         subrisks:
           type: array
           items:
@@ -286,8 +1196,7 @@ components:
         endDate:
           type: string
         days:
-          type: number
-          nullable: true
+          type: [number, "null"]
         territoryCode:
           type: string
         riskAmount:
@@ -295,11 +1204,9 @@ components:
         riskCurrency:
           type: string
         riskLabel:
-          type: string
-          nullable: true
+          type: [string, "null"]
         promoCode:
-          type: string
-          nullable: true
+          type: [string, "null"]
         travelers:
           type: array
           items:
@@ -328,48 +1235,39 @@ components:
             type: object
             properties:
               travelerId:
-                type: string
-                nullable: true
+                type: [string, "null"]
               premium:
                 type: number
             required:
               - premium
         sum:
-          type: number
-          nullable: true
+          type: [number, "null"]
         discountedSum:
-          type: number
-          nullable: true
+          type: [number, "null"]
         sumByTraveler:
-          type: object
-          nullable: true
+          type: [object, "null"]
           additionalProperties:
             type: number
         discountedSumByTraveler:
-          type: object
-          nullable: true
+          type: [object, "null"]
           additionalProperties:
             type: number
         priceCoverages:
-          type: object
-          nullable: true
+          type: [object, "null"]
           additionalProperties:
             type: number
         discountedPriceCoverages:
-          type: object
-          nullable: true
+          type: [object, "null"]
           additionalProperties:
             type: number
         priceCoveragesByTraveler:
-          type: object
-          nullable: true
+          type: [object, "null"]
           additionalProperties:
             type: object
             additionalProperties:
               type: number
         discountedPriceCoveragesByTraveler:
-          type: object
-          nullable: true
+          type: [object, "null"]
           additionalProperties:
             type: object
             additionalProperties:
