@@ -8,6 +8,7 @@ import { getDb } from "@/lib/db";
 import { hotelInfo as getHotelInfo } from "@/lib/aoryx-client";
 import { calculateBookingTotal } from "@/lib/booking-total";
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
+import { formatCurrencyAmount } from "@/lib/currency";
 
 const resolveLocaleFromParam = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
@@ -44,6 +45,22 @@ const formatDate = (dateStr: string | null | undefined, locale: string) => {
   }
 };
 
+const resolveLocaleTag = (locale: string) => {
+  if (locale === "hy") return "hy-AM";
+  if (locale === "ru") return "ru-RU";
+  return "en-GB";
+};
+
+const normalizeDisplayCurrency = (value: string | null | undefined): string | null => {
+  const normalized = (value ?? "").trim().toUpperCase();
+  if (!normalized) return null;
+  if (normalized === "051") return "AMD";
+  if (normalized === "840") return "USD";
+  if (normalized === "978") return "EUR";
+  if (normalized === "643") return "RUB";
+  return normalized;
+};
+
 export default async function PaymentFailPage({
   searchParams,
 }: {
@@ -56,9 +73,11 @@ export default async function PaymentFailPage({
   const locale = await resolveLocaleFromCookie();
   const t = getTranslations(locale);
   const session = await getServerSession(authOptions);
+  const sessionUserId = session?.user?.id ?? null;
 
   let bookingRecord: any = null;
   let hotelName = null;
+  let destinationName: string | null = null;
   let errorKey: keyof typeof t.payment.errors | null = null;
 
   if (typeof EDP_BILL_NO !== "string" && !orderIdParam && !orderNumberParam) {
@@ -87,6 +106,28 @@ export default async function PaymentFailPage({
         const info = await getHotelInfo(bookingRecord.payload.hotelCode);
         hotelName = info?.name;
       }
+
+      const destinationCode =
+        typeof bookingRecord.payload?.destinationCode === "string"
+          ? bookingRecord.payload.destinationCode.trim()
+          : "";
+      if (destinationCode && sessionUserId) {
+        const destinationSearch = await db.collection("user_searches").findOne(
+          {
+            userIdString: sessionUserId,
+            "resultSummary.destinationCode": destinationCode,
+          },
+          {
+            sort: { createdAt: -1 },
+            projection: { resultSummary: 1 },
+          }
+        );
+        const resolvedDestination =
+          typeof (destinationSearch as any)?.resultSummary?.destinationName === "string"
+            ? (destinationSearch as any).resultSummary.destinationName.trim()
+            : "";
+        destinationName = resolvedDestination || null;
+      }
     }
   }
 
@@ -106,8 +147,19 @@ export default async function PaymentFailPage({
 
   const payload = bookingRecord?.payload;
   const hotelMarkup = await getAoryxHotelPlatformFee();
-  const total = payload ? calculateBookingTotal(payload, { hotelMarkup }) : null;
-  const currency = payload?.currency ?? "USD";
+  const fallbackTotal = payload ? calculateBookingTotal(payload, { hotelMarkup }) : null;
+  const paidAmount =
+    typeof bookingRecord?.amount?.value === "number" && Number.isFinite(bookingRecord.amount.value)
+      ? bookingRecord.amount.value
+      : fallbackTotal;
+  const paidCurrency =
+    normalizeDisplayCurrency(bookingRecord?.amount?.currency ?? bookingRecord?.amount?.currencyCode) ??
+    normalizeDisplayCurrency(payload?.currency) ??
+    "USD";
+  const totalLabel =
+    formatCurrencyAmount(paidAmount, paidCurrency, resolveLocaleTag(locale)) ??
+    (paidAmount !== null ? `${paidAmount} ${paidCurrency}` : "—");
+  const destinationLabel = destinationName ?? payload?.destinationCode ?? null;
 
   return (
     <main className="container payment-status failure">
@@ -115,13 +167,13 @@ export default async function PaymentFailPage({
       <h1>{t.payment.failure.title}</h1>
       <p>{t.payment.failure.body}</p>
 
-      <div className="profile-item" style={{ textAlign: "left", marginTop: "1.5rem", width: "100%", maxWidth: "600px" }}>
+      <div className="profile-item" style={{ textAlign: "left", width: "100%", maxWidth: "600px" }}>
         <div className="profile-item-header">
-          <h3>{hotelName || payload?.hotelCode || t.profile.bookings.labels.hotelCode}</h3>
+          <h3>{hotelName || payload?.hotelCode || t.profile.bookings.labels.hotelName}</h3>
         </div>
         <p className="profile-item-meta">
           {t.profile.bookings.labels.bookingId}: {payload?.customerRefNumber ?? "—"}
-          {payload?.destinationCode ? ` • ${t.profile.bookings.labels.destination}: ${payload.destinationCode}` : ""}
+          {destinationLabel ? ` • ${t.profile.bookings.labels.destination}: ${destinationLabel}` : ""}
         </p>
 
         <div className="profile-item-grid">
@@ -144,9 +196,7 @@ export default async function PaymentFailPage({
 
           <div>
             <span>{t.profile.bookings.labels.total}</span>
-            <strong>
-              {total} {currency}
-            </strong>
+            <strong>{totalLabel}</strong>
           </div>
         </div>
       </div>

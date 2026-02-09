@@ -14,11 +14,13 @@ function getLocaleFromPath(pathname: string): Locale | null {
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const isVersionedApiPath = /^\/v\d+(?:\/|$)/.test(pathname);
 
   // Skip public files, API routes, and Next.js internals
   if (
     PUBLIC_FILE.test(pathname) ||
     pathname.startsWith("/api/") ||
+    isVersionedApiPath ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/favicon")
   ) {
@@ -46,6 +48,6 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // Match all paths except static files and API routes
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)",
+    "/((?!api|v\\d+|_next/static|_next/image|favicon.ico|.*\\..*).*)",
   ],
 };

@@ -23,6 +23,21 @@ MONGODB_DB=megatours_am
 IDRAM_REC_ACCOUNT=your-idram-id
 IDRAM_SECRET_KEY=your-idram-secret
 IDRAM_LANGUAGE=EN
+VPOS_BASE_URL=https://ipaytest.arca.am:8445/payment/rest
+VPOS_USER=your-idbank-vpos-user
+VPOS_PASSWORD=your-idbank-vpos-password
+VPOS_CURRENCY_CODE=051
+VPOS_CURRENCY_DECIMALS=2
+AMERIA_VPOS_BASE_URL=https://servicestest.ameriabank.am/VPOS
+AMERIA_VPOS_CLIENT_ID=your-ameria-client-id
+AMERIA_VPOS_USERNAME=your-ameria-username
+AMERIA_VPOS_PASSWORD=your-ameria-password
+AMERIA_VPOS_LANGUAGE=en
+AMERIA_VPOS_CURRENCY_CODE=051
+AMERIA_VPOS_CURRENCY_DECIMALS=2
+AMERIA_VPOS_TEST_ORDER_ID_MIN=4191001
+AMERIA_VPOS_TEST_ORDER_ID_MAX=4192000
+AMERIA_VPOS_TEST_AMOUNT_AMD=10
 EFES_ENV=staging
 EFES_BASE_URL=https://stagingimex.efes.am
 EFES_BASE_URL_PROD=https://imex.efes.am
@@ -47,6 +62,13 @@ EFES_TIMEOUT_MS_RAW=15000
   - RESULT_URL: `http://localhost:3000/api/payments/idram/result`
   - SUCCESS_URL: `http://localhost:3000/payment/success`
   - FAIL_URL: `http://localhost:3000/payment/fail`
+
+## Card payment setup
+- IDBank VPOS callback URL:
+  - `http://localhost:3000/api/payments/vpos/result`
+- Ameriabank VPOS callback URL (`BackURL` in InitPayment):
+  - `http://localhost:3000/api/payments/vpos/result`
+- In Ameriabank test environment, keep `OrderID` in `4191001-4192000` and `Amount=10 AMD` (handled by `AMERIA_VPOS_TEST_*` env vars).
 
 ## Scripts
 - `npm run dev` – start Next.js dev server.

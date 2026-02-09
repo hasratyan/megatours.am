@@ -93,6 +93,14 @@ function toStringValue(value: unknown): string | null {
   return null;
 }
 
+function toPrimarySupplierConfirmation(value: unknown): string | null {
+  const normalized = toStringValue(value);
+  if (!normalized) return null;
+  const [primary] = normalized.split("|");
+  const trimmedPrimary = primary?.trim();
+  return trimmedPrimary && trimmedPrimary.length > 0 ? trimmedPrimary : normalized;
+}
+
 function toNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -1072,7 +1080,7 @@ export async function book(payload: AoryxBookingPayload): Promise<AoryxBookingRe
     adsConfirmationNumber: toStringValue(
       response.ADSConfirmationNumber ?? response.AdsConfirmationNumber ?? response.adsConfirmationNumber
     ),
-    supplierConfirmationNumber: toStringValue(response.SupplierConfirmationNumber),
+    supplierConfirmationNumber: toPrimarySupplierConfirmation(response.SupplierConfirmationNumber),
     customerRefNumber: toStringValue(response.CustomerRefNumber),
     rooms: roomsArray.map((room) => ({
       roomIdentifier: toInteger((room as { RoomIdentifier?: unknown }).RoomIdentifier),

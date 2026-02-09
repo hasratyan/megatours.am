@@ -5,9 +5,11 @@ import { authOptions } from "@/lib/auth";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { getDb } from "@/lib/db";
+import PackageBuilderResetOnConfirm from "@/components/package-builder-reset-on-confirm";
 import { hotelInfo as getHotelInfo } from "@/lib/aoryx-client";
 import { calculateBookingTotal } from "@/lib/booking-total";
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
+import { formatCurrencyAmount } from "@/lib/currency";
 
 const resolveLocaleFromParam = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
@@ -44,6 +46,22 @@ const formatDate = (dateStr: string | null | undefined, locale: string) => {
   }
 };
 
+const resolveLocaleTag = (locale: string) => {
+  if (locale === "hy") return "hy-AM";
+  if (locale === "ru") return "ru-RU";
+  return "en-GB";
+};
+
+const normalizeDisplayCurrency = (value: string | null | undefined): string | null => {
+  const normalized = (value ?? "").trim().toUpperCase();
+  if (!normalized) return null;
+  if (normalized === "051") return "AMD";
+  if (normalized === "840") return "USD";
+  if (normalized === "978") return "EUR";
+  if (normalized === "643") return "RUB";
+  return normalized;
+};
+
 export default async function PaymentSuccessPage({
   searchParams,
 }: {
@@ -56,9 +74,12 @@ export default async function PaymentSuccessPage({
   const locale = await resolveLocaleFromCookie();
   const t = getTranslations(locale);
   const session = await getServerSession(authOptions);
+  const sessionUserId = session?.user?.id ?? null;
 
   let bookingRecord: any = null;
+  let userBookingRecord: any = null;
   let hotelName = null;
+  let destinationName: string | null = null;
   let errorKey: keyof typeof t.payment.errors | null = null;
 
   if (typeof EDP_BILL_NO !== "string" && !orderIdParam && !orderNumberParam) {
@@ -82,10 +103,48 @@ export default async function PaymentSuccessPage({
     }
 
     if (bookingRecord && !errorKey) {
+      const customerRefNumber =
+        typeof bookingRecord.payload?.customerRefNumber === "string"
+          ? bookingRecord.payload.customerRefNumber.trim()
+          : "";
+      if (sessionUserId && customerRefNumber) {
+        userBookingRecord = await db.collection("user_bookings").findOne(
+          {
+            userIdString: sessionUserId,
+            "payload.customerRefNumber": customerRefNumber,
+          },
+          {
+            projection: { booking: 1 },
+          }
+        );
+      }
+
       hotelName = bookingRecord.payload?.hotelName;
       if (!hotelName && bookingRecord.payload?.hotelCode) {
         const info = await getHotelInfo(bookingRecord.payload.hotelCode);
         hotelName = info?.name;
+      }
+
+      const destinationCode =
+        typeof bookingRecord.payload?.destinationCode === "string"
+          ? bookingRecord.payload.destinationCode.trim()
+          : "";
+      if (destinationCode && sessionUserId) {
+        const destinationSearch = await db.collection("user_searches").findOne(
+          {
+            userIdString: sessionUserId,
+            "resultSummary.destinationCode": destinationCode,
+          },
+          {
+            sort: { createdAt: -1 },
+            projection: { resultSummary: 1 },
+          }
+        );
+        const resolvedDestination =
+          typeof (destinationSearch as any)?.resultSummary?.destinationName === "string"
+            ? (destinationSearch as any).resultSummary.destinationName.trim()
+            : "";
+        destinationName = resolvedDestination || null;
       }
     }
   }
@@ -106,23 +165,60 @@ export default async function PaymentSuccessPage({
 
   const payload = bookingRecord?.payload;
   const bookingResult = bookingRecord?.bookingResult;
+  const bookingStatus = typeof bookingRecord?.status === "string" ? bookingRecord.status : null;
+  const userBookingStatus =
+    typeof userBookingRecord?.booking?.status === "string"
+      ? userBookingRecord.booking.status.trim()
+      : null;
+  const hasUserBookingConfirmation =
+    userBookingStatus === "2" ||
+    Boolean(
+      userBookingRecord?.booking?.hotelConfirmationNumber ||
+        userBookingRecord?.booking?.supplierConfirmationNumber ||
+        userBookingRecord?.booking?.adsConfirmationNumber
+    );
+  const isBookingConfirmed =
+    bookingStatus === "booking_complete" || Boolean(bookingResult) || hasUserBookingConfirmation;
+  const isBookingPending =
+    !isBookingConfirmed &&
+    (bookingStatus === "booking_in_progress" || bookingStatus === "payment_success" || bookingStatus === "created");
+  const confirmationNumber =
+    bookingResult?.hotelConfirmationNumber ||
+    bookingResult?.supplierConfirmationNumber ||
+    userBookingRecord?.booking?.hotelConfirmationNumber ||
+    userBookingRecord?.booking?.supplierConfirmationNumber ||
+    userBookingRecord?.booking?.adsConfirmationNumber ||
+    null;
   const hotelMarkup = await getAoryxHotelPlatformFee();
-  const total = payload ? calculateBookingTotal(payload, { hotelMarkup }) : null;
-  const currency = payload?.currency ?? "USD";
+  const fallbackTotal = payload ? calculateBookingTotal(payload, { hotelMarkup }) : null;
+  const paidAmount =
+    typeof bookingRecord?.amount?.value === "number" && Number.isFinite(bookingRecord.amount.value)
+      ? bookingRecord.amount.value
+      : fallbackTotal;
+  const paidCurrency =
+    normalizeDisplayCurrency(bookingRecord?.amount?.currency ?? bookingRecord?.amount?.currencyCode) ??
+    normalizeDisplayCurrency(payload?.currency) ??
+    "USD";
+  const totalLabel =
+    formatCurrencyAmount(paidAmount, paidCurrency, resolveLocaleTag(locale)) ??
+    (paidAmount !== null ? `${paidAmount} ${paidCurrency}` : "—");
+  const destinationLabel = destinationName ?? payload?.destinationCode ?? null;
 
   return (
     <main className="container payment-status success">
-      <span className="material-symbols-rounded">check</span>
-      <h1>{t.payment.success.title}</h1>
+      <PackageBuilderResetOnConfirm enabled={isBookingConfirmed} />
+      <span className="material-symbols-rounded">{isBookingConfirmed ? "check" : "hourglass_top"}</span>
+      <h1>{isBookingConfirmed ? t.payment.success.title : t.profile.bookings.status.pending}</h1>
       <p>{t.payment.success.body}</p>
+      {isBookingPending ? <p>{t.payment.success.note}</p> : null}
 
       <div className="profile-item" style={{ textAlign: "left", width: "100%", maxWidth: "600px" }}>
         <div className="profile-item-header">
-          <h3>{hotelName || payload?.hotelCode || t.profile.bookings.labels.hotelCode}</h3>
+          <h3><span className="material-symbols-outlined">apartment</span>{hotelName || payload?.hotelCode}</h3>
         </div>
         <p className="profile-item-meta">
           {t.profile.bookings.labels.bookingId}: {payload?.customerRefNumber ?? "—"}
-          {payload?.destinationCode ? ` • ${t.profile.bookings.labels.destination}: ${payload.destinationCode}` : ""}
+          {destinationLabel ? ` • ${t.profile.bookings.labels.destination}: ${destinationLabel}` : ""}
         </p>
 
         <div className="profile-item-grid">
@@ -145,27 +241,34 @@ export default async function PaymentSuccessPage({
 
           <div>
             <span>{t.profile.bookings.labels.total}</span>
-            <strong>
-              {total} {currency}
-            </strong>
+            <strong>{totalLabel}</strong>
           </div>
 
-          {(bookingResult?.hotelConfirmationNumber || bookingResult?.supplierConfirmationNumber) && (
+          {confirmationNumber && (
             <div>
               <span>{t.profile.bookings.labels.confirmation}</span>
-              <strong>
-                {bookingResult.hotelConfirmationNumber || bookingResult.supplierConfirmationNumber}
-              </strong>
+              <strong>{confirmationNumber}</strong>
             </div>
           )}
         </div>
       </div>
 
-      <p>{t.payment.success.note}</p>
-      <Link href="/profile" className="payment-link">
-        <span className="material-symbols-rounded">account_circle</span>
-        {t.payment.success.cta}
-      </Link>
+      {!isBookingPending ? <p>{t.payment.success.note}</p> : null}
+      <div className="profile-actions">
+        {isBookingConfirmed && payload?.customerRefNumber ? (
+          <Link
+            href={`/${locale}/profile/voucher/${encodeURIComponent(payload.customerRefNumber)}`}
+            className="payment-link"
+          >
+            <span className="material-symbols-rounded">description</span>
+            {t.profile.bookings.viewVoucher}
+          </Link>
+        ) : null}
+        <Link href="/profile" className="payment-link">
+          <span className="material-symbols-rounded">account_circle</span>
+          {t.payment.success.cta}
+        </Link>
+      </div>
     </main>
   );
 }

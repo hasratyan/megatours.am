@@ -299,6 +299,15 @@ export const clearPackageBuilderStateForOwner = (owner: string) => {
   window.localStorage.removeItem(ownerStateKey(owner));
 };
 
+export const resetPackageBuilderState = () => {
+  if (!isBrowser) return;
+  const owner = readPackageBuilderOwner();
+  writePackageBuilderState({});
+  if (owner) {
+    clearPackageBuilderStateForOwner(owner);
+  }
+};
+
 export const writePackageBuilderState = (state: PackageBuilderState) => {
   if (!isBrowser) return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));

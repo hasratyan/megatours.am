@@ -48,6 +48,16 @@ const formatAmount = (value: number) => value.toFixed(2);
 const checksumFor = (parts: string[]) =>
   createHash("md5").update(parts.join(":"), "utf8").digest("hex");
 
+const unwrapFindOneAndUpdateResult = <T,>(
+  result: unknown
+): T | null => {
+  if (!result || typeof result !== "object") return null;
+  if ("value" in (result as Record<string, unknown>)) {
+    return ((result as { value?: unknown }).value ?? null) as T | null;
+  }
+  return result as T;
+};
+
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
 
@@ -166,7 +176,7 @@ export async function POST(request: NextRequest) {
     { returnDocument: "after" }
   );
 
-  const lockedRecord = (lock?.value ?? null) as IdramPaymentRecord | null;
+  const lockedRecord = unwrapFindOneAndUpdateResult<IdramPaymentRecord>(lock);
   if (!lockedRecord) {
     return textResponse("OK", 200);
   }

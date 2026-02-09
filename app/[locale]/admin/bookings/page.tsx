@@ -23,6 +23,11 @@ type BookingRecord = {
   source?: string | null;
   payload?: AoryxBookingPayload | null;
   booking?: AoryxBookingResult | null;
+  cancellation?: {
+    refund?: {
+      status?: string | null;
+    } | null;
+  } | null;
 };
 
 type AdminBookingRecord = {
@@ -34,8 +39,13 @@ type AdminBookingRecord = {
   source: string | null;
   payload: AoryxBookingPayload | null;
   booking: AoryxBookingResult | null;
+  refundState?: string | null;
   displayTotal?: number | null;
   displayCurrency?: string | null;
+  displayNet?: number | null;
+  displayNetCurrency?: string | null;
+  displayProfit?: number | null;
+  displayProfitCurrency?: string | null;
 };
 
 const resolveLocale = (value: string | undefined) =>
@@ -176,6 +186,7 @@ export default async function AdminBookingsPage({ params }: PageProps) {
       source: entry.source ?? null,
       payload: sanitizeBookingPayload(entry.payload ?? null),
       booking: sanitizeBookingResult(entry.booking ?? null),
+      refundState: entry.cancellation?.refund?.status ?? null,
     };
   });
   const [hotelMarkup, rates] = await Promise.all([
@@ -191,10 +202,24 @@ export default async function AdminBookingsPage({ params }: PageProps) {
     const displayTotal = payload
       ? resolveBookingDisplayTotal(payload, rates, { hotelMarkup })
       : null;
+    const displayNet = payload
+      ? resolveBookingDisplayTotal(payload, rates, { hotelMarkup: 0 })
+      : null;
+    const displayProfit =
+      displayTotal && displayNet && displayTotal.currency === displayNet.currency
+        ? {
+            amount: displayTotal.amount - displayNet.amount,
+            currency: displayTotal.currency,
+          }
+        : null;
     return {
       ...entry,
       displayTotal: displayTotal?.amount ?? null,
       displayCurrency: displayTotal?.currency ?? null,
+      displayNet: displayNet?.amount ?? null,
+      displayNetCurrency: displayNet?.currency ?? null,
+      displayProfit: displayProfit?.amount ?? null,
+      displayProfitCurrency: displayProfit?.currency ?? null,
     };
   });
 

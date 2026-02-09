@@ -1,8 +1,10 @@
+import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import type { Collection, Document } from "mongodb";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { getPrebookState, getSessionFromCookie } from "@/app/api/aoryx/_shared";
+import { getPrebookState, getSessionFromCookie, type StoredPrebookState } from "@/app/api/aoryx/_shared";
 import { parseBookingPayload, validatePrebookState } from "@/lib/aoryx-booking";
 import { calculateBookingTotal } from "@/lib/booking-total";
 import { applyMarkup } from "@/lib/pricing-utils";
@@ -11,18 +13,49 @@ import type { AoryxBookingPayload } from "@/types/aoryx";
 
 export const runtime = "nodejs";
 
-const DEFAULT_BASE_URL = "https://ipaytest.arca.am:8445/payment/rest";
+type PaymentProvider = "idbank" | "ameriabank";
+
+type VposInitResult = {
+  orderId: string;
+  orderNumber: string;
+  formUrl: string;
+  gatewayMeta: Record<string, unknown>;
+};
+
+type AmeriaInitResponse = {
+  PaymentID?: string;
+  ResponseCode?: number | string;
+  ResponseMessage?: string;
+};
+
+type BlockingVposAttempt = {
+  provider?: string;
+  orderId?: string;
+  orderNumber?: string;
+  status?: string;
+  createdAt?: Date | string | number | null;
+  updatedAt?: Date | string | number | null;
+};
+
+const IDBANK_DEFAULT_BASE_URL = "https://ipaytest.arca.am:8445/payment/rest";
+const AMERIA_DEFAULT_BASE_URL = "https://servicestest.ameriabank.am/VPOS";
 const DEFAULT_CURRENCY_CODE = "051";
 const DEFAULT_CURRENCY_DECIMALS = 2;
 const DEFAULT_LANGUAGE = "en";
+const AMERIA_TEST_ORDER_ID_MIN = 4191001;
+const AMERIA_TEST_ORDER_ID_MAX = 4192000;
+const AMERIA_DEFAULT_TEST_AMOUNT_AMD = 10;
+const AMERIA_MAX_INIT_RETRIES = 6;
+const DUPLICATE_ATTEMPT_STATUSES = [
+  "booking_complete",
+  "booking_in_progress",
+  "payment_success",
+  "created",
+] as const;
+const ACTIVE_CREATED_ATTEMPT_TTL_MS = 20 * 60 * 1000;
+const DUPLICATE_ATTEMPT_LOOKUP_LIMIT = 20;
 
 const normalizeBaseUrl = (value: string) => value.trim().replace(/\/+$/, "");
-
-const resolveBaseUrl = () => {
-  const raw = typeof process.env.VPOS_BASE_URL === "string" ? process.env.VPOS_BASE_URL : "";
-  const baseUrl = raw.trim().length > 0 ? raw : DEFAULT_BASE_URL;
-  return normalizeBaseUrl(baseUrl);
-};
 
 const resolveString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
@@ -32,10 +65,22 @@ const parseSessionId = (input: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const parsePaymentProvider = (input: unknown): PaymentProvider => {
+  const normalized = resolveString(input).toLowerCase();
+  if (normalized === "ameriabank" || normalized === "ameria") return "ameriabank";
+  return "idbank";
+};
+
 const normalizeLanguage = (value: string | undefined) => {
   const normalized = (value ?? DEFAULT_LANGUAGE).trim().toLowerCase();
   if (normalized === "hy" || normalized === "ru" || normalized === "en") return normalized;
   return DEFAULT_LANGUAGE;
+};
+
+const resolveAmeriaLanguage = (value: string) => {
+  if (value === "hy") return "am";
+  if (value === "ru") return "ru";
+  return "en";
 };
 
 const resolveCurrencyDecimals = (value: string | undefined) => {
@@ -46,12 +91,26 @@ const resolveCurrencyDecimals = (value: string | undefined) => {
 const normalizeCurrencyCode = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return "";
+  const upper = trimmed.toUpperCase();
+  if (upper === "AMD") return "051";
+  if (upper === "USD") return "840";
+  if (upper === "EUR") return "978";
+  if (upper === "RUB") return "643";
   if (/^\d+$/.test(trimmed)) return trimmed.padStart(3, "0");
   return trimmed;
 };
 
 const toMinorUnits = (amount: number, decimals: number) =>
   Math.round(amount * Math.pow(10, decimals));
+
+const resolvePositiveNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+  return null;
+};
 
 const buildOrderNumber = (value: string | null | undefined) => {
   const suffix = Math.floor(Math.random() * 1000)
@@ -78,13 +137,424 @@ const buildReturnUrl = (request: NextRequest) => {
   return new URL("/api/payments/vpos/result", origin).toString();
 };
 
+const resolveCurrencyConfig = (provider: PaymentProvider) => {
+  if (provider === "ameriabank") {
+    const rawCode = resolveString(process.env.AMERIA_VPOS_CURRENCY_CODE) || DEFAULT_CURRENCY_CODE;
+    const code = normalizeCurrencyCode(rawCode);
+    const decimals = resolveCurrencyDecimals(process.env.AMERIA_VPOS_CURRENCY_DECIMALS);
+    return { code, decimals };
+  }
+
+  const rawCode =
+    typeof process.env.VPOS_CURRENCY_CODE === "string" && process.env.VPOS_CURRENCY_CODE.trim()
+      ? process.env.VPOS_CURRENCY_CODE.trim()
+      : DEFAULT_CURRENCY_CODE;
+  const code = normalizeCurrencyCode(rawCode);
+  const decimals = resolveCurrencyDecimals(process.env.VPOS_CURRENCY_DECIMALS);
+  return { code, decimals };
+};
+
+const resolveIdbankConfig = () => {
+  const baseUrl = normalizeBaseUrl(resolveString(process.env.VPOS_BASE_URL) || IDBANK_DEFAULT_BASE_URL);
+  const userName = resolveString(process.env.VPOS_USER);
+  const password = resolveString(process.env.VPOS_PASSWORD);
+  return { baseUrl, userName, password };
+};
+
+const resolveAmeriaConfig = () => {
+  const baseUrl = normalizeBaseUrl(
+    resolveString(process.env.AMERIA_VPOS_BASE_URL) || AMERIA_DEFAULT_BASE_URL
+  );
+  const clientId = resolveString(process.env.AMERIA_VPOS_CLIENT_ID);
+  const userName = resolveString(process.env.AMERIA_VPOS_USERNAME);
+  const password = resolveString(process.env.AMERIA_VPOS_PASSWORD);
+  const timeoutRaw = Number.parseInt(resolveString(process.env.AMERIA_VPOS_TIMEOUT) || "", 10);
+  const timeout = Number.isFinite(timeoutRaw) && timeoutRaw > 0
+    ? Math.min(timeoutRaw, 1200)
+    : 1200;
+  return { baseUrl, clientId, userName, password, timeout };
+};
+
+const isAmeriaTestEnvironment = (baseUrl: string) =>
+  /servicestest\.ameriabank\.am/i.test(baseUrl);
+
+const resolveAmeriaOrderRange = (baseUrl: string): { min: number; max: number } | null => {
+  const minRaw = Number.parseInt(resolveString(process.env.AMERIA_VPOS_TEST_ORDER_ID_MIN), 10);
+  const maxRaw = Number.parseInt(resolveString(process.env.AMERIA_VPOS_TEST_ORDER_ID_MAX), 10);
+
+  if (Number.isFinite(minRaw) && Number.isFinite(maxRaw) && minRaw > 0 && maxRaw >= minRaw) {
+    return { min: minRaw, max: maxRaw };
+  }
+
+  if (isAmeriaTestEnvironment(baseUrl)) {
+    return { min: AMERIA_TEST_ORDER_ID_MIN, max: AMERIA_TEST_ORDER_ID_MAX };
+  }
+
+  return null;
+};
+
+const resolveAmeriaOverrideAmount = (baseUrl: string): number | null => {
+  const explicitAmount = resolvePositiveNumber(process.env.AMERIA_VPOS_TEST_AMOUNT_AMD);
+  if (explicitAmount !== null) return explicitAmount;
+
+  const forceRaw = resolveString(process.env.AMERIA_VPOS_FORCE_TEST_AMOUNT).toLowerCase();
+  if (forceRaw === "false" || forceRaw === "0" || forceRaw === "no") {
+    return null;
+  }
+
+  if (isAmeriaTestEnvironment(baseUrl)) {
+    return AMERIA_DEFAULT_TEST_AMOUNT_AMD;
+  }
+
+  return null;
+};
+
+const buildAmeriaOrderId = (
+  customerRefNumber: string | null | undefined,
+  range: { min: number; max: number } | null,
+  attempt: number
+): number => {
+  const refDigits = (customerRefNumber ?? "").replace(/\D+/g, "");
+
+  if (range) {
+    const span = range.max - range.min + 1;
+    if (span <= 0) {
+      return range.min;
+    }
+
+    if (refDigits.length > 0) {
+      const refNumber = Number.parseInt(refDigits.slice(-10), 10);
+      if (Number.isFinite(refNumber)) {
+        const offset = (refNumber + attempt) % span;
+        return range.min + offset;
+      }
+    }
+
+    const seed = Date.now() + Math.floor(Math.random() * span) + attempt;
+    return range.min + (seed % span);
+  }
+
+  if (refDigits.length > 0) {
+    const parsed = Number.parseInt(refDigits.slice(-9), 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed + attempt;
+    }
+  }
+
+  const fallback = Number.parseInt(String(Date.now()).slice(-9), 10);
+  if (Number.isFinite(fallback) && fallback > 0) {
+    return fallback + attempt;
+  }
+  return 1 + attempt;
+};
+
+const extractJsonResponse = async (response: Response): Promise<Record<string, unknown> | null> => {
+  try {
+    return (await response.json()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
+const toDate = (value: unknown): Date | null => {
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value : null;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+  return null;
+};
+
+const hashForFingerprint = (value: string) =>
+  createHash("sha256").update(value, "utf8").digest("hex");
+
+const resolveBookingRateKeyHashes = (
+  payload: AoryxBookingPayload,
+  prebookState: StoredPrebookState | null
+): string[] => {
+  if (Array.isArray(prebookState?.rateKeyHashes) && prebookState.rateKeyHashes.length > 0) {
+    return [...prebookState.rateKeyHashes]
+      .map((hash) => resolveString(hash))
+      .filter((hash) => hash.length > 0)
+      .sort();
+  }
+  if (Array.isArray(prebookState?.rateKeys) && prebookState.rateKeys.length > 0) {
+    return [...prebookState.rateKeys]
+      .map((key) => resolveString(key))
+      .filter((key) => key.length > 0)
+      .map(hashForFingerprint)
+      .sort();
+  }
+  return payload.rooms
+    .map((room) => resolveString(room.rateKey))
+    .filter((key) => key.length > 0)
+    .map(hashForFingerprint)
+    .sort();
+};
+
+const buildBookingFingerprint = (
+  payload: AoryxBookingPayload,
+  rateKeyHashes: string[]
+) => {
+  const fingerprintPayload = JSON.stringify({
+    sessionId: payload.sessionId,
+    hotelCode: payload.hotelCode,
+    groupCode: payload.groupCode,
+    checkInDate: payload.checkInDate ?? "",
+    checkOutDate: payload.checkOutDate ?? "",
+    rateKeyHashes,
+  });
+  return hashForFingerprint(fingerprintPayload);
+};
+
+const isBlockingAttempt = (record: BlockingVposAttempt): boolean => {
+  const status = resolveString(record.status).toLowerCase();
+  if (status === "booking_complete" || status === "booking_in_progress" || status === "payment_success") {
+    return true;
+  }
+  if (status === "created") {
+    const lastUpdatedAt = toDate(record.updatedAt) ?? toDate(record.createdAt);
+    if (!lastUpdatedAt) return false;
+    return Date.now() - lastUpdatedAt.getTime() <= ACTIVE_CREATED_ATTEMPT_TTL_MS;
+  }
+  return false;
+};
+
+const findBlockingAttempt = async (
+  collection: Collection<Document>,
+  bookingFingerprint: string,
+  payload: AoryxBookingPayload
+): Promise<BlockingVposAttempt | null> => {
+  const statusFilter = { $in: [...DUPLICATE_ATTEMPT_STATUSES] };
+  const projection = {
+    _id: 0,
+    provider: 1,
+    orderId: 1,
+    orderNumber: 1,
+    status: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const sort = { updatedAt: -1, createdAt: -1 } as const;
+
+  const byFingerprint = (await collection
+    .find({ bookingFingerprint, status: statusFilter }, { projection })
+    .sort(sort)
+    .limit(DUPLICATE_ATTEMPT_LOOKUP_LIMIT)
+    .toArray()) as BlockingVposAttempt[];
+
+  for (const attempt of byFingerprint) {
+    if (isBlockingAttempt(attempt)) return attempt;
+  }
+
+  const legacyMatch = (await collection
+    .find(
+      {
+        "payload.sessionId": payload.sessionId,
+        "payload.hotelCode": payload.hotelCode,
+        "payload.groupCode": payload.groupCode,
+        status: statusFilter,
+      },
+      { projection }
+    )
+    .sort(sort)
+    .limit(DUPLICATE_ATTEMPT_LOOKUP_LIMIT)
+    .toArray()) as BlockingVposAttempt[];
+
+  for (const attempt of legacyMatch) {
+    if (isBlockingAttempt(attempt)) return attempt;
+  }
+
+  return null;
+};
+
+const duplicateAttemptMessage = (attempt: BlockingVposAttempt): string => {
+  const status = resolveString(attempt.status).toLowerCase();
+  if (status === "booking_complete") {
+    return "This prebook session is already booked. Please check your confirmed bookings.";
+  }
+  if (status === "booking_in_progress" || status === "payment_success") {
+    return "A payment for this prebook session is already being finalized. Please wait and check the booking status.";
+  }
+  return "A payment attempt for this prebook session is already active. Please complete it or wait a few minutes before retrying.";
+};
+
+const initializeIdbankPayment = async (params: {
+  amountMinor: number;
+  currencyCode: string;
+  orderNumber: string;
+  description: string;
+  language: string;
+  returnUrl: string;
+  pageView: string;
+  locale: string | null;
+}) => {
+  const config = resolveIdbankConfig();
+  if (!config.userName || !config.password || !config.baseUrl) {
+    throw new Error("Card payment is not configured. Please contact support.");
+  }
+
+  const query = new URLSearchParams();
+  query.set("userName", config.userName);
+  query.set("password", config.password);
+  query.set("orderNumber", params.orderNumber);
+  query.set("amount", String(params.amountMinor));
+  query.set("currency", params.currencyCode);
+  query.set("returnUrl", params.returnUrl);
+  if (params.description) query.set("description", params.description);
+  if (params.language) query.set("language", params.language);
+  if (params.pageView) query.set("pageView", params.pageView);
+  query.set("jsonParams", JSON.stringify({ orderNumber: params.orderNumber, locale: params.locale }));
+
+  const response = await fetch(`${config.baseUrl}/register.do`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: query.toString(),
+  });
+
+  const body = await extractJsonResponse(response);
+  if (!body) {
+    throw new Error("Payment gateway response invalid.");
+  }
+
+  const errorCode =
+    typeof body.errorCode === "number" || typeof body.errorCode === "string"
+      ? String(body.errorCode)
+      : null;
+  const formUrl = typeof body.formUrl === "string" ? body.formUrl.trim() : "";
+  const orderId = typeof body.orderId === "string" ? body.orderId.trim() : "";
+  const hasError = errorCode !== null && errorCode !== "0";
+
+  if (!response.ok || hasError || !formUrl || !orderId) {
+    const message =
+      typeof body.errorMessage === "string" && body.errorMessage.trim().length > 0
+        ? body.errorMessage
+        : "Failed to initialize card payment.";
+    console.error("[Vpos][checkout][idbank] Gateway error", body);
+    throw new Error(message);
+  }
+
+  return {
+    orderId,
+    orderNumber: params.orderNumber,
+    formUrl,
+    gatewayMeta: {
+      provider: "idbank",
+      baseUrl: config.baseUrl,
+      userName: config.userName,
+      returnUrl: params.returnUrl,
+      pageView: params.pageView,
+    },
+  } satisfies VposInitResult;
+};
+
+const initializeAmeriaPayment = async (params: {
+  amountValue: number;
+  amountMinor: number;
+  currencyCode: string;
+  description: string;
+  language: string;
+  returnUrl: string;
+  payload: AoryxBookingPayload;
+  locale: string | null;
+}) => {
+  const config = resolveAmeriaConfig();
+  if (!config.baseUrl || !config.clientId || !config.userName || !config.password) {
+    throw new Error("Card payment is not configured. Please contact support.");
+  }
+
+  const range = resolveAmeriaOrderRange(config.baseUrl);
+  const payLanguage = resolveAmeriaLanguage(params.language);
+  let lastErrorMessage = "Failed to initialize card payment.";
+
+  for (let attempt = 0; attempt < AMERIA_MAX_INIT_RETRIES; attempt += 1) {
+    const orderIdNumeric = buildAmeriaOrderId(params.payload.customerRefNumber ?? null, range, attempt);
+    const orderNumber = String(orderIdNumeric);
+    const opaque = JSON.stringify({ orderNumber, locale: params.locale, provider: "ameriabank" });
+
+    const initPayload = {
+      ClientID: config.clientId,
+      Username: config.userName,
+      Password: config.password,
+      Currency: params.currencyCode,
+      Description: params.description,
+      OrderID: orderIdNumeric,
+      Amount: params.amountValue,
+      BackURL: params.returnUrl,
+      Opaque: opaque,
+      Timeout: config.timeout,
+    };
+
+    const response = await fetch(`${config.baseUrl}/api/VPOS/InitPayment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(initPayload),
+    });
+
+    const body = (await extractJsonResponse(response)) as AmeriaInitResponse | null;
+    if (!body) {
+      throw new Error("Payment gateway response invalid.");
+    }
+
+    const responseCode =
+      typeof body.ResponseCode === "number" || typeof body.ResponseCode === "string"
+        ? String(body.ResponseCode).trim()
+        : "";
+    const responseMessage =
+      typeof body.ResponseMessage === "string" && body.ResponseMessage.trim().length > 0
+        ? body.ResponseMessage.trim()
+        : null;
+    const paymentId = typeof body.PaymentID === "string" ? body.PaymentID.trim() : "";
+    const isDuplicateOrderError = responseCode === "01" || responseCode === "08204";
+
+    if (response.ok && responseCode === "1" && paymentId) {
+      const formUrl = `${config.baseUrl}/Payments/Pay?id=${encodeURIComponent(paymentId)}&lang=${encodeURIComponent(payLanguage)}`;
+      return {
+        orderId: paymentId,
+        orderNumber,
+        formUrl,
+        gatewayMeta: {
+          provider: "ameriabank",
+          baseUrl: config.baseUrl,
+          clientId: config.clientId,
+          userName: config.userName,
+          returnUrl: params.returnUrl,
+          language: payLanguage,
+          originalOrderId: orderIdNumeric,
+          amountMinor: params.amountMinor,
+        },
+      } satisfies VposInitResult;
+    }
+
+    lastErrorMessage = responseMessage ?? "Failed to initialize card payment.";
+    console.error("[Vpos][checkout][ameriabank] Gateway error", {
+      responseCode,
+      responseMessage,
+      attempt,
+      orderIdNumeric,
+      paymentId,
+      body,
+    });
+
+    if (!isDuplicateOrderError) {
+      break;
+    }
+  }
+
+  throw new Error(lastErrorMessage);
+};
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const locale =
       typeof (body as { locale?: unknown }).locale === "string"
-        ? (body as { locale?: string }).locale?.trim()
+        ? (body as { locale?: string }).locale?.trim() ?? null
         : null;
+    const provider = parsePaymentProvider((body as { paymentProvider?: unknown }).paymentProvider);
+
     const sessionId =
       parseSessionId((body as { sessionId?: unknown }).sessionId) ??
       getSessionFromCookie(request);
@@ -108,20 +578,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: message }, { status: 409 });
     }
 
-    const userName = resolveString(process.env.VPOS_USER);
-    const password = resolveString(process.env.VPOS_PASSWORD);
-    if (!userName || !password) {
+    const db = await getDb();
+    const vposCollection = db.collection("vpos_payments");
+    const bookingRateKeyHashes = resolveBookingRateKeyHashes(payload, prebookState);
+    const bookingFingerprint = buildBookingFingerprint(payload, bookingRateKeyHashes);
+    const blockingAttempt = await findBlockingAttempt(vposCollection, bookingFingerprint, payload);
+    if (blockingAttempt) {
       return NextResponse.json(
-        { error: "Card payment is not configured. Please contact support." },
-        { status: 500 }
-      );
-    }
-
-    const baseUrl = resolveBaseUrl();
-    if (!baseUrl) {
-      return NextResponse.json(
-        { error: "Card payment is not configured. Please contact support." },
-        { status: 500 }
+        {
+          error: duplicateAttemptMessage(blockingAttempt),
+          code: "duplicate_payment_attempt",
+          existingPayment: {
+            provider: resolveString(blockingAttempt.provider) || null,
+            status: resolveString(blockingAttempt.status) || null,
+            orderId: resolveString(blockingAttempt.orderId) || null,
+            orderNumber: resolveString(blockingAttempt.orderNumber) || null,
+          },
+        },
+        { status: 409 }
       );
     }
 
@@ -163,6 +637,13 @@ export async function POST(request: NextRequest) {
         : 0;
 
     let totalAmd = 0;
+    let amountBreakdownAmd = {
+      rooms: 0,
+      transfer: 0,
+      excursions: 0,
+      insurance: 0,
+      flights: 0,
+    };
     try {
       const rates = await getAmdRates();
       const rateCache = new Map<string, number>();
@@ -200,6 +681,13 @@ export async function POST(request: NextRequest) {
         convertAmount(insuranceTotal, insuranceCurrency),
         convertAmount(flightsTotal, flightsCurrency),
       ]);
+      amountBreakdownAmd = {
+        rooms: roomsAmd,
+        transfer: transferAmd,
+        excursions: excursionsAmd,
+        insurance: insuranceAmd,
+        flights: flightsAmd,
+      };
       totalAmd = roomsAmd + transferAmd + excursionsAmd + insuranceAmd + flightsAmd;
     } catch (error) {
       console.error("[Vpos][checkout] Failed to convert amount", error);
@@ -209,76 +697,65 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const currencyCode =
-      typeof process.env.VPOS_CURRENCY_CODE === "string" && process.env.VPOS_CURRENCY_CODE.trim()
-        ? process.env.VPOS_CURRENCY_CODE.trim()
-        : DEFAULT_CURRENCY_CODE;
-    const normalizedCurrencyCode = normalizeCurrencyCode(currencyCode);
-    if (normalizedCurrencyCode !== "051") {
+    const { code: currencyCode, decimals: currencyDecimals } = resolveCurrencyConfig(provider);
+    if (currencyCode !== "051") {
       return NextResponse.json(
         { error: "Card payment is configured for AMD only." },
         { status: 500 }
       );
     }
-    const currencyDecimals = resolveCurrencyDecimals(process.env.VPOS_CURRENCY_DECIMALS);
-    const amountMinor = toMinorUnits(totalAmd, currencyDecimals);
+
+    let amountValue = Number((totalAmd || 0).toFixed(currencyDecimals));
+    const ameriaBaseUrl = provider === "ameriabank" ? resolveAmeriaConfig().baseUrl : "";
+    const ameriaOverrideAmount = provider === "ameriabank" ? resolveAmeriaOverrideAmount(ameriaBaseUrl) : null;
+    if (provider === "ameriabank" && ameriaOverrideAmount !== null) {
+      amountValue = Number(ameriaOverrideAmount.toFixed(currencyDecimals));
+    }
+
+    const amountMinor = toMinorUnits(amountValue, currencyDecimals);
     if (!Number.isFinite(amountMinor) || amountMinor <= 0) {
       return NextResponse.json({ error: "Invalid payment amount." }, { status: 400 });
     }
-    const amountValue = Number((amountMinor / Math.pow(10, currencyDecimals)).toFixed(currencyDecimals));
 
     const orderNumber = buildOrderNumber(payload.customerRefNumber ?? null);
-    const description = sanitizeDescription(
-      `Booking ${payload.hotelCode}`
+    const description = sanitizeDescription(`Booking ${payload.hotelCode}`);
+    const language = normalizeLanguage(
+      provider === "ameriabank"
+        ? process.env.AMERIA_VPOS_LANGUAGE ?? locale ?? undefined
+        : process.env.VPOS_LANGUAGE ?? locale ?? undefined
     );
-    const language = normalizeLanguage(process.env.VPOS_LANGUAGE ?? locale ?? undefined);
     const returnUrl = buildReturnUrl(request);
     const pageView = resolvePageView(request.headers.get("user-agent"));
 
-    const params = new URLSearchParams();
-    params.set("userName", userName);
-    params.set("password", password);
-    params.set("orderNumber", orderNumber);
-    params.set("amount", String(amountMinor));
-    params.set("currency", normalizedCurrencyCode);
-    params.set("returnUrl", returnUrl);
-    if (description) params.set("description", description);
-    if (language) params.set("language", language);
-    if (pageView) params.set("pageView", pageView);
-    params.set("jsonParams", JSON.stringify({ orderNumber, locale }));
-
-    const response = await fetch(`${baseUrl}/register.do`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-    });
-
-    let responseBody: Record<string, unknown> | null = null;
+    let initResult: VposInitResult;
     try {
-      responseBody = await response.json();
-    } catch (parseError) {
-      const text = await response.text().catch(() => "");
-      console.error("[Vpos][checkout] Non-JSON response", text);
-      return NextResponse.json(
-        { error: "Payment gateway response invalid." },
-        { status: 502 }
-      );
-    }
-
-    const errorCode =
-      typeof responseBody?.errorCode === "number" || typeof responseBody?.errorCode === "string"
-        ? String(responseBody.errorCode)
-        : null;
-    const formUrl = typeof responseBody?.formUrl === "string" ? responseBody.formUrl.trim() : "";
-    const orderId = typeof responseBody?.orderId === "string" ? responseBody.orderId.trim() : "";
-    const hasError = errorCode !== null && errorCode !== "0";
-
-    if (!response.ok || hasError || !formUrl || !orderId) {
+      initResult =
+        provider === "ameriabank"
+          ? await initializeAmeriaPayment({
+              amountValue,
+              amountMinor,
+              currencyCode,
+              description,
+              language,
+              returnUrl,
+              payload,
+              locale,
+            })
+          : await initializeIdbankPayment({
+              amountMinor,
+              currencyCode,
+              orderNumber,
+              description,
+              language,
+              returnUrl,
+              pageView,
+              locale,
+            });
+    } catch (gatewayError) {
       const message =
-        typeof responseBody?.errorMessage === "string" && responseBody.errorMessage.trim().length > 0
-          ? responseBody.errorMessage
+        gatewayError instanceof Error && gatewayError.message.trim().length > 0
+          ? gatewayError.message
           : "Failed to initialize card payment.";
-      console.error("[Vpos][checkout] Gateway error", responseBody);
       return NextResponse.json({ error: message }, { status: 502 });
     }
 
@@ -288,20 +765,28 @@ export async function POST(request: NextRequest) {
     const userNameValue = session?.user?.name ?? null;
 
     const now = new Date();
-    const db = await getDb();
-
-    await db.collection("vpos_payments").insertOne({
-      orderId,
-      orderNumber,
+    await vposCollection.insertOne({
+      provider,
+      orderId: initResult.orderId,
+      orderNumber: initResult.orderNumber,
       status: "created",
+      bookingFingerprint,
+      bookingKey: {
+        sessionId: payload.sessionId,
+        hotelCode: payload.hotelCode,
+        groupCode: payload.groupCode,
+        rateKeyHashes: bookingRateKeyHashes,
+      },
       amount: {
         value: amountValue,
         minor: amountMinor,
         currency: "AMD",
-        currencyCode: normalizedCurrencyCode,
+        currencyCode,
         decimals: currencyDecimals,
         baseValue: baseAmount,
         baseCurrency: payload.currency,
+        convertedValue: totalAmd,
+        breakdownAmd: amountBreakdownAmd,
       },
       description,
       payload,
@@ -310,20 +795,15 @@ export async function POST(request: NextRequest) {
       userEmail,
       userName: userNameValue,
       locale,
-      gateway: {
-        baseUrl,
-        userName,
-        returnUrl,
-        pageView,
-      },
+      gateway: initResult.gatewayMeta,
       createdAt: now,
       updatedAt: now,
     });
 
     return NextResponse.json({
-      formUrl,
-      orderId,
-      orderNumber,
+      formUrl: initResult.formUrl,
+      orderId: initResult.orderId,
+      orderNumber: initResult.orderNumber,
     });
   } catch (error) {
     console.error("[Vpos][checkout] Failed to initialize payment", error);

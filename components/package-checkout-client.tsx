@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useLanguage } from "@/components/language-provider";
-import { postJson } from "@/lib/api-helpers";
+import { ApiError, postJson } from "@/lib/api-helpers";
 import type { Locale as AppLocale } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
 import { getCountryOptions, getCountryOptionsWithAlpha3, resolveCountryAlpha2 } from "@/lib/countries";
@@ -33,7 +33,7 @@ import type {
 } from "@/types/aoryx";
 import type { EfesQuoteRequest, EfesQuoteResult } from "@/types/efes";
 
-type PaymentMethod = "idram" | "card";
+type PaymentMethod = "idram" | "idbank_card" | "ameria_card";
 
 type GuestForm = {
   id: string;
@@ -1384,6 +1384,9 @@ export default function PackageCheckoutClient() {
     }
 
     const resolveCheckoutError = (error: unknown) => {
+      if (error instanceof ApiError && error.code === "duplicate_payment_attempt") {
+        return t.packageBuilder.checkout.errors.duplicatePaymentAttempt;
+      }
       const message =
         error instanceof Error ? error.message : t.packageBuilder.checkout.errors.paymentFailed;
       const normalized = message.toLowerCase();
@@ -1622,10 +1625,11 @@ export default function PackageCheckoutClient() {
         return;
       }
 
-      const checkout = await postJson<VposCheckoutResponse>(
-        "/api/payments/vpos/checkout",
-        requestPayload
-      );
+      const paymentProvider = paymentMethod === "ameria_card" ? "ameriabank" : "idbank";
+      const checkout = await postJson<VposCheckoutResponse>("/api/payments/vpos/checkout", {
+        ...requestPayload,
+        paymentProvider,
+      });
       if (typeof window === "undefined") {
         throw new Error(t.packageBuilder.checkout.errors.paymentFailed);
       }
@@ -3100,11 +3104,21 @@ export default function PackageCheckoutClient() {
                   <input
                     type="radio"
                     name="payment-method"
-                    value="card"
-                    checked={paymentMethod === "card"}
-                    onChange={() => setPaymentMethod("card")}
+                    value="idbank_card"
+                    checked={paymentMethod === "idbank_card"}
+                    onChange={() => setPaymentMethod("idbank_card")}
                   />
                   <span>{t.packageBuilder.checkout.methodCard}</span>
+                </label>
+                <label className="checkout-radio">
+                  <input
+                    type="radio"
+                    name="payment-method"
+                    value="ameria_card"
+                    checked={paymentMethod === "ameria_card"}
+                    onChange={() => setPaymentMethod("ameria_card")}
+                  />
+                  <span>{t.packageBuilder.checkout.methodCardAmeria}</span>
                 </label>
               </div>
               <label className="checkout-terms">
@@ -3181,7 +3195,9 @@ export default function PackageCheckoutClient() {
               <button type="submit" className="checkout-pay" disabled={!canPay}>
                 {paymentMethod === "idram"
                   ? t.packageBuilder.checkout.payIdram
-                  : t.packageBuilder.checkout.payCard}
+                  : paymentMethod === "ameria_card"
+                    ? t.packageBuilder.checkout.payCardAmeria
+                    : t.packageBuilder.checkout.payCard}
               </button>
             </div>
           </aside>

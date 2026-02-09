@@ -1,0 +1,376 @@
+openapi: 3.1.0
+info:
+  title: Megatours B2B Gateway API
+  version: 1.0.0
+  description: |
+    Public B2B gateway for Megatours suppliers. All supplier calls are brokered by Megatours.
+servers:
+  - url: https://megatours.cloud
+security:
+  - bearerAuth: []
+paths:
+  /v1/health:
+    get:
+      summary: Health status
+      security: []
+      responses:
+        "200":
+          description: Service status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  service:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+                  suppliers:
+                    type: object
+                    properties:
+                      aoryx:
+                        type: boolean
+                      efes:
+                        type: boolean
+  /v1/hotels/search:
+    post:
+      summary: Search hotels through Aoryx
+      x-required-scope: hotels:search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HotelSearchRequest"
+      responses:
+        "200":
+          description: Search results
+          headers:
+            x-request-id:
+              schema:
+                type: string
+            x-ratelimit-limit:
+              schema:
+                type: string
+            x-ratelimit-remaining:
+              schema:
+                type: string
+            x-ratelimit-reset:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/HotelSearchResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
+  /v1/insurance/quote:
+    post:
+      summary: Get travel insurance quote through Efes
+      x-required-scope: insurance:quote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InsuranceQuoteRequest"
+      responses:
+        "200":
+          description: Insurance quote result
+          headers:
+            x-request-id:
+              schema:
+                type: string
+            x-ratelimit-limit:
+              schema:
+                type: string
+            x-ratelimit-remaining:
+              schema:
+                type: string
+            x-ratelimit-reset:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/InsuranceQuoteResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+  responses:
+    ErrorResponse:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              requestId:
+                type: string
+              code:
+                type: string
+                nullable: true
+  schemas:
+    Room:
+      type: object
+      properties:
+        roomIdentifier:
+          type: integer
+          minimum: 1
+        adults:
+          type: integer
+          minimum: 1
+        childrenAges:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 17
+      required:
+        - roomIdentifier
+        - adults
+        - childrenAges
+    HotelSearchRequest:
+      type: object
+      properties:
+        destinationCode:
+          type: string
+        hotelCode:
+          type: string
+        countryCode:
+          type: string
+          default: AE
+        nationality:
+          type: string
+          default: AM
+        currency:
+          type: string
+          default: USD
+        checkInDate:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        checkOutDate:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        rooms:
+          type: array
+          items:
+            $ref: "#/components/schemas/Room"
+      required:
+        - checkInDate
+        - checkOutDate
+    HotelSummary:
+      type: object
+      properties:
+        code:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        minPrice:
+          type: number
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        rating:
+          type: number
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+    HotelSearchResponse:
+      type: object
+      properties:
+        currency:
+          type: string
+          nullable: true
+        propertyCount:
+          type: integer
+          nullable: true
+        responseTime:
+          type: string
+          nullable: true
+        destination:
+          type: object
+          nullable: true
+          properties:
+            code:
+              type: string
+              nullable: true
+            name:
+              type: string
+              nullable: true
+        hotels:
+          type: array
+          items:
+            $ref: "#/components/schemas/HotelSummary"
+    InsuranceTraveler:
+      type: object
+      properties:
+        id:
+          type: string
+          nullable: true
+        age:
+          type: number
+        passportNumber:
+          type: string
+          nullable: true
+        socialCard:
+          type: string
+          nullable: true
+        subrisks:
+          type: array
+          items:
+            type: string
+      required:
+        - age
+    InsuranceQuoteRequest:
+      type: object
+      properties:
+        startDate:
+          type: string
+        endDate:
+          type: string
+        days:
+          type: number
+          nullable: true
+        territoryCode:
+          type: string
+        riskAmount:
+          type: number
+        riskCurrency:
+          type: string
+        riskLabel:
+          type: string
+          nullable: true
+        promoCode:
+          type: string
+          nullable: true
+        travelers:
+          type: array
+          items:
+            $ref: "#/components/schemas/InsuranceTraveler"
+        subrisks:
+          type: array
+          items:
+            type: string
+      required:
+        - startDate
+        - endDate
+        - territoryCode
+        - riskAmount
+        - riskCurrency
+        - travelers
+    InsuranceQuoteResponse:
+      type: object
+      properties:
+        totalPremium:
+          type: number
+        currency:
+          type: string
+        premiums:
+          type: array
+          items:
+            type: object
+            properties:
+              travelerId:
+                type: string
+                nullable: true
+              premium:
+                type: number
+            required:
+              - premium
+        sum:
+          type: number
+          nullable: true
+        discountedSum:
+          type: number
+          nullable: true
+        sumByTraveler:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: number
+        discountedSumByTraveler:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: number
+        priceCoverages:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: number
+        discountedPriceCoverages:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: number
+        priceCoveragesByTraveler:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: number
+        discountedPriceCoveragesByTraveler:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: number

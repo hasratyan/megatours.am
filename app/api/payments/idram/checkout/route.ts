@@ -1,8 +1,10 @@
+import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import type { Collection, Document } from "mongodb";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { getPrebookState, getSessionFromCookie } from "@/app/api/aoryx/_shared";
+import { getPrebookState, getSessionFromCookie, type StoredPrebookState } from "@/app/api/aoryx/_shared";
 import { parseBookingPayload, validatePrebookState } from "@/lib/aoryx-booking";
 import { calculateBookingTotal } from "@/lib/booking-total";
 import { applyMarkup } from "@/lib/pricing-utils";
@@ -13,6 +15,24 @@ export const runtime = "nodejs";
 
 const IDRAM_ACTION = "https://banking.idram.am/Payment/GetPayment";
 const DEFAULT_LANGUAGE = "EN";
+const DUPLICATE_ATTEMPT_STATUSES = [
+  "booking_complete",
+  "booking_in_progress",
+  "payment_success",
+  "created",
+  "prechecked",
+] as const;
+const ACTIVE_CREATED_ATTEMPT_TTL_MS = 20 * 60 * 1000;
+const DUPLICATE_ATTEMPT_LOOKUP_LIMIT = 20;
+
+type BlockingIdramAttempt = {
+  billNo?: string;
+  status?: string;
+  createdAt?: Date | string | number | null;
+  updatedAt?: Date | string | number | null;
+};
+
+const resolveString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
 const parseSessionId = (input: unknown): string | undefined => {
   if (typeof input !== "string") return undefined;
@@ -33,6 +53,131 @@ const normalizeLanguage = (value: string | undefined) => {
   const normalized = (value ?? DEFAULT_LANGUAGE).trim().toUpperCase();
   if (normalized === "AM" || normalized === "RU" || normalized === "EN") return normalized;
   return DEFAULT_LANGUAGE;
+};
+
+const toDate = (value: unknown): Date | null => {
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value : null;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+  return null;
+};
+
+const hashForFingerprint = (value: string) =>
+  createHash("sha256").update(value, "utf8").digest("hex");
+
+const resolveBookingRateKeyHashes = (
+  payload: AoryxBookingPayload,
+  prebookState: StoredPrebookState | null
+): string[] => {
+  if (Array.isArray(prebookState?.rateKeyHashes) && prebookState.rateKeyHashes.length > 0) {
+    return [...prebookState.rateKeyHashes]
+      .map((hash) => resolveString(hash))
+      .filter((hash) => hash.length > 0)
+      .sort();
+  }
+
+  if (Array.isArray(prebookState?.rateKeys) && prebookState.rateKeys.length > 0) {
+    return [...prebookState.rateKeys]
+      .map((key) => resolveString(key))
+      .filter((key) => key.length > 0)
+      .map(hashForFingerprint)
+      .sort();
+  }
+
+  return payload.rooms
+    .map((room) => resolveString(room.rateKey))
+    .filter((key) => key.length > 0)
+    .map(hashForFingerprint)
+    .sort();
+};
+
+const buildBookingFingerprint = (
+  payload: AoryxBookingPayload,
+  rateKeyHashes: string[]
+) => {
+  const fingerprintPayload = JSON.stringify({
+    sessionId: payload.sessionId,
+    hotelCode: payload.hotelCode,
+    groupCode: payload.groupCode,
+    checkInDate: payload.checkInDate ?? "",
+    checkOutDate: payload.checkOutDate ?? "",
+    rateKeyHashes,
+  });
+  return hashForFingerprint(fingerprintPayload);
+};
+
+const isBlockingAttempt = (record: BlockingIdramAttempt): boolean => {
+  const status = resolveString(record.status).toLowerCase();
+  if (status === "booking_complete" || status === "booking_in_progress" || status === "payment_success") {
+    return true;
+  }
+  if (status === "created" || status === "prechecked") {
+    const lastUpdatedAt = toDate(record.updatedAt) ?? toDate(record.createdAt);
+    if (!lastUpdatedAt) return false;
+    return Date.now() - lastUpdatedAt.getTime() <= ACTIVE_CREATED_ATTEMPT_TTL_MS;
+  }
+  return false;
+};
+
+const findBlockingAttempt = async (
+  collection: Collection<Document>,
+  bookingFingerprint: string,
+  payload: AoryxBookingPayload
+): Promise<BlockingIdramAttempt | null> => {
+  const statusFilter = { $in: [...DUPLICATE_ATTEMPT_STATUSES] };
+  const projection = {
+    _id: 0,
+    billNo: 1,
+    status: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const sort = { updatedAt: -1, createdAt: -1 } as const;
+
+  const byFingerprint = (await collection
+    .find({ bookingFingerprint, status: statusFilter }, { projection })
+    .sort(sort)
+    .limit(DUPLICATE_ATTEMPT_LOOKUP_LIMIT)
+    .toArray()) as BlockingIdramAttempt[];
+
+  for (const attempt of byFingerprint) {
+    if (isBlockingAttempt(attempt)) return attempt;
+  }
+
+  const legacyMatch = (await collection
+    .find(
+      {
+        "payload.sessionId": payload.sessionId,
+        "payload.hotelCode": payload.hotelCode,
+        "payload.groupCode": payload.groupCode,
+        status: statusFilter,
+      },
+      { projection }
+    )
+    .sort(sort)
+    .limit(DUPLICATE_ATTEMPT_LOOKUP_LIMIT)
+    .toArray()) as BlockingIdramAttempt[];
+
+  for (const attempt of legacyMatch) {
+    if (isBlockingAttempt(attempt)) return attempt;
+  }
+
+  return null;
+};
+
+const duplicateAttemptMessage = (attempt: BlockingIdramAttempt): string => {
+  const status = resolveString(attempt.status).toLowerCase();
+  if (status === "booking_complete") {
+    return "This prebook session is already booked. Please check your confirmed bookings.";
+  }
+  if (status === "booking_in_progress" || status === "payment_success") {
+    return "A payment for this prebook session is already being finalized. Please wait and check the booking status.";
+  }
+  return "A payment attempt for this prebook session is already active. Please complete it or wait a few minutes before retrying.";
 };
 
 export async function POST(request: NextRequest) {
@@ -70,6 +215,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Idram is not configured. Please contact support." },
         { status: 500 }
+      );
+    }
+
+    const db = await getDb();
+    const idramCollection = db.collection("idram_payments");
+    const bookingRateKeyHashes = resolveBookingRateKeyHashes(payload, prebookState);
+    const bookingFingerprint = buildBookingFingerprint(payload, bookingRateKeyHashes);
+    const blockingAttempt = await findBlockingAttempt(idramCollection, bookingFingerprint, payload);
+    if (blockingAttempt) {
+      return NextResponse.json(
+        {
+          error: duplicateAttemptMessage(blockingAttempt),
+          code: "duplicate_payment_attempt",
+          existingPayment: {
+            provider: "idram",
+            status: resolveString(blockingAttempt.status) || null,
+            billNo: resolveString(blockingAttempt.billNo) || null,
+          },
+        },
+        { status: 409 }
       );
     }
 
@@ -158,11 +323,17 @@ export async function POST(request: NextRequest) {
     const userName = session?.user?.name ?? null;
 
     const now = new Date();
-    const db = await getDb();
 
-    await db.collection("idram_payments").insertOne({
+    await idramCollection.insertOne({
       billNo,
       status: "created",
+      bookingFingerprint,
+      bookingKey: {
+        sessionId: payload.sessionId,
+        hotelCode: payload.hotelCode,
+        groupCode: payload.groupCode,
+        rateKeyHashes: bookingRateKeyHashes,
+      },
       recAccount,
       amount: {
         value: amountValue,
