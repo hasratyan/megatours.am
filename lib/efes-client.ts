@@ -658,21 +658,40 @@ export async function quoteEfesTravelCost(request: EfesQuoteRequest): Promise<Ef
 
 const buildPolicyPayload = (request: EfesPolicyRequest) => {
   const traveler = request.traveler;
-  const address = traveler.address ?? {};
-  const fullAddress = address.full ?? "";
-  const fullAddressEn = address.fullEn ?? fullAddress;
-  const country =
-    resolveEfesCountry(address.country) ??
-    (address.country ? address.country : "ARM");
-  const region = address.region ?? "YR";
-  const city = address.city ?? "YR01";
-  const citizenship =
+  const insuredTraveler = request.insuredTraveler ?? traveler;
+
+  const insuredAddress = insuredTraveler.address ?? {};
+  const insuredFullAddress = insuredAddress.full ?? "";
+  const insuredFullAddressEn = insuredAddress.fullEn ?? insuredFullAddress;
+  const insuredCountry =
+    resolveEfesCountry(insuredAddress.country) ??
+    (insuredAddress.country ? insuredAddress.country : "ARM");
+  const insuredRegion = insuredAddress.region ?? "YR";
+  const insuredCity = insuredAddress.city ?? "YR01";
+  const insuredCitizenship =
+    resolveEfesCountry(insuredTraveler.citizenship) ??
+    insuredTraveler.citizenship ??
+    "ARM";
+  const insuredMobilePhone = normalizeEfesPhone(
+    insuredTraveler.mobilePhone ?? insuredTraveler.phone
+  );
+  const insuredPhone = insuredMobilePhone;
+  const insuredResidency = insuredTraveler.residency === false ? "0" : "1";
+
+  const travelAddress = traveler.address ?? {};
+  const travelFullAddress = travelAddress.full ?? "";
+  const travelFullAddressEn = travelAddress.fullEn ?? travelFullAddress;
+  const travelCountry =
+    resolveEfesCountry(travelAddress.country) ??
+    (travelAddress.country ? travelAddress.country : "ARM");
+  const travelRegion = travelAddress.region ?? "YR";
+  const travelCity = travelAddress.city ?? "YR01";
+  const travelCitizenship =
     resolveEfesCountry(traveler.citizenship) ??
     traveler.citizenship ??
     "ARM";
-  const insuredPhone = normalizeEfesPhone(traveler.phone);
-  const insuredMobilePhone = normalizeEfesPhone(traveler.mobilePhone ?? traveler.phone);
-  const residency = traveler.residency === false ? "0" : "1";
+  const travelMobilePhone = normalizeEfesPhone(traveler.mobilePhone ?? traveler.phone);
+  const travelResidency = traveler.residency === false ? "0" : "1";
   const policyCreationDate = formatEfesDate(request.policyCreationDate);
   const policyStartDate = formatEfesDate(request.startDate);
   const policyEndDate = formatEfesDate(request.endDate);
@@ -687,36 +706,36 @@ const buildPolicyPayload = (request: EfesPolicyRequest) => {
     AUTO_GENERATE_POLICY_NUMBER: "1",
     POLICY_NUMBER: "",
     IS_INSURED_PHYSICAL: "1",
-    INSURED_NAME: traveler.firstName,
-    INSURED_NAME_EN: traveler.firstNameEn ?? traveler.firstName,
-    INSURED_LAST_NAME: traveler.lastName,
-    INSURED_LAST_NAME_EN: traveler.lastNameEn ?? traveler.lastName,
-    INSURED_RESIDENCY: residency,
-    INSURED_SOCIAL_CARD: traveler.socialCard ?? "",
-    INSURED_PASSPORT_NUMBER: traveler.passportNumber ?? "",
-    INSURED_PASSPORT_AUTHORITY: traveler.passportAuthority ?? "",
-    INSURED_PASSPORT_ISSUE_DATE: traveler.passportIssueDate
-      ? formatEfesDate(traveler.passportIssueDate)
+    INSURED_NAME: insuredTraveler.firstName,
+    INSURED_NAME_EN: insuredTraveler.firstNameEn ?? insuredTraveler.firstName,
+    INSURED_LAST_NAME: insuredTraveler.lastName,
+    INSURED_LAST_NAME_EN: insuredTraveler.lastNameEn ?? insuredTraveler.lastName,
+    INSURED_RESIDENCY: insuredResidency,
+    INSURED_SOCIAL_CARD: insuredTraveler.socialCard ?? "",
+    INSURED_PASSPORT_NUMBER: insuredTraveler.passportNumber ?? "",
+    INSURED_PASSPORT_AUTHORITY: insuredTraveler.passportAuthority ?? "",
+    INSURED_PASSPORT_ISSUE_DATE: insuredTraveler.passportIssueDate
+      ? formatEfesDate(insuredTraveler.passportIssueDate)
       : "",
-    INSURED_PASSPORT_EXPIRY_DATE: traveler.passportExpiryDate
-      ? formatEfesDate(traveler.passportExpiryDate)
+    INSURED_PASSPORT_EXPIRY_DATE: insuredTraveler.passportExpiryDate
+      ? formatEfesDate(insuredTraveler.passportExpiryDate)
       : "",
-    INSURED_GENDER: traveler.gender ?? "",
-    INSURED_BIRTHDAY: traveler.birthDate ? formatEfesDate(traveler.birthDate) : "",
-    INSURED_PHONE: insuredPhone,
-    INSURED_CITIZENSHIP: citizenship,
+    INSURED_GENDER: insuredTraveler.gender ?? "",
+    INSURED_BIRTHDAY: insuredTraveler.birthDate ? formatEfesDate(insuredTraveler.birthDate) : "",
+    INSURED_PHONE: "",
+    INSURED_CITIZENSHIP: insuredCitizenship,
     INSURED_MOBILE_PHONE: insuredMobilePhone,
-    INSURED_MAIL: traveler.email ?? "",
+    INSURED_MAIL: insuredTraveler.email ?? "",
     IS_INSURED_SAME_REG_LIVE_ADDRESS: "1",
-    INSURED_REG_FULL_ADDRESS: fullAddress,
-    INSURED_REG_FULL_ADDRESS_EN: fullAddressEn,
-    INSURED_REG_COUNTRY: country,
-    INSURED_REG_REGION: region,
-    INSURED_REG_CITY: city,
-    INSURED_LIVE_FULL_ADDRESS: "",
-    INSURED_LIVE_COUNTRY: "",
-    INSURED_LIVE_REGION: "",
-    INSURED_LIVE_CITY: "",
+    INSURED_REG_FULL_ADDRESS: insuredFullAddress,
+    INSURED_REG_FULL_ADDRESS_EN: insuredFullAddressEn,
+    INSURED_REG_COUNTRY: insuredCountry,
+    INSURED_REG_REGION: insuredRegion,
+    INSURED_REG_CITY: insuredCity,
+    INSURED_LIVE_FULL_ADDRESS: insuredFullAddress,
+    INSURED_LIVE_COUNTRY: insuredCountry,
+    INSURED_LIVE_REGION: insuredRegion,
+    INSURED_LIVE_CITY: insuredCity,
     IS_BENEFICIAR_IN_INSURED_OBJECT: "1",
     POLICY_CREATION_DATE: policyCreationDate,
     POLICY_FROM_DATE: policyStartDate,
@@ -728,10 +747,10 @@ const buildPolicyPayload = (request: EfesPolicyRequest) => {
     TRAVEL_LAST_NAME: traveler.lastName,
     TRAVEL_FIRST_NAME_EN: traveler.firstNameEn ?? traveler.firstName,
     TRAVEL_LAST_NAME_EN: traveler.lastNameEn ?? traveler.lastName,
-    TRAVEL_CITIZENSHIP: citizenship,
+    TRAVEL_CITIZENSHIP: travelCitizenship,
     TRAVEL_BIRTHDAY: traveler.birthDate ? formatEfesDate(traveler.birthDate) : "",
     TRAVEL_GENDER: traveler.gender ?? "",
-    TRAVEL_RESIDENCY: residency,
+    TRAVEL_RESIDENCY: travelResidency,
     TRAVEL_SOCIAL_CARD: traveler.socialCard ?? "",
     TRAVEL_PASSPORT_NUMBER: traveler.passportNumber ?? "",
     TRAVEL_PASSPORT_AUTHORITY: traveler.passportAuthority ?? "",
@@ -741,15 +760,14 @@ const buildPolicyPayload = (request: EfesPolicyRequest) => {
     TRAVEL_PASSPORT_EXPIRY_DATE: traveler.passportExpiryDate
       ? formatEfesDate(traveler.passportExpiryDate)
       : "",
-    TRAVEL_PHONE: insuredPhone,
-    TRAVEL_MOBILE_PHONE: insuredMobilePhone,
+    TRAVEL_MOBILE_PHONE: travelMobilePhone,
     TRAVEL_MAIL: traveler.email ?? "",
     TRAVEL_LOCATION_TYPE: "REGISTRATION",
-    TRAVEL_REG_FULL_ADDRESS: fullAddress,
-    TRAVEL_REG_FULL_ADDRESS_EN: fullAddressEn,
-    TRAVEL_REG_COUNTRY: country,
-    TRAVEL_REG_REGION: region,
-    TRAVEL_REG_CITY: city,
+    TRAVEL_REG_FULL_ADDRESS: travelFullAddress,
+    TRAVEL_REG_FULL_ADDRESS_EN: travelFullAddressEn,
+    TRAVEL_REG_COUNTRY: travelCountry,
+    TRAVEL_REG_REGION: travelRegion,
+    TRAVEL_REG_CITY: travelCity,
     TRAVEL_DAYS_COUNT: String(request.days),
     COUNTRY_TERRITORY: request.territoryLabel,
     TRAVEL_COUNTRIES: request.travelCountries,
@@ -795,6 +813,41 @@ const normalizePremiumCurrency = (traveler: BookingInsuranceTraveler, insurance:
   return insurance.currency ?? DEFAULT_PREMIUM_CURRENCY;
 };
 
+const normalizeNameValue = (value: string | null | undefined) => value?.trim().toLowerCase() ?? "";
+
+const resolveLeadBookingGuest = (
+  rooms: AoryxBookingPayload["rooms"]
+): AoryxBookingPayload["rooms"][number]["guests"][number] | null => {
+  const guests = rooms.flatMap((room) => room.guests ?? []);
+  if (guests.length === 0) return null;
+  const explicitLead = guests.find((guest) => guest.isLeadGuest);
+  if (explicitLead) return explicitLead;
+  const adultLead = guests.find((guest) => guest.type === "Adult");
+  return adultLead ?? guests[0] ?? null;
+};
+
+const resolveInsuredTraveler = (
+  payload: AoryxBookingPayload,
+  travelers: BookingInsuranceTraveler[]
+) => {
+  if (travelers.length === 0) return null;
+  if (travelers.length === 1) return travelers[0];
+  const leadGuest = resolveLeadBookingGuest(payload.rooms ?? []);
+  if (!leadGuest) return travelers[0];
+  const leadFirst = normalizeNameValue(leadGuest.firstName);
+  const leadLast = normalizeNameValue(leadGuest.lastName);
+  if (!leadFirst || !leadLast) return travelers[0];
+
+  const matched = travelers.find((traveler) => {
+    const pairs: Array<[string, string]> = [
+      [normalizeNameValue(traveler.firstNameEn), normalizeNameValue(traveler.lastNameEn)],
+      [normalizeNameValue(traveler.firstName), normalizeNameValue(traveler.lastName)],
+    ];
+    return pairs.some(([first, last]) => first === leadFirst && last === leadLast);
+  });
+  return matched ?? travelers[0];
+};
+
 export async function createEfesPoliciesFromBooking(payload: AoryxBookingPayload) {
   const insurance = payload.insurance ?? null;
   if (!insurance || insurance.provider !== "efes") return [];
@@ -831,6 +884,10 @@ export async function createEfesPoliciesFromBooking(payload: AoryxBookingPayload
   }
 
   const policyCreationDate = new Date().toISOString().slice(0, 10);
+  const insuredTraveler = resolveInsuredTraveler(payload, travelers);
+  if (!insuredTraveler) {
+    throw new EfesClientError("Missing insured traveler for EFES policy");
+  }
 
   const results = await Promise.all(
     travelers.map(async (traveler) => {
@@ -842,6 +899,7 @@ export async function createEfesPoliciesFromBooking(payload: AoryxBookingPayload
       const premiumCurrency = normalizePremiumCurrency(traveler, insurance);
       const policyRequest: EfesPolicyRequest = {
         traveler,
+        insuredTraveler,
         premium,
         premiumCurrency,
         riskAmount,

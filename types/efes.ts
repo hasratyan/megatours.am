@@ -38,6 +38,7 @@ export type EfesQuoteResult = {
 
 export type EfesPolicyRequest = {
   traveler: BookingInsuranceTraveler;
+  insuredTraveler?: BookingInsuranceTraveler | null;
   premium: number;
   premiumCurrency: string;
   riskAmount: number;

@@ -1,6 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fetchEfesValueSet } from "@/lib/efes-value-set";
 
 export const runtime = "nodejs";
+
+const normalizeEfesList = (payload: unknown): Record<string, unknown>[] => {
+  if (Array.isArray(payload)) {
+    return payload.filter(
+      (item): item is Record<string, unknown> =>
+        Boolean(item && typeof item === "object")
+    );
+  }
+  if (!payload || typeof payload !== "object") return [];
+  const record = payload as Record<string, unknown>;
+  const nested = record.data;
+  if (nested) return normalizeEfesList(nested);
+  return [];
+};
+
+const readString = (value: unknown) =>
+  typeof value === "string" ? value.trim() : "";
 
 export async function GET(
   request: NextRequest,
@@ -16,24 +34,18 @@ export async function GET(
     );
   }
 
-  const safeId = encodeURIComponent(stateId);
-  const url = `https://api.efes.am/api/v1/ra-states/${safeId}/city-villages`;
-
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: { Accept: "application/json" },
+    const payload = await fetchEfesValueSet({ dicName: "dic_country_locations" });
+    const cities = normalizeEfesList(payload).filter((item) => {
+      const countryId = readString(item.country_id);
+      const parentId = readString(item.parent_id);
+      const locationId = readString(item.location_id);
+      if (countryId !== "1") return false;
+      if (!parentId || parentId === "0") return false;
+      if (locationId === parentId) return false;
+      return parentId === stateId;
     });
-    if (!response.ok) {
-      const payload = await response.text().catch(() => "");
-      console.error("[EFES] City/villages request failed", response.status, payload);
-      return NextResponse.json(
-        { error: "Failed to load RA city/villages." },
-        { status: response.status }
-      );
-    }
-    const data = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json(cities);
   } catch (error) {
     console.error("[EFES] Failed to load RA city/villages", error);
     return NextResponse.json(
