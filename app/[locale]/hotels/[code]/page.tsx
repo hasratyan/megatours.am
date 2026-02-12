@@ -1,6 +1,6 @@
 import { cache } from "react";
 import HotelClient from "./hotel-client";
-import { hotelInfo, hotelsInfoByDestinationId, roomDetails, AoryxClientError, AoryxServiceError } from "@/lib/aoryx-client";
+import { roomDetails, AoryxClientError, AoryxServiceError } from "@/lib/aoryx-client";
 import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env";
 import { parseSearchParams } from "@/lib/search-query";
 import { obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
@@ -10,6 +10,7 @@ import { applyMarkup } from "@/lib/pricing-utils";
 import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { fetchExcursions, fetchTransferRates } from "@/lib/aoryx-addons";
+import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
 import type {
   AoryxExcursionTicket,
   AoryxHotelInfoResult,
@@ -17,9 +18,6 @@ import type {
   AoryxSearchParams,
   AoryxTransferRate,
 } from "@/types/aoryx";
-
-const toFinite = (value: number | null | undefined): number | null =>
-  typeof value === "number" && Number.isFinite(value) ? value : null;
 
 const buildSearchParams = (input: Record<string, string | string[] | undefined>) => {
   const params = new URLSearchParams();
@@ -38,7 +36,7 @@ const buildSearchParams = (input: Record<string, string | string[] | undefined>)
 const resolveLocale = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
 
-const getHotelInfoCached = cache(async (code: string) => hotelInfo(code));
+const getHotelInfoCached = cache(async (code: string) => getHotelInfoFromDb(code));
 
 type SafeRoomDetails = {
   currency: string | null;
@@ -127,7 +125,7 @@ export default async function HotelPage({ params, searchParams }: PageProps) {
   let hotelError: string | null = null;
   let roomDetailsResult: SafeRoomDetails | null = null;
   let roomsError: string | null = null;
-  let fallbackCoordinates: { lat: number; lon: number } | null = null;
+  const fallbackCoordinates: { lat: number; lon: number } | null = null;
   let transferOptionsResult: AoryxTransferRate[] | null = null;
   let transferError: string | null = null;
   let excursionOptionsResult: AoryxExcursionTicket[] | null = null;
@@ -192,23 +190,6 @@ export default async function HotelPage({ params, searchParams }: PageProps) {
             : room.totalPrice,
       })),
     };
-  }
-
-  const infoLat = toFinite(hotelInfoResult?.geoCode?.lat);
-  const infoLon = toFinite(hotelInfoResult?.geoCode?.lon);
-  if (infoLat === null || infoLon === null) {
-    const destinationCode = payload?.destinationCode;
-    if (destinationCode) {
-      try {
-        const hotels = await hotelsInfoByDestinationId(destinationCode);
-        const match = hotels.find((hotel) => hotel.systemId === hotelCode);
-        const lat = toFinite(match?.latitude);
-        const lon = toFinite(match?.longitude);
-        fallbackCoordinates = lat !== null && lon !== null ? { lat, lon } : null;
-      } catch {
-        fallbackCoordinates = null;
-      }
-    }
   }
 
   if (payload && hotelCode) {

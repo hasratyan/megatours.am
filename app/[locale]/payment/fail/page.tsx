@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { getDb } from "@/lib/db";
-import { hotelInfo as getHotelInfo } from "@/lib/aoryx-client";
+import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
 import { calculateBookingTotal } from "@/lib/booking-total";
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { formatCurrencyAmount } from "@/lib/currency";
@@ -103,7 +103,7 @@ export default async function PaymentFailPage({
     if (bookingRecord && !errorKey) {
       hotelName = bookingRecord.payload?.hotelName;
       if (!hotelName && bookingRecord.payload?.hotelCode) {
-        const info = await getHotelInfo(bookingRecord.payload.hotelCode);
+        const info = await getHotelInfoFromDb(bookingRecord.payload.hotelCode);
         hotelName = info?.name;
       }
 

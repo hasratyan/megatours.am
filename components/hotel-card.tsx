@@ -1,5 +1,7 @@
+import Link from "next/link";
 import Image from "next/image";
 import type { FeaturedHotelCard } from "@/lib/featured-hotels";
+import type { Locale } from "@/lib/i18n";
 
 export type HotelCardCopy = {
   from: string;
@@ -11,6 +13,7 @@ export type HotelCardCopy = {
 type Props = {
   hotel: FeaturedHotelCard;
   copy: HotelCardCopy;
+  locale: Locale;
 };
 
 // const formatPrice = (amount: number, currency: string) =>
@@ -20,8 +23,9 @@ type Props = {
 //     maximumFractionDigits: 0,
 //   }).format(amount);
 
-export default function HotelCard({ hotel, copy }: Props) {
+export default function HotelCard({ hotel, copy, locale }: Props) {
   const hasOldPrice = typeof hotel.oldPrice === "number" && hotel.oldPrice > 0;
+  const hotelHref = `/${locale}/hotels/${encodeURIComponent(hotel.hotelCode)}`;
 
   return (
     <div className="hotel-card">
@@ -62,10 +66,10 @@ export default function HotelCard({ hotel, copy }: Props) {
               <small>{copy.perNight}</small>
             </p>
           </div>
-          <button type="button">
+          <Link href={hotelHref}>
             <span className="material-symbols-rounded">notifications_active</span>
             {copy.cta}
-          </button>
+          </Link>
         </div>
       </div>
     </div>

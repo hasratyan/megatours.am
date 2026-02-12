@@ -2697,13 +2697,23 @@ footer{
           font-size: 0.8rem;
         }
 
-        button {
+        a {
+          text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.350em;
           background: #fff;
           color: #0f172a;
           font-weight: 700;
           box-shadow: 0 20px 50px -20px rgba(255, 255, 255, 0.4);
           outline-offset: 0;
           outline: 0px solid #fff;
+          padding: .7em .9em;
+          font-size: 0.9rem;
+          border-radius: 1.5em;
+          line-height: normal;
+          transition: all .25s;
+          
           &:hover {
             transform: translateY(-2px);
             outline-width: 1px;

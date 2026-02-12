@@ -73,14 +73,14 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
             {firstRow.length > 0 && (
               <Marquee reverse pauseOnHover={true}>
                 {firstRow.map((hotel) => (
-                  <HotelCard key={hotel.hotelCode} hotel={hotel} copy={t.card} />
+                  <HotelCard key={hotel.hotelCode} hotel={hotel} copy={t.card} locale={locale} />
                 ))}
               </Marquee>
             )}
             {secondRow.length > 0 && (
               <Marquee pauseOnHover={true}>
                 {secondRow.map((hotel) => (
-                  <HotelCard key={hotel.hotelCode} hotel={hotel} copy={t.card} />
+                  <HotelCard key={hotel.hotelCode} hotel={hotel} copy={t.card} locale={locale} />
                 ))}
               </Marquee>
             )}

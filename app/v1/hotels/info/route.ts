@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AoryxServiceError, hotelInfo } from "@/lib/aoryx-client";
 import { authenticateB2bRequest, withB2bGatewayHeaders } from "@/lib/b2b-gateway";
+import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = await hotelInfo(hotelCode);
+    const data = await getHotelInfoFromDb(hotelCode);
     return withB2bGatewayHeaders(
       NextResponse.json({
         requestId: auth.context.requestId,
@@ -32,21 +32,7 @@ export async function POST(request: NextRequest) {
       }),
       auth.context
     );
-  } catch (error) {
-    if (error instanceof AoryxServiceError) {
-      return withB2bGatewayHeaders(
-        NextResponse.json(
-          {
-            error: error.message,
-            code: error.code ?? null,
-            requestId: auth.context.requestId,
-          },
-          { status: 500 }
-        ),
-        auth.context
-      );
-    }
-
+  } catch {
     return withB2bGatewayHeaders(
       NextResponse.json(
         {
@@ -59,4 +45,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

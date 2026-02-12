@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hotelInfo, AoryxServiceError } from "@/lib/aoryx-client";
+import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
 
 export const runtime = "nodejs";
 
@@ -15,18 +15,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "hotelCode is required" }, { status: 400 });
     }
 
-    const info = await hotelInfo(hotelCode);
+    const info = await getHotelInfoFromDb(hotelCode);
 
     return NextResponse.json(info);
   } catch (error) {
     console.error("Hotel info error:", error);
-
-    if (error instanceof AoryxServiceError) {
-      return NextResponse.json(
-        { error: error.message, code: error.code },
-        { status: 500 }
-      );
-    }
 
     return NextResponse.json(
       { error: "Failed to load hotel information" },
