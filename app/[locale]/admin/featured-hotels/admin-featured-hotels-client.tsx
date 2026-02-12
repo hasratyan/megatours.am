@@ -82,8 +82,9 @@ export default function AdminFeaturedHotelsClient({
   useEffect(() => {
     let active = true;
     const trimmedQuery = searchQuery.trim();
+    const isAllDestinationsMode = trimmedQuery.length === 0;
 
-    if (trimmedQuery.length < 2) {
+    if (!isAllDestinationsMode && trimmedQuery.length < 2) {
       setSearchResults([]);
       setSearchLoading(false);
       return () => {
@@ -94,8 +95,11 @@ export default function AdminFeaturedHotelsClient({
     const run = async () => {
       setSearchLoading(true);
       try {
+        const queryParam = !isAllDestinationsMode
+          ? `&query=${encodeURIComponent(trimmedQuery)}`
+          : "";
         const response = await getJson<{ hotels: AoryxHotelOption[] }>(
-          `/api/admin/aoryx-hotels?query=${encodeURIComponent(trimmedQuery)}&limit=100`
+          `/api/admin/aoryx-hotels?limit=${isAllDestinationsMode ? 300 : 100}${queryParam}`
         );
         if (!active) return;
         setSearchResults(response.hotels ?? []);
@@ -108,7 +112,7 @@ export default function AdminFeaturedHotelsClient({
         setSearchLoading(false);
       }
     };
-    const handler = setTimeout(run, 250);
+    const handler = setTimeout(run, isAllDestinationsMode ? 0 : 250);
     return () => {
       active = false;
       clearTimeout(handler);
