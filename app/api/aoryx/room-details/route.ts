@@ -3,6 +3,8 @@ import { roomDetails, AoryxServiceError, AoryxClientError } from "@/lib/aoryx-cl
 import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env";
 import type { AoryxSearchParams, AoryxRoomSearch } from "@/types/aoryx";
 import { obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
+import { getAoryxHotelPlatformFee } from "@/lib/pricing";
+import { applyMarkup } from "@/lib/pricing-utils";
 
 export const runtime = "nodejs";
 
@@ -71,13 +73,27 @@ export async function POST(request: NextRequest) {
     };
 
     const result = await roomDetails(params);
+    const hotelMarkup = await getAoryxHotelPlatformFee().catch((error) => {
+      console.error("[Pricing] Failed to load hotel platform fee", error);
+      return null;
+    });
     const obfuscatedRooms = obfuscateRoomOptions(result.rooms, {
       sessionId: result.sessionId,
       hotelCode,
     });
+    const roomsWithDisplayPrice =
+      typeof hotelMarkup === "number"
+        ? obfuscatedRooms.map((room) => ({
+            ...room,
+            displayTotalPrice:
+              typeof room.totalPrice === "number" && Number.isFinite(room.totalPrice)
+                ? applyMarkup(room.totalPrice, hotelMarkup) ?? room.totalPrice
+                : room.totalPrice,
+          }))
+        : obfuscatedRooms;
     const response = NextResponse.json({
       currency: result.currency ?? null,
-      rooms: obfuscatedRooms,
+      rooms: roomsWithDisplayPrice,
     });
 
     return response;

@@ -166,14 +166,54 @@ const buildAddress = (
   const address = {
     line1:
       (rawAddress
-        ? readString(rawAddress, ["Line1", "line1", "Address1", "address1", "Add1", "add1"])
+        ? readString(rawAddress, [
+            "Line1",
+            "line1",
+            "Address1",
+            "address1",
+            "Add1",
+            "add1",
+            "AddressLine1",
+            "addressLine1",
+            "address_line1",
+          ])
         : null) ??
-      readString(doc, ["Address1", "address1", "Add1", "add1", "line1", "Line1"]),
+      readString(doc, [
+        "Address1",
+        "address1",
+        "Add1",
+        "add1",
+        "line1",
+        "Line1",
+        "AddressLine1",
+        "addressLine1",
+        "address_line1",
+      ]),
     line2:
       (rawAddress
-        ? readString(rawAddress, ["Line2", "line2", "Address2", "address2", "Add2", "add2"])
+        ? readString(rawAddress, [
+            "Line2",
+            "line2",
+            "Address2",
+            "address2",
+            "Add2",
+            "add2",
+            "AddressLine2",
+            "addressLine2",
+            "address_line2",
+          ])
         : null) ??
-      readString(doc, ["Address2", "address2", "Add2", "add2", "line2", "Line2"]),
+      readString(doc, [
+        "Address2",
+        "address2",
+        "Add2",
+        "add2",
+        "line2",
+        "Line2",
+        "AddressLine2",
+        "addressLine2",
+        "address_line2",
+      ]),
     countryCode:
       (rawAddress ? readString(rawAddress, ["CountryCode", "countryCode"]) : null) ??
       readString(doc, ["CountryCode", "countryCode"]),
@@ -288,6 +328,10 @@ export async function getHotelInfoFromDb(hotelCode: string): Promise<AoryxHotelI
       "cityCode",
     ]) ??
     (rawAddress ? readString(rawAddress, ["CityCode", "cityCode", "CityId", "cityId", "CityID"]) : null);
+  const destinationName =
+    readString(doc, ["DestinationName", "destinationName"]) ??
+    (rawAddress ? readString(rawAddress, ["CityName", "cityName", "City", "city"]) : null) ??
+    readString(doc, ["CityName", "cityName", "City", "city"]);
 
   const masterHotelAmenities = normalizeAmenityList(
     doc.MasterHotelAmenities ??
@@ -300,6 +344,7 @@ export async function getHotelInfoFromDb(hotelCode: string): Promise<AoryxHotelI
 
   return {
     destinationId: normalizeDestinationId(rawDestinationId),
+    destinationName,
     systemId: readString(doc, ["SystemId", "systemId", "HotelCode", "hotelCode", "Code", "code", "Id", "id", "_id"]),
     name: readString(doc, ["Name", "name", "HotelName", "hotelName"]),
     rating: readNumber(doc, ["Rating", "rating", "StarRating", "starRating"]),
