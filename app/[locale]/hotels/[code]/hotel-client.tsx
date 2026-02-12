@@ -8,6 +8,7 @@ import SearchForm from "@/components/search-form";
 import Loader from "@/components/loader";
 import { ApiError, postJson } from "@/lib/api-helpers";
 import { parseSearchParams } from "@/lib/search-query";
+import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount, type AmdRates } from "@/lib/currency";
@@ -893,6 +894,9 @@ export default function HotelClient({
   const [requiresResetConfirmation, setRequiresResetConfirmation] = useState(false);
   const [resetConfirmed, setResetConfirmed] = useState(false);
   const [confirmPriceChange, setConfirmPriceChange] = useState(false);
+  const [prebookNonRefundableByGroupKey, setPrebookNonRefundableByGroupKey] = useState<
+    Record<string, boolean | null>
+  >({});
   const [pendingHotelSelection, setPendingHotelSelection] =
     useState<PackageBuilderHotelSelection | null>(null);
   const [prebookingKey, setPrebookingKey] = useState<string | null>(null);
@@ -976,6 +980,7 @@ export default function HotelClient({
     setBookingError(null);
     setBookingResult(null);
     setConfirmPriceChange(false);
+    setPrebookNonRefundableByGroupKey({});
     setPendingHotelSelection(null);
     setPrebookingKey(null);
     setShowTransfers(false);
@@ -1446,7 +1451,7 @@ export default function HotelClient({
       })
       .catch((error) => {
         if (!active) return;
-        const message = error instanceof Error ? error.message : t.hotel.addons.transfers.loadFailed;
+        const message = resolveSafeErrorFromUnknown(error, t.hotel.addons.transfers.loadFailed);
         setTransferError(message);
         setTransferLoaded(true);
       })
@@ -1489,7 +1494,7 @@ export default function HotelClient({
       })
       .catch((error) => {
         if (!active) return;
-        const message = error instanceof Error ? error.message : t.hotel.addons.excursions.loadFailed;
+        const message = resolveSafeErrorFromUnknown(error, t.hotel.addons.excursions.loadFailed);
         setExcursionError(message);
         setExcursionLoaded(true);
       })
@@ -1633,6 +1638,7 @@ export default function HotelClient({
       setRoomsLoading(true);
       setRoomsError(null);
       setRoomOptions([]);
+      setPrebookNonRefundableByGroupKey({});
       const resolvedHotelCode = payload.hotelCode ?? hotelCode ?? undefined;
       if (resolvedHotelCode) {
         params.set("hotelCode", resolvedHotelCode);
@@ -2029,6 +2035,10 @@ export default function HotelClient({
         );
         const resolvedNonRefundable =
           prebookNonRefundable !== null ? prebookNonRefundable : selectionNonRefundable;
+        setPrebookNonRefundableByGroupKey((current) => ({
+          ...current,
+          [group.key]: resolvedNonRefundable,
+        }));
         const nextHotelSelection: PackageBuilderHotelSelection = {
           ...nextHotel,
           nonRefundable: resolvedNonRefundable,
@@ -2050,7 +2060,7 @@ export default function HotelClient({
         setBookingGuests(guests);
         setBookingOpen(true);
       } catch (err) {
-        const message = err instanceof Error ? err.message : t.hotel.errors.prebookFailed;
+        const message = resolveSafeErrorFromUnknown(err, t.hotel.errors.prebookFailed);
         setBookingError(message);
       } finally {
         setBookingPreparing(false);
@@ -2335,7 +2345,7 @@ export default function HotelClient({
         setBookingLoading(false);
         return;
       }
-      const message = err instanceof Error ? err.message : t.hotel.errors.startPaymentFailed;
+      const message = resolveSafeErrorFromUnknown(err, t.hotel.errors.startPaymentFailed);
       setBookingError(message);
       setBookingLoading(false);
     }
@@ -2583,9 +2593,12 @@ export default function HotelClient({
                             group.option.cancellationPolicy,
                             t.hotel.roomOptions
                           );
-                          const groupNonRefundable = summarizeNonRefundable(
-                            group.items.map((item) => resolveRoomNonRefundable(item))
-                          );
+                          const groupNonRefundable =
+                            group.key in prebookNonRefundableByGroupKey
+                              ? prebookNonRefundableByGroupKey[group.key]
+                              : summarizeNonRefundable(
+                                  group.items.map((item) => resolveRoomNonRefundable(item))
+                                );
                           const rateKeys = group.items
                             .map((item) => item.rateKey)
                             .filter((key): key is string => typeof key === "string" && key.length > 0);

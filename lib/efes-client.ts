@@ -8,6 +8,7 @@ import {
   isEfesConfigured,
 } from "@/lib/env";
 import { toCountryAlpha3 } from "@/lib/country-alpha3";
+import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import type { AoryxBookingPayload, BookingInsuranceSelection, BookingInsuranceTraveler } from "@/types/aoryx";
 import type { EfesQuoteRequest, EfesQuoteResult, EfesPolicyRequest } from "@/types/efes";
 
@@ -415,7 +416,11 @@ const getEfesToken = async () => {
         typeof (payload as { error?: unknown }).error === "string"
           ? String((payload as { error?: unknown }).error)
           : `EFES auth error: ${response.status} ${response.statusText}`;
-      throw new EfesServiceError(message, response.status, payload);
+      throw new EfesServiceError(
+        resolveSafeErrorMessage(message, "EFES auth failed"),
+        response.status,
+        payload
+      );
     }
 
     const token = extractToken(payload);
@@ -432,9 +437,11 @@ const getEfesToken = async () => {
     clearTimeout(timeoutId);
     if (error instanceof EfesServiceError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
-      throw new EfesClientError(`EFES auth request timed out after ${EFES_TIMEOUT_MS}ms`);
+      throw new EfesClientError("EFES auth failed");
     }
-    throw new EfesClientError(error instanceof Error ? error.message : "EFES auth failed");
+    throw new EfesClientError(
+      resolveSafeErrorMessage(error instanceof Error ? error.message : null, "EFES auth failed")
+    );
   }
 };
 
@@ -469,16 +476,22 @@ const efesRequest = async <T>(
         typeof (payload as { error?: unknown }).error === "string"
           ? String((payload as { error?: unknown }).error)
           : `EFES API error: ${response.status} ${response.statusText}`;
-      throw new EfesServiceError(message, response.status, payload);
+      throw new EfesServiceError(
+        resolveSafeErrorMessage(message, "EFES request failed"),
+        response.status,
+        payload
+      );
     }
     return payload as T;
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof EfesServiceError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
-      throw new EfesClientError(`EFES request timed out after ${EFES_TIMEOUT_MS}ms`);
+      throw new EfesClientError("EFES request failed");
     }
-    throw new EfesClientError(error instanceof Error ? error.message : "EFES request failed");
+    throw new EfesClientError(
+      resolveSafeErrorMessage(error instanceof Error ? error.message : null, "EFES request failed")
+    );
   }
 };
 

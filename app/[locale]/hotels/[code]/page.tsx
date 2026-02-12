@@ -7,6 +7,7 @@ import { obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { getAmdRates, getAoryxHotelPlatformFee, type AmdRates } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
+import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { fetchExcursions, fetchTransferRates } from "@/lib/aoryx-addons";
 import type {
@@ -141,9 +142,9 @@ export default async function HotelPage({ params, searchParams }: PageProps) {
         hotelError =
           error.code === "MISSING_SESSION_ID"
             ? t.search.errors.missingSession
-            : error.message;
+            : resolveSafeErrorMessage(error.message, t.hotel.errors.loadHotelFailed);
       } else if (error instanceof AoryxClientError) {
-        hotelError = error.message;
+        hotelError = resolveSafeErrorMessage(error.message, t.hotel.errors.loadHotelFailed);
       } else {
         hotelError = t.hotel.errors.loadHotelFailed;
       }
@@ -171,9 +172,9 @@ export default async function HotelPage({ params, searchParams }: PageProps) {
         roomsError =
           error.code === "MISSING_SESSION_ID"
             ? t.search.errors.missingSession
-            : error.message;
+            : resolveSafeErrorMessage(error.message, t.hotel.errors.loadRoomOptionsFailed);
       } else if (error instanceof AoryxClientError) {
-        roomsError = error.message;
+        roomsError = resolveSafeErrorMessage(error.message, t.hotel.errors.loadRoomOptionsFailed);
       } else {
         roomsError = t.hotel.errors.loadRoomOptionsFailed;
       }

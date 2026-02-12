@@ -13,6 +13,7 @@ import { enGB, hy, ru } from "date-fns/locale";
 import { useLanguage } from "@/components/language-provider";
 import StarBorder from '@/components/StarBorder'
 import { postJson } from "@/lib/api-helpers";
+import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { AoryxSearchParams, HotelInfo } from "@/types/aoryx";
 import type { Locale as AppLocale } from "@/lib/i18n";
 import type { HotelMapPickerProps } from "./hotel-map-picker";
@@ -796,7 +797,7 @@ export default function SearchForm({
           router.push(query ? `${resultsPath}?${query}` : resultsPath);
         }
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : copy.errors.submit;
+        const message = resolveSafeErrorFromUnknown(err, copy.errors.submit);
         setSearchError(message);
         setIsSubmitting(false);
       }

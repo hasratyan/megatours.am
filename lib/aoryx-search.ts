@@ -2,6 +2,7 @@ import { search, AoryxClientError, AoryxServiceError } from "@/lib/aoryx-client"
 import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env";
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
+import { isTechnicalErrorMessage } from "@/lib/error-utils";
 import type { AoryxSearchParams, AoryxSearchResult } from "@/types/aoryx";
 
 export type SafeSearchResult = Omit<AoryxSearchResult, "sessionId">;
@@ -31,15 +32,25 @@ export async function runAoryxSearch(payload: AoryxSearchParams): Promise<SafeSe
 
 export type SearchErrorInfo = { message: string; code?: string };
 
+const toSearchMessage = (value: unknown): string => {
+  if (typeof value !== "string") return "";
+  const message = value.trim();
+  if (!message || isTechnicalErrorMessage(message)) return "";
+  return message;
+};
+
 export function normalizeSearchError(error: unknown): SearchErrorInfo {
   if (error instanceof AoryxServiceError) {
-    return { message: error.message, code: error.code };
+    return {
+      message: toSearchMessage(error.message),
+      code: error.code,
+    };
   }
   if (error instanceof AoryxClientError) {
-    return { message: error.message };
+    return { message: toSearchMessage(error.message) };
   }
   if (error instanceof Error) {
-    return { message: error.message };
+    return { message: toSearchMessage(error.message) };
   }
-  return { message: "Failed to perform search" };
+  return { message: "" };
 }

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import type { Locale } from "@/lib/i18n";
 import { resolveBookingStatusKey, type BookingStatusKey } from "@/lib/booking-status";
-import { ApiError, postJson } from "@/lib/api-helpers";
+import { postJson } from "@/lib/api-helpers";
+import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
 type AdminBookingRecord = {
@@ -323,12 +324,7 @@ export default function AdminBookingsClient({
         [bookingId]: { ok: true, message },
       }));
     } catch (error) {
-      const message =
-        error instanceof ApiError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : t.admin.actions.cancelAndRefundFailed;
+      const message = resolveSafeErrorFromUnknown(error, t.admin.actions.cancelAndRefundFailed);
       setCancelFeedback((prev) => ({
         ...prev,
         [bookingId]: { ok: false, message },

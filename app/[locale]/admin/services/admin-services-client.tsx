@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { postJson } from "@/lib/api-helpers";
+import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { useTranslations } from "@/components/language-provider";
 import type { PackageBuilderService, ServiceFlags } from "@/lib/package-builder-state";
 
@@ -45,7 +46,7 @@ export default function AdminServicesClient({
       setFlags(response.flags);
       setSaved(true);
     } catch (err) {
-      const message = err instanceof Error ? err.message : t.admin.services.errors.saveFailed;
+      const message = resolveSafeErrorFromUnknown(err, t.admin.services.errors.saveFailed);
       setError(message);
     } finally {
       setSaving(false);

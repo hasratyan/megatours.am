@@ -11,6 +11,7 @@ import Loader from "@/components/loader";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
+import { resolveSafeErrorFromUnknown, resolveSafeErrorMessage } from "@/lib/error-utils";
 import { useAmdRates } from "@/lib/use-amd-rates";
 import { runResultsSearch } from "./actions";
 
@@ -141,12 +142,12 @@ export default function ResultsClient({
         const message =
           response.code === "MISSING_SESSION_ID"
             ? t.search.errors.missingSession
-            : response.error || t.search.errors.submit;
+            : resolveSafeErrorMessage(response.error, t.search.errors.submit);
         setErrorState(message);
       })
       .catch((error) => {
         if (!active) return;
-        const message = error instanceof Error ? error.message : t.search.errors.submit;
+        const message = resolveSafeErrorFromUnknown(error, t.search.errors.submit);
         setErrorState(message);
       })
       .finally(() => {

@@ -8,6 +8,7 @@ import {
   AORYX_TASSPRO_CUSTOMER_CODE,
   AORYX_TASSPRO_REGION_ID,
 } from "./env";
+import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import type {
   AoryxSearchParams,
   AoryxSearchRequest,
@@ -180,7 +181,10 @@ async function coreRequest<TRequest, TResponse>(
 
     if (!response.ok) {
       throw new AoryxClientError(
-        `Aoryx API error: ${response.status} ${response.statusText}`,
+        resolveSafeErrorMessage(
+          `Aoryx API error: ${response.status} ${response.statusText}`,
+          "Failed to communicate with hotel service"
+        ),
         endpoint,
         response.status
       );
@@ -197,11 +201,14 @@ async function coreRequest<TRequest, TResponse>(
     }
 
     if (error instanceof Error && error.name === "AbortError") {
-      throw new AoryxClientError(`Request timeout after ${timeoutMs}ms`, endpoint);
+      throw new AoryxClientError("Failed to communicate with hotel service", endpoint);
     }
 
     throw new AoryxClientError(
-      error instanceof Error ? error.message : "Unknown error",
+      resolveSafeErrorMessage(
+        error instanceof Error ? error.message : null,
+        "Failed to communicate with hotel service"
+      ),
       endpoint
     );
   }
