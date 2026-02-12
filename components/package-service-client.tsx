@@ -13,7 +13,7 @@ import SearchForm from "@/components/search-form";
 import { useLanguage } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
-import { mapEfesErrorMessage } from "@/lib/efes-errors";
+import { mapEfesErrorMessage, resolveEfesErrorKind } from "@/lib/efes-errors";
 import { postJson } from "@/lib/api-helpers";
 import StarBorder from "@/components/StarBorder";
 import type {
@@ -895,6 +895,8 @@ export default function PackageServiceClient({ serviceKey }: Props) {
           t.packageBuilder.insurance.errors,
           t.packageBuilder.checkout.errors.insuranceQuoteFailed
         );
+        const errorKind = resolveEfesErrorKind(message);
+        const shouldUnselectInsurance = errorKind !== "ageLimit";
         setInsuranceQuoteError(mappedMessage);
         updatePackageBuilderState((prev) => {
           if (!prev.insurance?.selected) return prev;
@@ -902,6 +904,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
             ...prev,
             insurance: {
               ...prev.insurance,
+              ...(shouldUnselectInsurance ? { selected: false } : {}),
               price: null,
               currency: null,
               quoteSum: null,

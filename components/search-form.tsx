@@ -402,6 +402,89 @@ export default function SearchForm({
     }
   }, [selectedLocation]);
 
+  const mapHotelsToOptions = useCallback(
+    (hotelsData: HotelInfo[], fallbackParentDestinationId: string) =>
+      hotelsData
+        .map<LocationOption | null>((hotel) => {
+          const value = hotel.systemId ?? "";
+          if (!value) return null;
+          return {
+            value,
+            label: hotel.name ?? hotel.systemId ?? copy.unknownHotel,
+            lat: typeof hotel.latitude === "number" ? hotel.latitude : undefined,
+            lng: typeof hotel.longitude === "number" ? hotel.longitude : undefined,
+            rating: typeof hotel.rating === "number" ? hotel.rating : undefined,
+            imageUrl: hotel.imageUrl ?? undefined,
+            type: "hotel",
+            parentDestinationId: hotel.destinationId ?? fallbackParentDestinationId,
+          };
+        })
+        .filter((option): option is LocationOption => Boolean(option))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [copy.unknownHotel]
+  );
+
+  const fetchHotelsForDestination = useCallback(
+    async (destination: LocationOption) => {
+      const destinationId = destination.rawId ?? destination.value;
+      const response = await postJson<{ hotels: HotelInfo[] }>("/api/aoryx/hotels-by-destination", {
+        destinationId,
+        parentDestinationId: destination.value,
+      });
+      const fallbackParentDestinationId = destination.rawId ?? destination.value;
+      return mapHotelsToOptions(response.hotels ?? [], fallbackParentDestinationId);
+    },
+    [mapHotelsToOptions]
+  );
+
+  const loadHotelsForAllDestinations = useCallback(
+    async (destinationOptions: LocationOption[]) => {
+      if (hideLocationFields) return;
+      if (destinationOptions.length === 0) {
+        setHotels([]);
+        return;
+      }
+
+      setHotelsLoading(true);
+      try {
+        const responses = await Promise.all(
+          destinationOptions.map(async (destination) => ({
+            destination,
+            hotels: await fetchHotelsForDestination(destination),
+          }))
+        );
+        const byHotelCode = new Map<string, LocationOption>();
+        responses.forEach(({ hotels: destinationHotels }) => {
+          destinationHotels.forEach((hotel) => {
+            const existing = byHotelCode.get(hotel.value);
+            if (!existing) {
+              byHotelCode.set(hotel.value, hotel);
+              return;
+            }
+            byHotelCode.set(hotel.value, {
+              ...existing,
+              parentDestinationId: existing.parentDestinationId ?? hotel.parentDestinationId,
+              lat: existing.lat ?? hotel.lat,
+              lng: existing.lng ?? hotel.lng,
+              rating: existing.rating ?? hotel.rating,
+              imageUrl: existing.imageUrl ?? hotel.imageUrl,
+            });
+          });
+        });
+        const merged = Array.from(byHotelCode.values()).sort((a, b) =>
+          a.label.localeCompare(b.label)
+        );
+        setHotels(merged);
+      } catch (error) {
+        console.error("Failed to load hotels for all destinations:", error);
+        setHotels([]);
+      } finally {
+        setHotelsLoading(false);
+      }
+    },
+    [fetchHotelsForDestination, hideLocationFields]
+  );
+
   useEffect(() => {
     if (!presetDestinationOption && !presetHotelOption) return;
     setSelectedLocation((current) => {
@@ -468,7 +551,8 @@ export default function SearchForm({
       });
   }, [hideLocationFields, copy.unknownHotel]);
 
-  // Set default destination (referrer > Dubai) once destinations are loaded
+  // Initialize location once destinations are loaded.
+  // If there's no preset/referrer destination, load hotels across all destinations.
   useEffect(() => {
     if (hideLocationFields) return;
     if (destinationsInitialized) return;
@@ -489,18 +573,39 @@ export default function SearchForm({
         }
       : null;
 
-    const preferred = referrerDestination ??
-      destinations.find((d) => d.label.toLowerCase() === "dubai") ??
-      destinations.find((d) => d.value === "160") ??
-      destinations[0];
-
-    if (preferred) {
+    if (referrerDestination) {
       queueMicrotask(() => {
-        setSelectedLocation(preferred);
+        setSelectedLocation(referrerDestination);
         setDestinationsInitialized(true);
+        setHotelsLoading(true);
+        fetchHotelsForDestination(referrerDestination)
+          .then((options) => {
+            setHotels(options);
+          })
+          .catch((error: unknown) => {
+            console.error("Failed to load hotels for referrer destination:", error);
+            setHotels([]);
+          })
+          .finally(() => {
+            setHotelsLoading(false);
+          });
       });
+      return;
     }
-  }, [destinationsInitialized, destinations, hideLocationFields, referrerChecked, referrerPreset]);
+
+    queueMicrotask(() => {
+      setDestinationsInitialized(true);
+      void loadHotelsForAllDestinations(destinations);
+    });
+  }, [
+    destinationsInitialized,
+    destinations,
+    hideLocationFields,
+    fetchHotelsForDestination,
+    loadHotelsForAllDestinations,
+    referrerChecked,
+    referrerPreset,
+  ]);
 
   // Load hotels for preset destination on mount (even if a hotel is pre-selected)
   useEffect(() => {
@@ -511,24 +616,11 @@ export default function SearchForm({
     setHotelsLoading(true);
     const destinationId = presetDestinationOption.rawId ?? presetDestinationOption.value;
 
-    postJson<{ hotels: HotelInfo[] }>("/api/aoryx/hotels-by-destination", {
-      destinationId,
-      parentDestinationId: presetDestinationOption.value,
+    fetchHotelsForDestination({
+      ...presetDestinationOption,
+      rawId: destinationId,
     })
-      .then((response) => {
-        const options = (response.hotels ?? [])
-          .map<LocationOption>((hotel) => ({
-            value: hotel.systemId ?? "",
-            label: hotel.name ?? hotel.systemId ?? copy.unknownHotel,
-            lat: typeof hotel.latitude === "number" ? hotel.latitude : undefined,
-            lng: typeof hotel.longitude === "number" ? hotel.longitude : undefined,
-            rating: typeof hotel.rating === "number" ? hotel.rating : undefined,
-            imageUrl: hotel.imageUrl ?? undefined,
-            type: "hotel",
-            parentDestinationId: presetDestinationOption.rawId ?? presetDestinationOption.value,
-          }))
-          .filter((option) => option.value.length > 0)
-          .sort((a, b) => a.label.localeCompare(b.label));
+      .then((options) => {
 
         console.log("Hotels loaded for preset destination", { count: options.length, first: options[0] });
         setHotels(options);
@@ -562,35 +654,18 @@ export default function SearchForm({
     setSelectedLocation(destination);
 
     if (!destination) {
-      console.warn("loadHotelsForDestination: no destination provided");
-      setHotels([]);
+      if (destinations.length > 0) {
+        void loadHotelsForAllDestinations(destinations);
+      } else {
+        setHotels([]);
+      }
       return;
     }
 
     setHotelsLoading(true);
-    const destinationId = destination.rawId ?? destination.value;
-
-    postJson<{ hotels: HotelInfo[] }>("/api/aoryx/hotels-by-destination", {
-      destinationId,
-      parentDestinationId: destination.value,
-    })
-      .then((response) => {
-        const options = (response.hotels ?? [])
-          .map<LocationOption>((hotel) => ({
-            value: hotel.systemId ?? "",
-            label: hotel.name ?? hotel.systemId ?? copy.unknownHotel,
-            lat: typeof hotel.latitude === "number" ? hotel.latitude : undefined,
-            lng: typeof hotel.longitude === "number" ? hotel.longitude : undefined,
-            rating: typeof hotel.rating === "number" ? hotel.rating : undefined,
-            imageUrl: hotel.imageUrl ?? undefined,
-            type: "hotel",
-            parentDestinationId: destination.rawId ?? destination.value,
-          }))
-          .filter((option) => option.value.length > 0)
-          .sort((a, b) => a.label.localeCompare(b.label));
-
+    fetchHotelsForDestination(destination)
+      .then((options) => {
         console.log("Hotels loaded", { count: options.length, first: options[0] });
-
         setHotels(options);
       })
       .catch((error: unknown) => {
@@ -600,48 +675,7 @@ export default function SearchForm({
       .finally(() => {
         setHotelsLoading(false);
       });
-  }, [hideLocationFields, copy.unknownHotel]);
-
-  // Load hotels when destination is selected (after destinations are initialized)
-    useEffect(() => {
-    if (hideLocationFields) return;
-    if (!destinationsInitialized) return;
-    if (!selectedLocation || selectedLocation.type !== "destination") return;
-    
-    // Load hotels for the selected destination
-    queueMicrotask(() => setHotelsLoading(true));
-    const destinationId = selectedLocation.rawId ?? selectedLocation.value;
-
-    postJson<{ hotels: HotelInfo[] }>("/api/aoryx/hotels-by-destination", {
-      destinationId,
-      parentDestinationId: selectedLocation.value,
-    })
-      .then((response) => {
-        const options = (response.hotels ?? [])
-          .map<LocationOption>((hotel) => ({
-            value: hotel.systemId ?? "",
-            label: hotel.name ?? hotel.systemId ?? copy.unknownHotel,
-            lat: typeof hotel.latitude === "number" ? hotel.latitude : undefined,
-            lng: typeof hotel.longitude === "number" ? hotel.longitude : undefined,
-            rating: typeof hotel.rating === "number" ? hotel.rating : undefined,
-            imageUrl: hotel.imageUrl ?? undefined,
-            type: "hotel",
-            parentDestinationId: selectedLocation.rawId ?? selectedLocation.value,
-          }))
-          .filter((option) => option.value.length > 0)
-          .sort((a, b) => a.label.localeCompare(b.label));
-
-        console.log("Hotels auto-loaded", { count: options.length, first: options[0] });
-        setHotels(options);
-      })
-      .catch((error: unknown) => {
-        console.error("Failed to auto-load hotels:", error);
-        setHotels([]);
-      })
-      .finally(() => {
-        setHotelsLoading(false);
-      });
-  }, [destinationsInitialized, selectedLocation, hideLocationFields, copy.unknownHotel]);
+  }, [destinations, fetchHotelsForDestination, hideLocationFields, loadHotelsForAllDestinations]);
 
   // Guest handlers
 
@@ -907,10 +941,15 @@ export default function SearchForm({
             options={combinedOptions}
             value={selectedLocation}
             onChange={(option: SingleValue<LocationOption>) => {
-              setSelectedLocation(option);
               if (option?.type === "destination") {
                 loadHotelsForDestination(option);
+                return;
               }
+              if (!option) {
+                loadHotelsForDestination(null);
+                return;
+              }
+              setSelectedLocation(option);
             }}
             placeholder={destinationsLoading ? copy.loadingDestinations : copy.wherePlaceholder}
             styles={selectStyles}
