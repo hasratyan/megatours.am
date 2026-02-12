@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin";
 import { getDb } from "@/lib/db";
 import { getFeaturedHotelAdminItems } from "@/lib/featured-hotels";
-import type { Locale } from "@/lib/i18n";
+import { locales, type Locale } from "@/lib/i18n";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,12 @@ const hasMissingTranslations = (translations: Record<Locale, { badge: string; av
   (Object.values(translations) as Array<{ badge: string; availability: string }>).some(
     (entry) => entry.badge.length === 0 || entry.availability.length === 0
   );
+
+const revalidateFeaturedHotelPages = () => {
+  for (const locale of locales) {
+    revalidatePath(`/${locale}`);
+  }
+};
 
 export async function GET() {
   try {
@@ -120,6 +127,7 @@ export async function POST(request: NextRequest) {
       },
       { upsert: true }
     );
+    revalidateFeaturedHotelPages();
 
     const featuredHotels = await getFeaturedHotelAdminItems();
     return NextResponse.json({ featuredHotels });
@@ -145,6 +153,7 @@ export async function DELETE(request: NextRequest) {
 
     const db = await getDb();
     await db.collection("home_featured_hotels").deleteOne({ hotelCode });
+    revalidateFeaturedHotelPages();
 
     const featuredHotels = await getFeaturedHotelAdminItems();
     return NextResponse.json({ featuredHotels });
