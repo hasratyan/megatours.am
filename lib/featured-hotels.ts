@@ -87,6 +87,14 @@ const toNumberValue = (value: unknown): number | null => {
   return null;
 };
 
+const normalizeSearchText = (value: string): string =>
+  value
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .toLowerCase()
+    .trim();
+
 const readString = (record: AoryxHotelDoc, keys: string[]): string | null => {
   for (const key of keys) {
     if (Object.prototype.hasOwnProperty.call(record, key)) {
@@ -164,35 +172,37 @@ const buildTranslationFallback = (): Record<Locale, FeaturedHotelTranslation> =>
 export async function searchAoryxHotels(query: string, limit = 40): Promise<AoryxHotelOption[]> {
   const db = await getB2bDb();
   const docs = await db.collection<AoryxHotelDoc>("aoryx_hotels").find({}).toArray();
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = normalizeSearchText(query.trim());
+  const queryTokens = normalizedQuery.split(/\s+/).filter((token) => token.length > 0);
   const safeLimit = Math.max(limit, 1);
 
   const options = docs
     .map((doc) => normalizeAoryxHotelDoc(doc as AoryxHotelDoc))
     .filter((item): item is NormalizedAoryxHotel => Boolean(item));
 
-  const filtered = normalizedQuery.length > 0
+  const filtered = queryTokens.length > 0
     ? options.filter((item) => {
-        const searchTarget = [
-          item.name,
-          item.destinationName,
-          item.hotelCode,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        return searchTarget.includes(normalizedQuery);
+        const searchTarget = normalizeSearchText(
+          [
+            item.name,
+            item.destinationName,
+            item.hotelCode,
+          ]
+            .filter(Boolean)
+            .join(" ")
+        );
+        return queryTokens.every((token) => searchTarget.includes(token));
       })
     : options;
 
-  if (normalizedQuery.length > 0) {
+  if (queryTokens.length > 0) {
     filtered.sort((a, b) => {
-      const aCode = a.hotelCode.toLowerCase();
-      const bCode = b.hotelCode.toLowerCase();
-      const aName = (a.name ?? "").toLowerCase();
-      const bName = (b.name ?? "").toLowerCase();
-      const aDestination = (a.destinationName ?? "").toLowerCase();
-      const bDestination = (b.destinationName ?? "").toLowerCase();
+      const aCode = normalizeSearchText(a.hotelCode);
+      const bCode = normalizeSearchText(b.hotelCode);
+      const aName = normalizeSearchText(a.name ?? "");
+      const bName = normalizeSearchText(b.name ?? "");
+      const aDestination = normalizeSearchText(a.destinationName ?? "");
+      const bDestination = normalizeSearchText(b.destinationName ?? "");
 
       const scoreItem = (
         code: string,
