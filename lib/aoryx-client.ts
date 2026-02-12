@@ -1194,6 +1194,10 @@ export async function hotelInfo(hotelCode: string): Promise<AoryxHotelInfoResult
 
   return {
     destinationId,
+    destinationName:
+      toStringValue((info as Record<string, unknown>).DestinationName) ??
+      toStringValue((info as Record<string, unknown>).destinationName) ??
+      toStringValue(info.Address?.CityName),
     systemId: toStringValue(info.SystemId),
     name: toStringValue(info.Name),
     rating: toNumber(info.Rating),

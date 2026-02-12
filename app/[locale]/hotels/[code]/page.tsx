@@ -1,50 +1,16 @@
 import { cache } from "react";
 import HotelClient from "./hotel-client";
-import { roomDetails, AoryxClientError, AoryxServiceError } from "@/lib/aoryx-client";
-import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env";
-import { parseSearchParams } from "@/lib/search-query";
-import { obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { getAmdRates, getAoryxHotelPlatformFee, type AmdRates } from "@/lib/pricing";
-import { applyMarkup } from "@/lib/pricing-utils";
-import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
-import type {
-  AoryxExcursionTicket,
-  AoryxHotelInfoResult,
-  AoryxRoomOption,
-  AoryxSearchParams,
-  AoryxTransferRate,
-} from "@/types/aoryx";
-
-const buildSearchParams = (input: Record<string, string | string[] | undefined>) => {
-  const params = new URLSearchParams();
-  Object.entries(input).forEach(([key, value]) => {
-    if (Array.isArray(value)) {
-      value.forEach((entry) => {
-        if (typeof entry === "string") params.append(key, entry);
-      });
-      return;
-    }
-    if (typeof value === "string") params.set(key, value);
-  });
-  return params;
-};
 
 const resolveLocale = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
 
 const getHotelInfoCached = cache(async (code: string) => getHotelInfoFromDb(code));
 
-type SafeRoomDetails = {
-  currency: string | null;
-  rooms: AoryxRoomOption[];
-};
-
 type PageProps = {
   params: Promise<{ locale: string; code?: string | string[] }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string; code?: string | string[] }> }) {
@@ -84,133 +50,34 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   });
 }
 
-export default async function HotelPage({ params, searchParams }: PageProps) {
-  const resolvedSearchParams = await searchParams;
+export default async function HotelPage({ params }: PageProps) {
   const resolvedParams = await params;
   const resolvedLocale = resolveLocale(resolvedParams.locale);
   const t = getTranslations(resolvedLocale);
   const hotelCode = Array.isArray(resolvedParams.code) ? resolvedParams.code[0] : resolvedParams.code;
-  const parsed = parseSearchParams(buildSearchParams(resolvedSearchParams), {
-    missingDates: t.search.errors.missingDates,
-    missingLocation: t.search.errors.missingLocation,
-    invalidRooms: t.search.errors.invalidRooms,
-  });
-  const payload = parsed.payload
-    ? {
-        ...parsed.payload,
-        customerCode: AORYX_TASSPRO_CUSTOMER_CODE,
-        regionId: AORYX_TASSPRO_REGION_ID,
-      }
-    : null;
-  if (payload && hotelCode) {
-    payload.hotelCode = hotelCode;
-  }
-  const ratesPromise: Promise<AmdRates | null> = hotelCode
-    ? getAmdRates().catch((error) => {
-        console.error("[ExchangeRates] Failed to load rates", error);
-        return null;
-      })
-    : Promise.resolve(null);
-  const markupPromise: Promise<number | null> = hotelCode
-    ? getAoryxHotelPlatformFee().catch((error) => {
-        console.error("[Pricing] Failed to load hotel platform fee", error);
-        return null;
-      })
-    : Promise.resolve(null);
 
-  let hotelInfoResult: AoryxHotelInfoResult | null = null;
+  let hotelInfoResult = null;
   let hotelError: string | null = null;
-  let roomDetailsResult: SafeRoomDetails | null = null;
-  let roomsError: string | null = null;
-  const fallbackCoordinates: { lat: number; lon: number } | null = null;
-  let transferOptionsResult: AoryxTransferRate[] | null = null;
-  let transferError: string | null = null;
-  let excursionOptionsResult: AoryxExcursionTicket[] | null = null;
-  let excursionError: string | null = null;
-  let excursionFee: number | null = null;
 
   if (hotelCode) {
     try {
       hotelInfoResult = await getHotelInfoCached(hotelCode);
-    } catch (error) {
-      if (error instanceof AoryxServiceError) {
-        hotelError =
-          error.code === "MISSING_SESSION_ID"
-            ? t.search.errors.missingSession
-            : resolveSafeErrorMessage(error.message, t.hotel.errors.loadHotelFailed);
-      } else if (error instanceof AoryxClientError) {
-        hotelError = resolveSafeErrorMessage(error.message, t.hotel.errors.loadHotelFailed);
-      } else {
+      if (!hotelInfoResult) {
         hotelError = t.hotel.errors.loadHotelFailed;
       }
-    }
-  }
-
-  if (payload && !payload.destinationCode && hotelInfoResult?.destinationId) {
-    payload.destinationCode = hotelInfoResult.destinationId;
-  }
-
-  if (payload && hotelCode) {
-    const paramsWithHotel: AoryxSearchParams = { ...payload, hotelCode };
-    try {
-      const result = await roomDetails(paramsWithHotel);
-      const obfuscatedRooms = obfuscateRoomOptions(result.rooms, {
-        sessionId: result.sessionId,
-        hotelCode,
-      });
-      roomDetailsResult = {
-        currency: result.currency ?? null,
-        rooms: obfuscatedRooms,
-      };
     } catch (error) {
-      if (error instanceof AoryxServiceError) {
-        roomsError =
-          error.code === "MISSING_SESSION_ID"
-            ? t.search.errors.missingSession
-            : resolveSafeErrorMessage(error.message, t.hotel.errors.loadRoomOptionsFailed);
-      } else if (error instanceof AoryxClientError) {
-        roomsError = resolveSafeErrorMessage(error.message, t.hotel.errors.loadRoomOptionsFailed);
-      } else {
-        roomsError = t.hotel.errors.loadRoomOptionsFailed;
-      }
+      console.error("[HotelPage] Failed to load hotel info", error);
+      hotelError = t.hotel.errors.loadHotelFailed;
     }
   }
-
-  const hotelMarkup = await markupPromise;
-  if (roomDetailsResult && typeof hotelMarkup === "number") {
-    roomDetailsResult = {
-      ...roomDetailsResult,
-      rooms: roomDetailsResult.rooms.map((room) => ({
-        ...room,
-        displayTotalPrice:
-          typeof room.totalPrice === "number" && Number.isFinite(room.totalPrice)
-            ? applyMarkup(room.totalPrice, hotelMarkup) ?? room.totalPrice
-            : room.totalPrice,
-      })),
-    };
-  }
-
-  // Keep addons client-loaded to avoid blocking initial hotel page render.
-  transferOptionsResult = null;
-  transferError = null;
-  excursionOptionsResult = null;
-  excursionError = null;
-  excursionFee = null;
-  const initialAmdRates = await ratesPromise;
 
   return (
     <HotelClient
       initialHotelInfo={hotelInfoResult}
-      initialRoomDetails={roomDetailsResult}
+      initialRoomDetails={null}
       initialHotelError={hotelError}
-      initialRoomsError={roomsError}
-      initialFallbackCoordinates={fallbackCoordinates}
-      initialAmdRates={initialAmdRates}
-      initialTransferOptions={transferOptionsResult}
-      initialTransferError={transferError}
-      initialExcursionOptions={excursionOptionsResult}
-      initialExcursionError={excursionError}
-      initialExcursionFee={excursionFee}
+      initialRoomsError={null}
+      initialAmdRates={null}
     />
   );
 }

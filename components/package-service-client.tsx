@@ -19,6 +19,7 @@ import { postJson } from "@/lib/api-helpers";
 import StarBorder from "@/components/StarBorder";
 import type {
   AoryxExcursionSelection,
+  AoryxHotelInfoResult,
   AoryxExcursionTicket,
   AoryxTransferRate,
 } from "@/types/aoryx";
@@ -291,6 +292,22 @@ const normalizeAirportKey = (value: string | null | undefined) => {
   return trimmed.length > 0 ? trimmed.toUpperCase() : null;
 };
 
+const resolvePreferredAirportCode = (destinationName: string | null | undefined) => {
+  const normalized = destinationName?.trim().toLowerCase() ?? "";
+  if (!normalized) return null;
+  if (normalized.includes("abu dhabi")) return "AUH";
+  if (normalized.includes("sharjah")) return "SHJ";
+  if (normalized.includes("dubai")) return "DXB";
+  return null;
+};
+
+const getAirportLabelHint = (airportCode: string | null) => {
+  if (airportCode === "AUH") return "abu dhabi";
+  if (airportCode === "SHJ") return "sharjah";
+  if (airportCode === "DXB") return "dubai";
+  return null;
+};
+
 const buildTransferAirportOption = (transfer: AoryxTransferRate): TransferAirportOption | null => {
   const origin = transfer.origin ?? null;
   if (!origin) return null;
@@ -432,6 +449,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
 
   const hotelSelection = builderState.hotel;
   const hasHotel = hotelSelection?.selected === true;
+  const hotelCode = hotelSelection?.hotelCode ?? null;
   const destinationName = hotelSelection?.destinationName ?? null;
   const destinationCode = hotelSelection?.destinationCode ?? null;
   const selectedHotelName = hotelSelection?.hotelName?.trim() ?? null;
@@ -450,6 +468,41 @@ export default function PackageServiceClient({ serviceKey }: Props) {
     serviceKey === "transfer" && hasHotel && !destinationName && !destinationCode;
   const shouldFetchTransfers =
     serviceKey === "transfer" && hasHotel && !transferMissingDestination;
+
+  useEffect(() => {
+    if (serviceKey !== "transfer") return;
+    if (!hasHotel || !hotelCode) return;
+
+    let active = true;
+    postJson<AoryxHotelInfoResult | null>("/api/aoryx/hotel-info", { hotelCode })
+      .then((info) => {
+        if (!active) return;
+        const resolvedDestinationName = info?.destinationName?.trim() ?? "";
+        if (!resolvedDestinationName) return;
+        updatePackageBuilderState((prev) => {
+          const prevHotel = prev.hotel;
+          if (!prevHotel?.selected) return prev;
+          if ((prevHotel.hotelCode ?? null) !== hotelCode) return prev;
+          const current = prevHotel.destinationName?.trim() ?? "";
+          if (current === resolvedDestinationName) return prev;
+          return {
+            ...prev,
+            hotel: {
+              ...prevHotel,
+              destinationName: resolvedDestinationName,
+            },
+            updatedAt: Date.now(),
+          };
+        });
+      })
+      .catch((error) => {
+        console.error("[PackageBuilder][transfer] Failed to sync hotel destination name", error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [hasHotel, hotelCode, serviceKey]);
   const insuranceStartDateRaw =
     insuranceSelection?.startDate ?? hotelSelection?.checkInDate ?? null;
   const insuranceEndDateRaw =
@@ -470,15 +523,36 @@ export default function PackageServiceClient({ serviceKey }: Props) {
     return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [transferOptions]);
 
+  const preferredAirportCode = useMemo(
+    () => resolvePreferredAirportCode(destinationName),
+    [destinationName]
+  );
+  const preferredAirportLabelHint = useMemo(
+    () => getAirportLabelHint(preferredAirportCode),
+    [preferredAirportCode]
+  );
+
   const preferredAirportKey = useMemo(() => {
     if (airportOptions.length === 0) return null;
     return (
+      (preferredAirportCode
+        ? airportOptions.find((option) => option.code === preferredAirportCode)?.key
+        : null) ??
+      (preferredAirportLabelHint
+        ? airportOptions.find((option) =>
+            option.label.toLowerCase().includes(preferredAirportLabelHint)
+          )?.key
+        : null) ??
       airportOptions.find((option) => option.code === "DXB")?.key ??
       airportOptions.find((option) => option.label.toLowerCase().includes("dubai"))?.key ??
       airportOptions[0]?.key ??
       null
     );
-  }, [airportOptions]);
+  }, [airportOptions, preferredAirportCode, preferredAirportLabelHint]);
+
+  useEffect(() => {
+    setSelectedAirportKey(null);
+  }, [destinationCode, destinationName]);
 
   useEffect(() => {
     if (!preferredAirportKey) {
@@ -1259,7 +1333,18 @@ export default function PackageServiceClient({ serviceKey }: Props) {
           destinationName: destinationName ?? "",
         });
         if (!active) return;
-        const transfers = Array.isArray(data.transfers) ? data.transfers : [];
+        let transfers = Array.isArray(data.transfers) ? data.transfers : [];
+
+        // For destinations outside Dubai/Abu Dhabi/Sharjah, fallback to Dubai transfers.
+        if (transfers.length === 0 && !resolvePreferredAirportCode(destinationName)) {
+          const fallback = await postJson<{ transfers?: AoryxTransferRate[] }>("/api/aoryx/transfers", {
+            destinationLocationCode: "",
+            destinationName: "Dubai",
+          });
+          if (!active) return;
+          transfers = Array.isArray(fallback.transfers) ? fallback.transfers : [];
+        }
+
         setTransferOptions(transfers);
       } catch (error) {
         if (!active) return;
@@ -1873,6 +1958,22 @@ export default function PackageServiceClient({ serviceKey }: Props) {
 
   const pageCopy = t.packageBuilder.pages[serviceKey];
 
+  const destinationBadgeLabel = useMemo(() => {
+    const normalizedDestinationName =
+      typeof destinationName === "string" ? destinationName.trim() : "";
+    if (normalizedDestinationName.length > 0) {
+      return normalizedDestinationName;
+    }
+
+    const selectedTransferDestination =
+      (selectedTransferId ? transferById.get(selectedTransferId)?.destination?.name : null) ?? null;
+    const firstTransferDestination =
+      filteredTransferOptions[0]?.destination?.name ?? transferOptions[0]?.destination?.name ?? null;
+    const preferred = selectedTransferDestination ?? firstTransferDestination;
+    const trimmed = typeof preferred === "string" ? preferred.trim() : "";
+    return trimmed.length > 0 ? trimmed : null;
+  }, [destinationName, filteredTransferOptions, selectedTransferId, transferById, transferOptions]);
+
   const handleMarkService = () => {
     if (serviceKey === "hotel") return;
     const targetService = serviceKey as Exclude<PackageBuilderService, "hotel">;
@@ -2334,16 +2435,16 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   };
 
   const destinationBadge = useMemo(() => {
-    if (!destinationName) return null;
+    if (!destinationBadgeLabel) return null;
     return (
       <span className="badge">
         <span className="material-symbols-rounded" aria-hidden="true">
           location_on
         </span>
-        {destinationName}
+        {destinationBadgeLabel}
       </span>
     );
-  }, [destinationName]);
+  }, [destinationBadgeLabel]);
 
   const formatServicePrice = useCallback(
     (amount: number | null | undefined, currency: string | null | undefined) => {
@@ -2930,7 +3031,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
       return <p className="state error">{transferError}</p>;
     }
     if (filteredTransferOptions.length === 0) {
-      return <p className="tate">{t.hotel.addons.transfers.noOptions}</p>;
+      return <p className="state">{t.hotel.addons.transfers.noOptions}</p>;
     }
 
     const activeTransfers =

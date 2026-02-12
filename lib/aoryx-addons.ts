@@ -21,6 +21,16 @@ const parseDate = (value: unknown): Date | null => {
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const buildLooseSearchRegex = (value: string): RegExp | null => {
+  const tokens = value
+    .trim()
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  if (tokens.length === 0) return null;
+  return new RegExp(tokens.map(escapeRegex).join(".*"), "i");
+};
+
 const normalizeTransferType = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
   const trimmed = value.trim().toUpperCase();
@@ -60,16 +70,17 @@ export async function fetchTransferRates(input: TransferQueryInput): Promise<Aor
     destFilters.push({ "destination.locationCode": destinationLocationCode });
   }
   if (destinationName) {
-    const safeName = escapeRegex(destinationName);
-    const regex = new RegExp(safeName, "i");
-    destFilters.push({
-      $or: [
-        { "destination.name": regex },
-        { "destination.locationCode": regex },
-        { "destination.cityCode": regex },
-        { "destination.zoneCode": regex },
-      ],
-    });
+    const regex = buildLooseSearchRegex(destinationName);
+    if (regex) {
+      destFilters.push({
+        $or: [
+          { "destination.name": regex },
+          { "destination.locationCode": regex },
+          { "destination.cityCode": regex },
+          { "destination.zoneCode": regex },
+        ],
+      });
+    }
   }
 
   if (destFilters.length > 0) {
@@ -118,16 +129,17 @@ export async function fetchTransferRates(input: TransferQueryInput): Promise<Aor
       fallbackDestFilters.push({ "destination.locationCode": destinationLocationCode });
     }
     if (destinationName) {
-      const safeName = escapeRegex(destinationName);
-      const regex = new RegExp(safeName, "i");
-      fallbackDestFilters.push({
-        $or: [
-          { "destination.name": regex },
-          { "destination.locationCode": regex },
-          { "destination.cityCode": regex },
-          { "destination.zoneCode": regex },
-        ],
-      });
+      const regex = buildLooseSearchRegex(destinationName);
+      if (regex) {
+        fallbackDestFilters.push({
+          $or: [
+            { "destination.name": regex },
+            { "destination.locationCode": regex },
+            { "destination.cityCode": regex },
+            { "destination.zoneCode": regex },
+          ],
+        });
+      }
     }
 
     const destinationClause =

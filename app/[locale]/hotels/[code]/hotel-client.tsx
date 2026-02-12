@@ -942,7 +942,9 @@ export default function HotelClient({
     cabinClass: "",
     notes: "",
   });
-  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [roomsLoading, setRoomsLoading] = useState(() =>
+    Boolean(parsed.payload && hotelCode && !initialRoomDetails && !initialRoomsError)
+  );
   const [roomsError, setRoomsError] = useState<string | null>(initialRoomsError);
   const [mealFilter, setMealFilter] = useState<string>("all");
   const [priceSort, setPriceSort] = useState<"default" | "asc" | "desc">("default");
@@ -971,7 +973,7 @@ export default function HotelClient({
   }, [hotelCode, parsed.payload]);
 
   useEffect(() => {
-    setRoomsLoading(false);
+    setRoomsLoading(Boolean(roomDetailsPayload && !initialRoomDetails && !initialRoomsError));
     setRoomsError(initialRoomsError ?? null);
     setRoomOptions(initialRoomDetails?.rooms ?? []);
     setActivePrebook(null);
@@ -1019,6 +1021,44 @@ export default function HotelClient({
     initialRoomsError,
     initialTransferError,
     initialTransferOptions,
+    roomDetailsPayload,
+  ]);
+
+  useEffect(() => {
+    if (!roomDetailsPayload) return;
+    if (initialRoomDetails !== null || initialRoomsError !== null) return;
+
+    let active = true;
+    setRoomsLoading(true);
+    setRoomsError(null);
+
+    postJson<SafeRoomDetails>("/api/aoryx/room-details", roomDetailsPayload)
+      .then((data) => {
+        if (!active) return;
+        setRoomOptions(Array.isArray(data.rooms) ? data.rooms : []);
+      })
+      .catch((error) => {
+        if (!active) return;
+        const message =
+          error instanceof ApiError && error.code === "MISSING_SESSION_ID"
+            ? t.search.errors.missingSession
+            : resolveSafeErrorFromUnknown(error, t.hotel.errors.loadRoomOptionsFailed);
+        setRoomsError(message);
+        setRoomOptions([]);
+      })
+      .finally(() => {
+        if (active) setRoomsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    initialRoomDetails,
+    initialRoomsError,
+    roomDetailsPayload,
+    t.hotel.errors.loadRoomOptionsFailed,
+    t.search.errors.missingSession,
   ]);
 
   useEffect(() => {
@@ -1058,17 +1098,41 @@ export default function HotelClient({
   }, [bookingOpen]);
   const roundedRating = Math.round(hotelInfo?.rating ?? 0);
   const galleryImages = useMemo(() => {
-    const unique = new Set<string>();
+    const unique = new Map<string, { url: string; score: number }>();
+    const buildKeyAndScore = (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      try {
+        const parsed = new URL(trimmed);
+        const normalizedPath = decodeURIComponent(parsed.pathname)
+          .replace(/\/(thumbnail|full)\//gi, "/")
+          .replace(/\/+$/g, "")
+          .toLowerCase();
+        const key = normalizedPath;
+        const score = /\/full\//i.test(parsed.pathname) ? 2 : /\/thumbnail\//i.test(parsed.pathname) ? 1 : 0;
+        return { key, score, url: trimmed };
+      } catch {
+        const normalizedPath = trimmed
+          .replace(/[?#].*$/g, "")
+          .replace(/\/(thumbnail|full)\//gi, "/")
+          .replace(/\/+$/g, "")
+          .toLowerCase();
+        const score = /\/full\//i.test(trimmed) ? 2 : /\/thumbnail\//i.test(trimmed) ? 1 : 0;
+        return { key: normalizedPath, score, url: trimmed };
+      }
+    };
     const add = (value?: string | null) => {
       if (typeof value === "string") {
-        const trimmed = value.trim();
-        if (trimmed.length > 0) {
-          unique.add(trimmed);
+        const normalized = buildKeyAndScore(value);
+        if (!normalized) return;
+        const existing = unique.get(normalized.key);
+        if (!existing || normalized.score > existing.score) {
+          unique.set(normalized.key, { url: normalized.url, score: normalized.score });
         }
       }
     };
     (hotelInfo?.imageUrls ?? []).forEach(add);
-    return Array.from(unique);
+    return Array.from(unique.values()).map((entry) => entry.url);
   }, [hotelInfo?.imageUrls]);
   const hotelCoordinates = useMemo(() => {
     const lat = toFinite(hotelInfo?.geoCode?.lat) ?? fallbackCoordinates?.lat ?? null;
@@ -1079,6 +1143,9 @@ export default function HotelClient({
   const mapEmbedSrc = hotelCoordinates
     ? `https://www.google.com/maps?q=${hotelCoordinates.lat},${hotelCoordinates.lon}&output=embed`
     : null;
+  const hotelAddressLine = hotelInfo?.address?.line1 && hotelInfo?.address?.line2 ? `${hotelInfo?.address?.line1}, ${hotelInfo?.address?.line2}` : hotelInfo?.address?.line1 ?? null;
+  const hotelDestinationLabel = hotelInfo?.destinationName ?? hotelInfo?.address?.cityName ?? null;
+  const hotelAddressText = [hotelAddressLine, hotelDestinationLabel].filter(Boolean).join(", ");
   const fallbackCurrency = hotelInfo?.currencyCode ?? parsed.payload?.currency ?? null;
   const tripAdvisorRating = hotelInfo?.tripAdvisorRating ?? null;
   const roomCount = roomDetailsPayload?.rooms.length ?? 1;
@@ -1426,7 +1493,7 @@ export default function HotelClient({
   useEffect(() => {
     if (!bookingOpen || !showTransfers) return;
     if (transferLoaded) return;
-    const destinationLabel = hotelInfo?.address?.cityName ?? "";
+    const destinationLabel = hotelInfo?.destinationName ?? hotelInfo?.address?.cityName ?? "";
     if (!destinationCode && !destinationLabel) {
       setTransferError(t.hotel.addons.transfers.missingDestination);
       setTransferOptions([]);
@@ -1465,6 +1532,7 @@ export default function HotelClient({
   }, [
     bookingOpen,
     destinationCode,
+    hotelInfo?.destinationName,
     hotelInfo?.address?.cityName,
     parsed.payload?.checkInDate,
     showTransfers,
@@ -1588,8 +1656,9 @@ export default function HotelClient({
     if (destinationCodeFromQuery) return destinationCodeFromQuery;
     if (hotelInfo?.destinationId) return hotelInfo.destinationId;
     if (resolvedDestinationCode) return resolvedDestinationCode;
-    const cityName = hotelInfo?.address?.cityName?.trim();
-    if (!cityName) return null;
+    const destinationName =
+      hotelInfo?.destinationName?.trim() ?? hotelInfo?.address?.cityName?.trim() ?? "";
+    if (!destinationName) return null;
     const countryCode = hotelInfo?.address?.countryCode?.trim() || "AE";
 
     try {
@@ -1609,13 +1678,16 @@ export default function HotelClient({
           .toLowerCase()
           .replace(/[^\p{L}\p{N}\s-]/gu, "")
           .replace(/\s+/g, " ");
-      const normalizedCity = normalize(cityName);
-      const exact = destinations.find((dest) => normalize(dest.name) === normalizedCity);
+      const normalizedDestination = normalize(destinationName);
+      const exact = destinations.find((dest) => normalize(dest.name) === normalizedDestination);
       const partial =
         exact ??
         destinations.find((dest) => {
           const normalizedName = normalize(dest.name);
-          return normalizedCity.includes(normalizedName) || normalizedName.includes(normalizedCity);
+          return (
+            normalizedDestination.includes(normalizedName) ||
+            normalizedName.includes(normalizedDestination)
+          );
         });
       const code = partial?.rawId ?? partial?.id ?? null;
       if (code) {
@@ -1628,6 +1700,7 @@ export default function HotelClient({
     }
   }, [
     destinationCodeFromQuery,
+    hotelInfo?.destinationName,
     hotelInfo?.address?.cityName,
     hotelInfo?.address?.countryCode,
     hotelInfo?.destinationId,
@@ -1729,7 +1802,7 @@ export default function HotelClient({
       const response = await postJson<{ isFavorite: boolean }>("/api/favorites", {
         hotelCode,
         name: hotelInfo?.name ?? null,
-        city: hotelInfo?.address?.cityName ?? null,
+        city: hotelInfo?.destinationName ?? hotelInfo?.address?.cityName ?? null,
         address: hotelInfo?.address?.line1 ?? null,
         imageUrl: hotelInfo?.imageUrl ?? hotelInfo?.imageUrls?.[0] ?? null,
         rating: hotelInfo?.rating ?? null,
@@ -1909,7 +1982,7 @@ export default function HotelClient({
         return;
       }
 
-      const selectionDestinationName = hotelInfo?.address?.cityName ?? null;
+      const selectionDestinationName = hotelInfo?.destinationName ?? hotelInfo?.address?.cityName ?? null;
       const selectionDestinationCode = destinationCode ?? null;
       const selectionCountryCode = parsed.payload?.countryCode ?? null;
       const selectionNationality = parsed.payload?.nationality ?? null;
@@ -2072,6 +2145,7 @@ export default function HotelClient({
       destinationCode,
       fallbackCurrency,
       hotelCode,
+      hotelInfo?.destinationName,
       hotelInfo?.address?.cityName,
       hotelInfo?.name,
       isSignedIn,
@@ -2395,9 +2469,7 @@ export default function HotelClient({
                 </span>
               ))}
             </span>
-            {hotelInfo?.address && (
-              <p>{hotelInfo?.address?.line1}, {hotelInfo?.address?.cityName}</p>
-            )}
+            {hotelAddressText && <p>{hotelAddressText}</p>}
             {(hotelInfo?.contact?.phone || hotelInfo?.contact?.website) && (
               <div>
                 {hotelInfo?.contact?.phone &&(
