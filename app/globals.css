@@ -2697,7 +2697,7 @@ footer{
           font-size: 0.8rem;
         }
 
-        a {
+        a, button {
           text-decoration: none;
           display: inline-flex;
           align-items: center;
@@ -2713,7 +2713,7 @@ footer{
           border-radius: 1.5em;
           line-height: normal;
           transition: all .25s;
-          
+
           &:hover {
             transform: translateY(-2px);
             outline-width: 1px;
