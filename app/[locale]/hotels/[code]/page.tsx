@@ -9,7 +9,6 @@ import { getAmdRates, getAoryxHotelPlatformFee, type AmdRates } from "@/lib/pric
 import { applyMarkup } from "@/lib/pricing-utils";
 import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
-import { fetchExcursions, fetchTransferRates } from "@/lib/aoryx-addons";
 import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
 import type {
   AoryxExcursionTicket,
@@ -118,8 +117,6 @@ export default async function HotelPage({ params, searchParams }: PageProps) {
         return null;
       })
     : Promise.resolve(null);
-  const initialAmdRates = await ratesPromise;
-  const hotelMarkup = await markupPromise;
 
   let hotelInfoResult: AoryxHotelInfoResult | null = null;
   let hotelError: string | null = null;
@@ -179,6 +176,7 @@ export default async function HotelPage({ params, searchParams }: PageProps) {
     }
   }
 
+  const hotelMarkup = await markupPromise;
   if (roomDetailsResult && typeof hotelMarkup === "number") {
     roomDetailsResult = {
       ...roomDetailsResult,
@@ -192,43 +190,13 @@ export default async function HotelPage({ params, searchParams }: PageProps) {
     };
   }
 
-  if (payload && hotelCode) {
-    const destinationLocationCode = payload.destinationCode ?? "";
-    const destinationName = hotelInfoResult?.address?.cityName ?? "";
-    const totalGuests = payload.rooms.reduce(
-      (sum, room) => sum + room.adults + room.childrenAges.length,
-      0
-    );
-    const paxCount = totalGuests > 0 ? totalGuests : undefined;
-    if (destinationLocationCode || destinationName) {
-      try {
-        transferOptionsResult = await fetchTransferRates({
-          destinationLocationCode,
-          destinationName,
-          paxCount,
-          travelDate: payload.checkInDate,
-        });
-      } catch (error) {
-        console.error("[Transfers] Failed to load transfer options", error);
-        transferError = "Failed to load transfer options.";
-        transferOptionsResult = [];
-      }
-    } else {
-      transferOptionsResult = [];
-    }
-  }
-
-  if (hotelCode) {
-    try {
-      const result = await fetchExcursions(200);
-      excursionOptionsResult = result.excursions;
-      excursionFee = result.excursionFee;
-    } catch (error) {
-      console.error("[Excursions] Failed to load excursion options", error);
-      excursionError = "Failed to load excursion options.";
-      excursionOptionsResult = [];
-    }
-  }
+  // Keep addons client-loaded to avoid blocking initial hotel page render.
+  transferOptionsResult = null;
+  transferError = null;
+  excursionOptionsResult = null;
+  excursionError = null;
+  excursionFee = null;
+  const initialAmdRates = await ratesPromise;
 
   return (
     <HotelClient
