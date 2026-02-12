@@ -160,6 +160,7 @@ export type Translation = {
       guestToggleAdd: string;
       errors: {
         invalidDays: string;
+        ageLimit: string;
       };
       subrisks: {
         amateurSport: {
@@ -203,7 +204,6 @@ export type Translation = {
       title: string;
       subtitle: string;
       summaryTitle: string;
-      summaryHint: string;
       emptySummary: string;
       pendingDetails: string;
       contactTitle: string;
@@ -233,6 +233,7 @@ export type Translation = {
       insuranceHint: string;
       insuranceEmpty: string;
       insuranceTravelerLabel: string;
+      copyLeadTravelerContact: string;
       insuranceFields: {
         firstNameEn: string;
         lastNameEn: string;
@@ -248,6 +249,7 @@ export type Translation = {
         residency: string;
         citizenship: string;
         socialCard: string;
+        optionalPlaceholder: string;
         mobilePhone: string;
         phone: string;
         email: string;
@@ -283,6 +285,10 @@ export type Translation = {
       totalTitle: string;
       totalLabel: string;
       nonRefundableWarning: string;
+      restoreDraftTitle: string;
+      restoreDraftPrompt: string;
+      restoreDraftConfirm: string;
+      restoreDraftCancel: string;
       errors: {
         missingHotel: string;
         missingDetails: string;
@@ -291,6 +297,7 @@ export type Translation = {
         insuranceQuoteFailed: string;
         cardUnavailable: string;
         prebookInvalid: string;
+        prebookReturnToHotel: string;
         duplicatePaymentAttempt: string;
         paymentFailed: string;
       };
@@ -1247,6 +1254,8 @@ const translations: Record<Locale, Translation> = {
         guestToggleAdd: "Ավելացնել ապահովագրությունը այս հյուրի համար",
         errors: {
           invalidDays: "Ճանապարհորդության օրերի քանակը սխալ է լրացված",
+          ageLimit:
+            "100 տարեկանից բարձր անձինք չեն կարող ապահովագրվել։ Խնդրում ենք շտկել ծննդյան ամսաթիվը։",
         },
         subrisks: {
           amateurSport: {
@@ -1312,7 +1321,6 @@ const translations: Record<Locale, Translation> = {
         title: "Վճարում",
         subtitle: "Ստուգեք ձեր փաթեթը և ընտրեք վճարման եղանակը։",
         summaryTitle: "Ընտրված ծառայությունները",
-        summaryHint: "Ձեր փաթեթում ընդգրկված ծառայությունները ստորև։",
         emptySummary: "Դեռ ընտրված ծառայություններ չկան։",
         pendingDetails: "Մանրամասները կհաստատվեն ամրագրման ընթացքում։",
         contactTitle: "Կոնտակտային տվյալներ",
@@ -1342,6 +1350,7 @@ const translations: Record<Locale, Translation> = {
         insuranceHint: "Լրացրեք յուրաքանչյուր ճանապարհորդի անձնագրային և կոնտակտային տվյալները։",
         insuranceEmpty: "Ապահովագրությունը ընտրելուց հետո կլրացվեն տվյալները։",
         insuranceTravelerLabel: "Ճանապարհորդ {index}",
+        copyLeadTravelerContact: "Պատճենել գլխավոր ճանապարհորդի կոնտակտային տվյալները",
         insuranceFields: {
           firstNameEn: "Անուն",
           lastNameEn: "Ազգանուն",
@@ -1357,13 +1366,14 @@ const translations: Record<Locale, Translation> = {
           residency: "Ռեզիդենտություն",
           citizenship: "Քաղաքացիություն",
           socialCard: "Սոց․ քարտ",
+          optionalPlaceholder: "Ոչ պարտադիր լրացման համար",
           mobilePhone: "Բջջային հեռ․",
           phone: "Հեռախոսահամար",
           email: "Էլ․ հասցե",
           address: "Հասցե",
           country: "Երկիր",
-          region: "Տարածաշրջան",
-          city: "Քաղաք",
+          region: "Մարզ",
+          city: "Քաղաք / Համայնք",
         },
         couponTitle: "Կտրոնի կամ նվեր քարտի կոդ",
         couponPlaceholder: "Մուտքագրեք կոդը",
@@ -1378,7 +1388,7 @@ const translations: Record<Locale, Translation> = {
         devInsuranceSuccess: "Ապահովագրությունը հաջողությամբ ուղարկվեց։",
         paymentTitle: "Վճարման եղանակ",
         paymentHint: "Ընտրեք վճարման տարբերակը։",
-        methodIdram: "idram",
+        methodIdram: "Idram",
         methodCard: "IDBank-ի վճարային տերմինալ",
         methodCardAmeria: "Ameriabank-ի վճարային տերմինալ",
         cardName: "Քարտի վրա նշված անուն",
@@ -1394,6 +1404,11 @@ const translations: Record<Locale, Translation> = {
         totalLabel: "Ընդհանուր",
         nonRefundableWarning:
           "Ընտրված հյուրանոցային սակագինը չվերադարձվող է։ Չեղարկման դեպքում վերադարձ չի կատարվի։",
+        restoreDraftTitle: "Վերականգնել պահպանված տվյալները",
+        restoreDraftPrompt:
+          "Նախորդ ամրագրման ընթացքից առկա են պահպանված տվյալներ։ Ցանկանու՞մ եք ավտոմատ լրացնել դրանք։",
+        restoreDraftConfirm: "Վերականգնել",
+        restoreDraftCancel: "Ոչ հիմա",
         errors: {
           missingHotel: "Խնդրում ենք ընտրել հյուրանոցը շարունակելու համար։",
           missingDetails: "Սենյակների տվյալները բացակայում են։ Խնդրում ենք կրկին ընտրել հյուրանոցը։",
@@ -1402,6 +1417,7 @@ const translations: Record<Locale, Translation> = {
           insuranceQuoteFailed: "Չհաջողվեց հաշվարկել ապահովագրության արժեքը։",
           cardUnavailable: "Քարտով վճարումը դեռ հասանելի չէ։",
           prebookInvalid: "Ընտրված սակագինը այլևս հասանելի չէ։ Խնդրում ենք կրկին ընտրել սենյակը։",
+          prebookReturnToHotel: "Վերադառնալ ընտրված հյուրանոցին",
           duplicatePaymentAttempt:
             "Այս նախնական ամրագրման համար արդեն կա ակտիվ կամ ավարտված վճարում։ Խնդրում ենք ստուգել ամրագրման կարգավիճակը։",
           paymentFailed: "Չհաջողվեց սկսել վճարումը։ Խնդրում ենք կրկին փորձել։",
@@ -1520,12 +1536,12 @@ const translations: Record<Locale, Translation> = {
       idram: {
         title: "Հանգստացեք հիմա, վճարեք հետո",
         body: "Օգտվե՛ք RocketLine-ից և վճարեք մինչև 60 ամսվա ընթացքում։",
-        alt: "idram",
+        alt: "Idram",
       },
       efes:{
         title: "Ապահովագրություն՝ ձեր հանգստի համար",
         body: "Ընտրե՛ք ճանապարհորդական ապահովագրություն՝ ձեր հանգիստը լիարժեք անցկացնելու համար՝ սկսած օրական 300 դրամից։",
-        alt: "efes"
+        alt: "EFES"
       },
       esim:{
         title: "Անվճար ինտերնետ փաթեթ՝ Ձեր ապահովագրության հետ",
@@ -2076,7 +2092,7 @@ const translations: Record<Locale, Translation> = {
       backToSearch: "Վերադառնալ որոնմանը",
       scrollTop: "Վերև գնալ",
       contact: "Կապվել",
-      contactForRates: "Արժեքների ճշտման համար խնդրում ենք կապ հաստատել մեզ հետ։",
+      contactForRates: "Արժեքների հաշվարկման ընթացքում առաջացել է սխալ։ Խնդիրը շտկելու և վճարումը ամփոփելու համար խնդրում ենք կապ հաստատել մեզ հետ։",
       close: "Փակել",
       yes: "Այո",
       no: "Ոչ",
@@ -2571,6 +2587,8 @@ const translations: Record<Locale, Translation> = {
         guestToggleAdd: "Add insurance for this guest",
         errors: {
           invalidDays: "The number of travel days is incorrect.",
+          ageLimit:
+            "Travelers older than 100 cannot be insured. Please correct the birth date.",
         },
         subrisks: {
           amateurSport: {
@@ -2636,7 +2654,6 @@ const translations: Record<Locale, Translation> = {
         title: "Checkout",
         subtitle: "Review your package and choose a payment method.",
         summaryTitle: "Selected services",
-        summaryHint: "Everything in your package, summarized below.",
         emptySummary: "No services selected yet.",
         pendingDetails: "Details will be confirmed during booking.",
         contactTitle: "Contact details",
@@ -2666,6 +2683,7 @@ const translations: Record<Locale, Translation> = {
         insuranceHint: "Provide passport and contact details for each traveler.",
         insuranceEmpty: "Insurance travelers will appear after you select insurance.",
         insuranceTravelerLabel: "Traveler {index}",
+        copyLeadTravelerContact: "Copy lead traveler contact data",
         insuranceFields: {
           firstNameEn: "First name",
           lastNameEn: "Last name",
@@ -2681,13 +2699,14 @@ const translations: Record<Locale, Translation> = {
           residency: "Residency",
           citizenship: "Citizenship",
           socialCard: "Social card",
+          optionalPlaceholder: "Optional for filling",
           mobilePhone: "Mobile phone",
           phone: "Phone",
           email: "Email",
           address: "Address",
           country: "Country",
           region: "Region",
-          city: "City",
+          city: "City / District",
         },
         couponTitle: "Coupon or gift card code",
         couponPlaceholder: "Enter code",
@@ -2718,6 +2737,11 @@ const translations: Record<Locale, Translation> = {
         totalLabel: "Total",
         nonRefundableWarning:
           "The selected hotel rate is non-refundable. Cancellations are not eligible for a refund.",
+        restoreDraftTitle: "Restore saved details",
+        restoreDraftPrompt:
+          "There is saved data from a previous booking process. Would you like to auto-fill it?",
+        restoreDraftConfirm: "Restore details",
+        restoreDraftCancel: "Not now",
         errors: {
           missingHotel: "Select a hotel to continue.",
           missingDetails: "Room details are missing. Please reselect the hotel.",
@@ -2726,6 +2750,7 @@ const translations: Record<Locale, Translation> = {
           insuranceQuoteFailed: "Failed to calculate the insurance premium.",
           cardUnavailable: "Card payments are not available yet.",
           prebookInvalid: "Your selected rate is no longer available. Please search again and reselect the room.",
+          prebookReturnToHotel: "Back to selected hotel",
           duplicatePaymentAttempt:
             "There is already an active or completed payment for this prebook session. Please check your booking status.",
           paymentFailed: "Failed to start payment. Please try again.",
@@ -2844,7 +2869,7 @@ const translations: Record<Locale, Translation> = {
       idram: {
         title: "Travel Now, Pay Later",
         body: "Use RocketLine and spread your payment over up to 60 months.",
-        alt: "idram",
+        alt: "Idram",
       },
 
       efes: {
@@ -3404,7 +3429,7 @@ const translations: Record<Locale, Translation> = {
       backToSearch: "Back to Search",
       scrollTop: "Scroll to top",
       contact: "Contact",
-      contactForRates: "For rate inquiries, please contact us.",
+      contactForRates: "An error occurred while calculating rates. Please contact us to resolve the issue and complete your booking.",
       close: "Close",
       yes: "Yes",
       no: "No",
@@ -3902,6 +3927,8 @@ const translations: Record<Locale, Translation> = {
         guestToggleAdd: "Добавить страховку для этого гостя",
         errors: {
           invalidDays: "Неверно указано количество дней поездки.",
+          ageLimit:
+            "Путешественники старше 100 лет не могут быть застрахованы. Исправьте дату рождения.",
         },
         subrisks: {
           amateurSport: {
@@ -3967,7 +3994,6 @@ const translations: Record<Locale, Translation> = {
         title: "Оплата",
         subtitle: "Проверьте пакет и выберите способ оплаты.",
         summaryTitle: "Выбранные услуги",
-        summaryHint: "Все выбранные услуги собраны ниже.",
         emptySummary: "Пока нет выбранных услуг.",
         pendingDetails: "Детали будут подтверждены во время бронирования.",
         contactTitle: "Контактные данные",
@@ -3997,6 +4023,7 @@ const translations: Record<Locale, Translation> = {
         insuranceHint: "Укажите паспортные и контактные данные каждого путешественника.",
         insuranceEmpty: "Путешественники для страховки появятся после выбора страховки.",
         insuranceTravelerLabel: "Путешественник {index}",
+        copyLeadTravelerContact: "Скопировать контактные данные главного путешественника",
         insuranceFields: {
           firstNameEn: "Имя",
           lastNameEn: "Фамилия",
@@ -4012,13 +4039,14 @@ const translations: Record<Locale, Translation> = {
           residency: "Резидент",
           citizenship: "Гражданство",
           socialCard: "Соц. карта",
+          optionalPlaceholder: "Необязательно для заполнения",
           mobilePhone: "Номер мобильного телефона",
           phone: "Номер телефона",
           email: "Эл. почта",
           address: "Адрес",
           country: "Страна",
           region: "Регион",
-          city: "Город",
+          city: "Город / Округ",
         },
         couponTitle: "Код купона или подарочной карты",
         couponPlaceholder: "Введите код",
@@ -4049,6 +4077,11 @@ const translations: Record<Locale, Translation> = {
         totalLabel: "Итого",
         nonRefundableWarning:
           "Выбранный тариф отеля невозвратный. При отмене возврат средств не предусмотрен.",
+        restoreDraftTitle: "Восстановить сохраненные данные",
+        restoreDraftPrompt:
+          "Есть сохраненные данные из предыдущего процесса бронирования. Хотите ли вы автоматически заполнить их?",
+        restoreDraftConfirm: "Восстановить",
+        restoreDraftCancel: "Не сейчас",
         errors: {
           missingHotel: "Выберите отель, чтобы продолжить.",
           missingDetails: "Данные по номерам отсутствуют. Пожалуйста, выберите отель заново.",
@@ -4057,6 +4090,7 @@ const translations: Record<Locale, Translation> = {
           insuranceQuoteFailed: "Не удалось рассчитать стоимость страховки.",
           cardUnavailable: "Оплата картой пока недоступна.",
           prebookInvalid: "Выбранный тариф больше недоступен. Повторите поиск и выберите номер заново.",
+          prebookReturnToHotel: "Вернуться к выбранному отелю",
           duplicatePaymentAttempt:
             "Для этой сессии предбронирования уже есть активный или завершенный платеж. Проверьте статус бронирования.",
           paymentFailed: "Не удалось начать оплату. Пожалуйста, попробуйте снова.",
@@ -4175,7 +4209,7 @@ const translations: Record<Locale, Translation> = {
       idram: {
         title: "Путешествуйте сейчас — платите позже",
         body: "Воспользуйтесь RocketLine и распределите оплату на срок до 60 месяцев.",
-        alt: "idram",
+        alt: "Idram",
       },
 
       efes: {
@@ -4737,7 +4771,7 @@ const translations: Record<Locale, Translation> = {
       backToSearch: "Вернуться к поиску",
       scrollTop: "Наверх",
       contact: "Связаться",
-      contactForRates: "Для уточнения тарифов свяжитесь с нами",
+      contactForRates: "При расчете цен произошла ошибка. Пожалуйста, свяжитесь с нами, чтобы исправить проблему и завершить оплату.",
       close: "Закрыть",
       yes: "Да",
       no: "Нет",

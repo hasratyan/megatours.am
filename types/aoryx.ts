@@ -525,6 +525,7 @@ export type BookingInsuranceTraveler = {
     full?: string | null;
     fullEn?: string | null;
     country?: string | null;
+    countryId?: string | null;
     region?: string | null;
     city?: string | null;
   } | null;

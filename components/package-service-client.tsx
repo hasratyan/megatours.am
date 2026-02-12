@@ -892,7 +892,8 @@ export default function PackageServiceClient({ serviceKey }: Props) {
             : t.packageBuilder.checkout.errors.insuranceQuoteFailed;
         const mappedMessage = mapEfesErrorMessage(
           message,
-          t.packageBuilder.insurance.errors
+          t.packageBuilder.insurance.errors,
+          t.packageBuilder.checkout.errors.insuranceQuoteFailed
         );
         setInsuranceQuoteError(mappedMessage);
         updatePackageBuilderState((prev) => {
