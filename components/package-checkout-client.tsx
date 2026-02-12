@@ -11,6 +11,7 @@ import Select, {
 } from "react-select";
 import { useLanguage } from "@/components/language-provider";
 import { ApiError, postJson } from "@/lib/api-helpers";
+import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { Locale as AppLocale } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
 import { getCountryOptions, resolveCountryAlpha2 } from "@/lib/countries";
@@ -1655,10 +1656,10 @@ export default function PackageCheckoutClient() {
         return quote;
       } catch (error) {
         if (requestId !== insuranceQuoteRequestIdRef.current) return null;
-        const message =
-          error instanceof Error
-            ? error.message
-            : t.packageBuilder.checkout.errors.insuranceQuoteFailed;
+        const message = resolveSafeErrorFromUnknown(
+          error,
+          t.packageBuilder.checkout.errors.insuranceQuoteFailed
+        );
         const mappedMessage = mapEfesErrorMessage(
           message,
           t.packageBuilder.insurance.errors,
@@ -2012,8 +2013,7 @@ export default function PackageCheckoutClient() {
       if (error instanceof ApiError && error.code === "duplicate_payment_attempt") {
         return t.packageBuilder.checkout.errors.duplicatePaymentAttempt;
       }
-      const message =
-        error instanceof Error ? error.message : t.packageBuilder.checkout.errors.paymentFailed;
+      const message = resolveSafeErrorFromUnknown(error, t.packageBuilder.checkout.errors.paymentFailed);
       const normalized = message.toLowerCase();
       if (normalized.includes("prebook") || normalized.includes("bookable")) {
         return t.packageBuilder.checkout.errors.prebookInvalid;
@@ -2326,8 +2326,10 @@ export default function PackageCheckoutClient() {
       console.log("[EFES][dev-submit] response", response);
       setDevInsuranceMessage(t.packageBuilder.checkout.devInsuranceSuccess);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : t.packageBuilder.checkout.errors.paymentFailed;
+      const message = resolveSafeErrorFromUnknown(
+        error,
+        t.packageBuilder.checkout.errors.paymentFailed
+      );
       console.error("[EFES][dev-submit] error", error);
       setDevInsuranceMessage(message);
     } finally {

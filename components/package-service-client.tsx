@@ -14,6 +14,7 @@ import { useLanguage } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
 import { mapEfesErrorMessage, resolveEfesErrorKind } from "@/lib/efes-errors";
+import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { postJson } from "@/lib/api-helpers";
 import StarBorder from "@/components/StarBorder";
 import type {
@@ -886,10 +887,10 @@ export default function PackageServiceClient({ serviceKey }: Props) {
         });
       } catch (error) {
         if (requestId !== insuranceQuoteRequestIdRef.current) return;
-        const message =
-          error instanceof Error
-            ? error.message
-            : t.packageBuilder.checkout.errors.insuranceQuoteFailed;
+        const message = resolveSafeErrorFromUnknown(
+          error,
+          t.packageBuilder.checkout.errors.insuranceQuoteFailed
+        );
         const mappedMessage = mapEfesErrorMessage(
           message,
           t.packageBuilder.insurance.errors,
@@ -1262,8 +1263,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
         setTransferOptions(transfers);
       } catch (error) {
         if (!active) return;
-        const message =
-          error instanceof Error ? error.message : t.hotel.addons.transfers.loadFailed;
+        const message = resolveSafeErrorFromUnknown(error, t.hotel.addons.transfers.loadFailed);
         setTransferError(message);
       } finally {
         if (active) setTransferLoading(false);
@@ -1307,8 +1307,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
         }
       } catch (error) {
         if (!active) return;
-        const message =
-          error instanceof Error ? error.message : t.hotel.addons.excursions.loadFailed;
+        const message = resolveSafeErrorFromUnknown(error, t.hotel.addons.excursions.loadFailed);
         setExcursionError(message);
       } finally {
         if (active) setExcursionLoading(false);
@@ -2238,8 +2237,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
         setFlightOffers(Array.isArray(data.offers) ? data.offers : []);
         setFlightMocked(Boolean(data.mock));
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : t.packageBuilder.flights.loadFailed;
+        const message = resolveSafeErrorFromUnknown(error, t.packageBuilder.flights.loadFailed);
         setFlightError(message);
       } finally {
         setFlightLoading(false);

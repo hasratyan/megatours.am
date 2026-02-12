@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { getJson, postJson } from "@/lib/api-helpers";
 import { useLanguage, useTranslations } from "@/components/language-provider";
+import { resolveSafeErrorFromUnknown, resolveSafeErrorMessage } from "@/lib/error-utils";
 import type { Locale } from "@/lib/i18n";
 import type { AoryxHotelOption, FeaturedHotelAdminItem } from "@/lib/featured-hotels";
 
@@ -226,7 +227,7 @@ export default function AdminFeaturedHotelsClient({
       setFeaturedHotels(response.featuredHotels ?? []);
       clearForm();
     } catch (error) {
-      const message = error instanceof Error ? error.message : t.admin.featured.errors.saveFailed;
+      const message = resolveSafeErrorFromUnknown(error, t.admin.featured.errors.saveFailed);
       setFormError(message);
     } finally {
       setSaving(false);
@@ -243,14 +244,16 @@ export default function AdminFeaturedHotelsClient({
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || t.admin.featured.errors.removeFailed);
+        throw new Error(
+          resolveSafeErrorMessage(errorData.error, t.admin.featured.errors.removeFailed)
+        );
       }
       const payload = (await response.json()) as { featuredHotels: FeaturedHotelAdminItem[] };
       setFeaturedHotels(payload.featuredHotels ?? []);
       if (form.hotelCode === hotelCode) clearForm();
     } catch (error) {
       console.error("[AdminFeaturedHotels] Failed to remove hotel", error);
-      setFormError(error instanceof Error ? error.message : t.admin.featured.errors.removeFailed);
+      setFormError(resolveSafeErrorFromUnknown(error, t.admin.featured.errors.removeFailed));
     } finally {
       setRemovingCode(null);
     }

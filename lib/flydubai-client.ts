@@ -5,6 +5,7 @@ import {
   FLYDUBAI_TIMEOUT_MS,
   isFlydubaiConfigured,
 } from "@/lib/env";
+import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import type {
   FlydubaiSearchRequest,
   FlydubaiSearchResponse,
@@ -146,7 +147,11 @@ export async function searchFlydubai(
         typeof errorPayload.error === "string"
           ? errorPayload.error
           : `Flydubai API error: ${response.status} ${response.statusText}`;
-      throw new FlydubaiServiceError(message, response.status, errorPayload);
+      throw new FlydubaiServiceError(
+        resolveSafeErrorMessage(message, "Failed to load flight offers"),
+        response.status,
+        errorPayload
+      );
     }
 
     const data = (await response.json()) as FlydubaiSearchResponse;
@@ -160,8 +165,13 @@ export async function searchFlydubai(
       throw error;
     }
     if (error instanceof Error && error.name === "AbortError") {
-      throw new FlydubaiClientError(`Request timeout after ${FLYDUBAI_TIMEOUT_MS}ms`);
+      throw new FlydubaiClientError("Failed to load flight offers");
     }
-    throw new FlydubaiClientError(error instanceof Error ? error.message : "Unknown error");
+    throw new FlydubaiClientError(
+      resolveSafeErrorMessage(
+        error instanceof Error ? error.message : null,
+        "Failed to load flight offers"
+      )
+    );
   }
 }

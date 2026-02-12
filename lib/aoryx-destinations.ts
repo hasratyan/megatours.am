@@ -1,5 +1,6 @@
 import { AoryxClientError, AoryxServiceError } from "@/lib/aoryx-client";
 import { AORYX_API_KEY, AORYX_BASE_URL, AORYX_CUSTOMER_CODE, AORYX_TIMEOUT_MS } from "@/lib/env";
+import { resolveSafeErrorMessage } from "@/lib/error-utils";
 
 const EXCLUDED_DESTINATION_CODES = new Set(["650", "650-0"]);
 const DEFAULT_LIMIT = 200;
@@ -88,7 +89,10 @@ export async function listAoryxDestinations(
 
     if (!response.ok) {
       throw new AoryxClientError(
-        `Aoryx API error: ${response.status} ${response.statusText}`,
+        resolveSafeErrorMessage(
+          `Aoryx API error: ${response.status} ${response.statusText}`,
+          "Failed to fetch destinations"
+        ),
         "country-info",
         response.status
       );
@@ -103,7 +107,7 @@ export async function listAoryxDestinations(
 
     if (isSuccess === false) {
       throw new AoryxServiceError(
-        exceptionMessage ?? "country-info request failed",
+        resolveSafeErrorMessage(exceptionMessage ?? "country-info request failed", "Failed to fetch destinations"),
         "DESTINATIONS_ERROR",
         numericStatusCode,
         payload
@@ -146,14 +150,16 @@ export async function listAoryxDestinations(
       throw error;
     }
     if (error instanceof Error && error.name === "AbortError") {
-      throw new AoryxClientError(`Request timeout after ${AORYX_TIMEOUT_MS}ms`, "country-info");
+      throw new AoryxClientError("Failed to fetch destinations", "country-info");
     }
     throw new AoryxClientError(
-      error instanceof Error ? error.message : "Failed to fetch destinations",
+      resolveSafeErrorMessage(
+        error instanceof Error ? error.message : null,
+        "Failed to fetch destinations"
+      ),
       "country-info"
     );
   } finally {
     clearTimeout(timeoutId);
   }
 }
-

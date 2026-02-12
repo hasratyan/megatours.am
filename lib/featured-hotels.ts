@@ -165,11 +165,11 @@ export async function searchAoryxHotels(query: string, limit = 40): Promise<Aory
   const db = await getB2bDb();
   const docs = await db.collection<AoryxHotelDoc>("aoryx_hotels").find({}).toArray();
   const normalizedQuery = query.trim().toLowerCase();
+  const safeLimit = Math.max(limit, 1);
 
   const options = docs
     .map((doc) => normalizeAoryxHotelDoc(doc as AoryxHotelDoc))
-    .filter((item): item is NormalizedAoryxHotel => Boolean(item))
-    .filter((item) => (item.rating ?? 0) >= 4 && Boolean(item.imageUrl));
+    .filter((item): item is NormalizedAoryxHotel => Boolean(item));
 
   const filtered = normalizedQuery.length > 0
     ? options.filter((item) => {
@@ -185,13 +185,99 @@ export async function searchAoryxHotels(query: string, limit = 40): Promise<Aory
       })
     : options;
 
-  filtered.sort((a, b) => {
-    const ratingDiff = (b.rating ?? 0) - (a.rating ?? 0);
-    if (ratingDiff !== 0) return ratingDiff;
-    return (a.name ?? "").localeCompare(b.name ?? "");
+  if (normalizedQuery.length > 0) {
+    filtered.sort((a, b) => {
+      const aCode = a.hotelCode.toLowerCase();
+      const bCode = b.hotelCode.toLowerCase();
+      const aName = (a.name ?? "").toLowerCase();
+      const bName = (b.name ?? "").toLowerCase();
+      const aDestination = (a.destinationName ?? "").toLowerCase();
+      const bDestination = (b.destinationName ?? "").toLowerCase();
+
+      const scoreItem = (
+        code: string,
+        name: string,
+        destination: string,
+        rating: number | null,
+        hasImage: boolean
+      ) => {
+        if (code === normalizedQuery || name === normalizedQuery || destination === normalizedQuery) {
+          return 500;
+        }
+        if (name.startsWith(normalizedQuery) || destination.startsWith(normalizedQuery)) {
+          return 400;
+        }
+        if (code.startsWith(normalizedQuery)) {
+          return 350;
+        }
+        let score = 0;
+        if (name.includes(normalizedQuery)) score += 200;
+        if (destination.includes(normalizedQuery)) score += 180;
+        if (code.includes(normalizedQuery)) score += 160;
+        if (hasImage) score += 20;
+        score += Math.max(rating ?? 0, 0);
+        return score;
+      };
+
+      const scoreA = scoreItem(aCode, aName, aDestination, a.rating, Boolean(a.imageUrl));
+      const scoreB = scoreItem(bCode, bName, bDestination, b.rating, Boolean(b.imageUrl));
+      if (scoreA !== scoreB) return scoreB - scoreA;
+
+      const ratingDiff = (b.rating ?? 0) - (a.rating ?? 0);
+      if (ratingDiff !== 0) return ratingDiff;
+      return (a.name ?? a.hotelCode).localeCompare(b.name ?? b.hotelCode);
+    });
+
+    return filtered.slice(0, safeLimit).map((item) => ({
+      hotelCode: item.hotelCode,
+      name: item.name ?? null,
+      destinationName: item.destinationName ?? null,
+      rating: item.rating ?? null,
+      imageUrl: item.imageUrl ?? null,
+      masterHotelAmenities: item.masterHotelAmenities,
+    }));
+  }
+
+  const destinationGroups = new Map<string, NormalizedAoryxHotel[]>();
+  for (const item of filtered) {
+    const key = item.destinationName?.trim().toLowerCase() || "__unknown__";
+    const existing = destinationGroups.get(key) ?? [];
+    existing.push(item);
+    destinationGroups.set(key, existing);
+  }
+
+  const sortedDestinations = Array.from(destinationGroups.keys()).sort((a, b) => {
+    if (a === "__unknown__") return 1;
+    if (b === "__unknown__") return -1;
+    return a.localeCompare(b);
   });
 
-  return filtered.slice(0, Math.max(limit, 1)).map((item) => ({
+  for (const hotels of destinationGroups.values()) {
+    hotels.sort((a, b) => {
+      const imageDiff = Number(Boolean(b.imageUrl)) - Number(Boolean(a.imageUrl));
+      if (imageDiff !== 0) return imageDiff;
+      const ratingDiff = (b.rating ?? 0) - (a.rating ?? 0);
+      if (ratingDiff !== 0) return ratingDiff;
+      return (a.name ?? a.hotelCode).localeCompare(b.name ?? b.hotelCode);
+    });
+  }
+
+  const ranked: NormalizedAoryxHotel[] = [];
+  while (ranked.length < safeLimit) {
+    let pulled = false;
+    for (const destination of sortedDestinations) {
+      if (ranked.length >= safeLimit) break;
+      const hotels = destinationGroups.get(destination);
+      if (!hotels || hotels.length === 0) continue;
+      const nextHotel = hotels.shift();
+      if (!nextHotel) continue;
+      ranked.push(nextHotel);
+      pulled = true;
+    }
+    if (!pulled) break;
+  }
+
+  return ranked.map((item) => ({
     hotelCode: item.hotelCode,
     name: item.name ?? null,
     destinationName: item.destinationName ?? null,
@@ -204,6 +290,7 @@ export async function searchAoryxHotels(query: string, limit = 40): Promise<Aory
 export async function getFeaturedHotelSelections(): Promise<FeaturedHotelSelection[]> {
   const db = await getDb();
   const docs = await db.collection("home_featured_hotels").find({}).sort({ createdAt: 1 }).toArray();
+  type TranslationSource = Record<string, { badge?: unknown; availability?: unknown } | undefined>;
   return docs.map((doc) => ({
     hotelCode: toStringValue(doc.hotelCode) ?? "",
     priceFrom: toNumberValue(doc.priceFrom) ?? 0,
@@ -215,16 +302,16 @@ export async function getFeaturedHotelSelections(): Promise<FeaturedHotelSelecti
     translations: typeof doc.translations === "object" && doc.translations
       ? {
           hy: {
-            badge: toStringValue((doc.translations as Record<string, any>).hy?.badge) ?? "",
-            availability: toStringValue((doc.translations as Record<string, any>).hy?.availability) ?? "",
+            badge: toStringValue((doc.translations as TranslationSource).hy?.badge) ?? "",
+            availability: toStringValue((doc.translations as TranslationSource).hy?.availability) ?? "",
           },
           en: {
-            badge: toStringValue((doc.translations as Record<string, any>).en?.badge) ?? "",
-            availability: toStringValue((doc.translations as Record<string, any>).en?.availability) ?? "",
+            badge: toStringValue((doc.translations as TranslationSource).en?.badge) ?? "",
+            availability: toStringValue((doc.translations as TranslationSource).en?.availability) ?? "",
           },
           ru: {
-            badge: toStringValue((doc.translations as Record<string, any>).ru?.badge) ?? "",
-            availability: toStringValue((doc.translations as Record<string, any>).ru?.availability) ?? "",
+            badge: toStringValue((doc.translations as TranslationSource).ru?.badge) ?? "",
+            availability: toStringValue((doc.translations as TranslationSource).ru?.availability) ?? "",
           },
         }
       : buildTranslationFallback(),

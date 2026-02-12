@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("query")?.trim() ?? "";
     const limitParam = Number(searchParams.get("limit"));
-    const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 100) : 40;
+    const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 500) : 200;
 
     const hotels = await searchAoryxHotels(query, limit);
     return NextResponse.json({ hotels });
