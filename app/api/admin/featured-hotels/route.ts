@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin";
 import { getDb } from "@/lib/db";
-import { getFeaturedHotelAdminItems } from "@/lib/featured-hotels";
+import {
+  FEATURED_HOTELS_CACHE_TAG,
+  getFeaturedHotelAdminItems,
+} from "@/lib/featured-hotels";
 import { locales, type Locale } from "@/lib/i18n";
 
 export const runtime = "nodejs";
@@ -51,6 +54,7 @@ const hasMissingTranslations = (translations: Record<Locale, { badge: string; av
   );
 
 const revalidateFeaturedHotelPages = () => {
+  revalidateTag(FEATURED_HOTELS_CACHE_TAG, "max");
   for (const locale of locales) {
     revalidatePath(`/${locale}`);
   }

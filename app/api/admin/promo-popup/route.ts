@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin";
-import { getPromoPopupAdminConfig, savePromoPopupConfig } from "@/lib/promo-popup";
+import {
+  getPromoPopupAdminConfig,
+  PROMO_POPUP_CACHE_TAG,
+  savePromoPopupConfig,
+} from "@/lib/promo-popup";
 
 export const runtime = "nodejs";
 
@@ -32,6 +37,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}));
     const config = await savePromoPopupConfig(body?.config ?? null);
+    revalidateTag(PROMO_POPUP_CACHE_TAG, "max");
     return NextResponse.json({ config });
   } catch (error) {
     console.error("[AdminPromoPopup] Failed to save config", error);
