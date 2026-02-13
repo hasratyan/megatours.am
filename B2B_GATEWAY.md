@@ -13,6 +13,8 @@ This repository now includes a versioned B2B API gateway exposed at root paths:
 - `POST /v1/excursions/search`
 - `POST /v1/insurance/quote`
 
+For partner engineering teams, start with `/PARTNER_QUICKSTART.md` and then use `/b2b-openapi.yaml` for full schema details.
+
 The gateway sits in front of supplier APIs (Aoryx/Efes). Partner clients never receive supplier credentials.
 
 ## Domain and deployment
@@ -27,6 +29,56 @@ Important:
 - Configure DNS `A/AAAA/CNAME` for `megatours.cloud` to your deployment.
 - Enable TLS for `megatours.cloud`.
 - If you also serve other apps on this host, keep `/v1/*` routed to this Next.js app.
+
+## Fast start (15 minutes)
+
+1. Import `/b2b-openapi.yaml` into Postman or Swagger.
+2. Set base URL to `https://megatours.cloud`.
+3. Set `Authorization: Bearer <partner_token>` for all protected requests.
+4. Call `GET /v1/health` and expect `200`.
+5. Call `GET /v1/destinations?countryCode=AE&q=dubai&limit=20` and pick a destination code ending with `-0` (example: `160-0`).
+6. Run hotel flow in sequence:
+`POST /v1/hotels/search` -> `POST /v1/hotels/room-details` -> `POST /v1/hotels/prebook` -> `POST /v1/hotels/book`.
+7. If booking includes addons, add:
+`POST /v1/transfers/search`, `POST /v1/excursions/search`, `POST /v1/insurance/quote`.
+8. Log `x-request-id` from every response for support and incident tracking.
+
+## Scope matrix
+
+- `hotels:search`
+  Grants: `/v1/destinations`, `/v1/hotels/search`, `/v1/hotels/info`, `/v1/hotels/room-details`, `/v1/hotels/prebook`, `/v1/transfers/search`, `/v1/excursions/search`
+- `hotels:book`
+  Grants: `/v1/hotels/book`
+- `insurance:quote`
+  Grants: `/v1/insurance/quote`, and insurance block inside `/v1/hotels/book`
+- `*`
+  Grants all endpoints
+
+## Request conventions
+
+- Dates: `YYYY-MM-DD` (example: `2026-03-10`)
+- Date-time (transfer flight fields): ISO date-time with timezone (example: `2026-03-10T08:30:00+04:00`)
+- Destination code for hotel search: top-level supplier code ending with `-0` (example: `160-0`)
+- HTTP method rules:
+  - `GET`: `/v1/health`, `/v1/destinations`
+  - `POST`: all other `/v1/*` endpoints
+- Required headers on protected endpoints:
+  - `Authorization: Bearer <partner_token>`
+  - `Content-Type: application/json` for `POST`
+- Response wrapper shape:
+  - Success: `{ "requestId": "...", "data": ... }`
+  - Error: `{ "error": "...", "requestId": "...", "code": "..."? }`
+
+## Retry and timeout guidance
+
+- Retryable statuses: `429`, `500`, `502`
+- Non-retryable statuses: `400`, `401`, `403`, `405`
+- Backoff policy: exponential backoff with jitter (for example: 500ms, 1s, 2s, 4s)
+- Respect rate-limit headers:
+  - `x-ratelimit-limit`
+  - `x-ratelimit-remaining`
+  - `x-ratelimit-reset`
+- Use idempotent partner `customerRefNumber` in booking requests to prevent duplicate orders after retries.
 
 ## Auth model (implemented)
 
@@ -64,23 +116,50 @@ B2B_API_CLIENTS_JSON=[{"id":"partner-a","name":"Partner A","token":"replace_with
 # B2B_API_TOKEN=replace_with_single_shared_token
 ```
 
-Hotel markup for B2B API prices is read from `settings` collection in this order:
-
-- `aoryxHotelsB2BPlatformFee`
-- `aoryx.hotelsB2BPlatformFee`
-- fallback to existing B2C hotel fee fields if B2B fields are missing
-
-Excursion platform fee for B2B API is read in this order:
-
-- `aoryxExcursionsB2BPlatformFee`
-- `aoryx.excursionsB2BPlatformFee`
-- fallback to existing B2C/general excursion fee fields if B2B fields are missing
-
 Generate strong tokens:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
+
+## Required fields quick reference
+
+All protected endpoints require:
+
+- `Authorization: Bearer <partner_token>`
+- `Content-Type: application/json` for `POST` endpoints
+
+Endpoint requirements:
+
+- `GET /v1/health`
+  Required query/body fields: none.
+- `GET /v1/destinations`
+  Required query/body fields: none.
+  Optional query fields: `countryCode`, `q`, `limit`.
+- `POST /v1/hotels/search`
+  Required fields: `checkInDate`, `checkOutDate`, and one of `destinationCode` or `hotelCode`.
+  Optional fields: `countryCode`, `nationality`, `currency`, `rooms`.
+- `POST /v1/hotels/info`
+  Required fields: `hotelCode`.
+- `POST /v1/hotels/room-details`
+  Required fields: `hotelCode`, `checkInDate`, `checkOutDate`.
+  Optional fields: `destinationCode`, `countryCode`, `nationality`, `currency`, `rooms`.
+- `POST /v1/hotels/prebook`
+  Required fields: `hotelCode`, `rateKeys[]`.
+  If `rateKeys` are raw supplier keys (not opaque tokens), also required: `sessionId`, `groupCode`.
+- `POST /v1/hotels/book`
+  Required top-level fields: `hotelCode`, `destinationCode`, `rooms[]`.
+  Required per room: `roomIdentifier`, `adults`, `rateKey`, `guests[]`, `price.gross`, `price.net`.
+  Optional addons: `transferSelection`, `excursions`, `insurance`.
+- `POST /v1/transfers/search`
+  Required fields: one of `destinationLocationCode` or `destinationName`.
+  Optional fields: `transferType`, `paxCount`, `travelDate`.
+- `POST /v1/excursions/search`
+  Required fields: none.
+  Optional fields: `limit`.
+- `POST /v1/insurance/quote`
+  Required top-level fields: `startDate`, `endDate`, `territoryCode`, `riskAmount`, `riskCurrency`, `travelers[]`.
+  Required per traveler: `age`.
 
 ## Request examples
 
@@ -94,8 +173,6 @@ curl -s https://megatours.cloud/v1/health
 
 Use supplier destination codes (example: `160-0` for Dubai).  
 You can fetch valid destination codes from `GET /v1/destinations` (this endpoint returns only top-level codes ending with `-0`).
-Hotel prices returned by `/v1/hotels/search`, `/v1/hotels/room-details`, and `/v1/hotels/prebook`
-already include Megatours platform markup (raw supplier rates are not exposed).
 
 ```bash
 curl -s https://megatours.cloud/v1/hotels/search \
@@ -181,7 +258,6 @@ Insurance input rules (for `insurance.provider = "efes"`):
   `firstName`, `lastName`, `gender`, `birthDate`, `passportNumber`, `passportAuthority`,
   `passportIssueDate`, `passportExpiryDate`, `residency`, `citizenship`,
   `mobilePhone`, `email`, `premium`, `premiumCurrency`, and `address.{full,country,region,city}`
-- EFES internal/default fields are set server-side by Megatours.
 
 ```bash
 curl -s https://megatours.cloud/v1/hotels/book \
@@ -396,7 +472,7 @@ Common API errors:
 `x-ratelimit-limit`, `x-ratelimit-remaining`, `x-ratelimit-reset`.
 6. Rotate tokens periodically and immediately after any exposure.
 
-## Security notes
+## Security
 
 - Supplier keys stay server-side in existing environment variables.
 - `/v1/*` is excluded from locale middleware redirects.

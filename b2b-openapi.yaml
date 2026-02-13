@@ -1,9 +1,19 @@
 openapi: 3.1.0
 info:
   title: Megatours B2B Gateway API
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Public B2B gateway for Megatours suppliers. All supplier calls are brokered by Megatours.
+    Integration order:
+    1) GET /v1/destinations
+    2) POST /v1/hotels/search
+    3) POST /v1/hotels/room-details
+    4) POST /v1/hotels/prebook
+    5) POST /v1/hotels/book
+    Optional addons:
+    - POST /v1/transfers/search
+    - POST /v1/excursions/search
+    - POST /v1/insurance/quote
   license:
     name: Proprietary
     url: https://megatours.cloud
@@ -11,11 +21,26 @@ servers:
   - url: https://megatours.cloud
 security:
   - bearerAuth: []
+tags:
+  - name: System
+    description: Service health and technical checks.
+  - name: Hotels
+    description: Hotel search, details, prebook, and booking endpoints.
+  - name: Catalog
+    description: Destination lookup for hotel search.
+  - name: Transfers
+    description: Local transfer search endpoints.
+  - name: Excursions
+    description: Local excursion search endpoints.
+  - name: Insurance
+    description: EFES quote and booking-related insurance payloads.
 paths:
   /v1/health:
     get:
       operationId: getHealth
       summary: Health status
+      tags:
+        - System
       security: []
       responses:
         "200":
@@ -47,6 +72,8 @@ paths:
     get:
       operationId: getDestinations
       summary: List supplier destination codes for hotel search
+      tags:
+        - Catalog
       description: Returns top-level destination codes only (codes ending with `-0`).
       x-required-scope: hotels:search
       parameters:
@@ -113,7 +140,11 @@ paths:
     post:
       operationId: postHotelRoomDetails
       summary: Get room options with policies and meal/cancellation facets
-      description: Room prices in response include Megatours platform markup.
+      tags:
+        - Hotels
+      description: |
+        Required body fields: `hotelCode`, `checkInDate`, `checkOutDate`.
+        Optional body fields: `destinationCode`, `countryCode`, `nationality`, `currency`, `rooms`.
       x-required-scope: hotels:search
       requestBody:
         required: true
@@ -121,6 +152,27 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/HotelRoomDetailsRequest"
+            examples:
+              minimal_required:
+                summary: Minimal required payload
+                value:
+                  hotelCode: "71190"
+                  checkInDate: "2026-03-10"
+                  checkOutDate: "2026-03-15"
+              with_occupancy:
+                summary: With destination and room occupancy
+                value:
+                  hotelCode: "71190"
+                  destinationCode: "160-0"
+                  countryCode: "AE"
+                  nationality: "AM"
+                  currency: "USD"
+                  checkInDate: "2026-03-10"
+                  checkOutDate: "2026-03-15"
+                  rooms:
+                    - roomIdentifier: 1
+                      adults: 2
+                      childrenAges: []
       responses:
         "200":
           description: Room options and filter facets
@@ -162,6 +214,10 @@ paths:
     post:
       operationId: postHotelInfo
       summary: Get detailed hotel metadata
+      tags:
+        - Hotels
+      description: |
+        Required body fields: `hotelCode`.
       x-required-scope: hotels:search
       requestBody:
         required: true
@@ -169,6 +225,11 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/HotelInfoRequest"
+            examples:
+              minimal_required:
+                summary: Minimal required payload
+                value:
+                  hotelCode: "71190"
       responses:
         "200":
           description: Hotel information
@@ -208,7 +269,11 @@ paths:
     post:
       operationId: postHotelPrebook
       summary: Validate selected room rates and return bookable result
-      description: Prebook prices in response include Megatours platform markup.
+      tags:
+        - Hotels
+      description: |
+        Required body fields: `hotelCode`, `rateKeys[]`.
+        If you send raw supplier rate keys (not opaque tokens), also send `sessionId` and `groupCode`.
       x-required-scope: hotels:search
       requestBody:
         required: true
@@ -216,6 +281,21 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/HotelsPrebookRequest"
+            examples:
+              minimal_required:
+                summary: Minimal payload with rate tokens
+                value:
+                  hotelCode: "71190"
+                  rateKeys:
+                    - "<room_rate_token_1>"
+              raw_rate_keys:
+                summary: Raw supplier rate keys (requires sessionId and groupCode)
+                value:
+                  sessionId: "<supplier_session_id>"
+                  hotelCode: "71190"
+                  groupCode: 12345
+                  rateKeys:
+                    - "<supplier_rate_key_1>"
       responses:
         "200":
           description: Prebook result with refreshed room options/facets
@@ -259,10 +339,14 @@ paths:
     post:
       operationId: postHotelBook
       summary: Complete hotel booking with selected rates and guests
+      tags:
+        - Hotels
       description: |
         Books hotel inventory through Aoryx and optionally processes local services:
         transfer booking, excursion booking, and EFES insurance policy issuance.
-        For insurance, partners should send traveler form inputs; EFES internal/default fields are filled server-side.
+        For insurance, partners should send traveler form inputs.
+        Required top-level body fields: `hotelCode`, `destinationCode`, `rooms[]`.
+        Required room fields: `roomIdentifier`, `adults`, `rateKey`, `guests[]`, `price{gross,net}`.
       x-error-catalog:
         - status: 400
           error: Invalid JSON payload
@@ -292,6 +376,30 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/HotelsBookRequest"
+            examples:
+              minimal_required:
+                summary: Minimal required payload
+                value:
+                  hotelCode: "71190"
+                  destinationCode: "160-0"
+                  checkInDate: "2026-03-10"
+                  checkOutDate: "2026-03-15"
+                  customerRefNumber: "PARTNER-1001"
+                  rooms:
+                    - roomIdentifier: 1
+                      adults: 2
+                      childrenAges: []
+                      rateKey: "<room_rate_token_1>"
+                      guests:
+                        - firstName: "John"
+                          lastName: "Doe"
+                          type: "Adult"
+                          age: 33
+                          isLeadGuest: true
+                      price:
+                        gross: 500
+                        net: 450
+                        tax: 50
       responses:
         "200":
           description: Booking result
@@ -338,7 +446,11 @@ paths:
     post:
       operationId: postHotelSearch
       summary: Search hotels through Aoryx
-      description: Hotel minPrice values include Megatours platform markup.
+      tags:
+        - Hotels
+      description: |
+        Required body fields: `checkInDate`, `checkOutDate`, and one of `destinationCode` or `hotelCode`.
+        Optional body fields: `countryCode`, `nationality`, `currency`, `rooms`.
       x-required-scope: hotels:search
       requestBody:
         required: true
@@ -346,6 +458,33 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/HotelSearchRequest"
+            examples:
+              by_destination:
+                summary: Search by destination
+                value:
+                  destinationCode: "160-0"
+                  countryCode: "AE"
+                  nationality: "AM"
+                  currency: "USD"
+                  checkInDate: "2026-03-10"
+                  checkOutDate: "2026-03-15"
+                  rooms:
+                    - roomIdentifier: 1
+                      adults: 2
+                      childrenAges: []
+              by_hotel:
+                summary: Search by specific hotel code
+                value:
+                  hotelCode: "71190"
+                  countryCode: "AE"
+                  nationality: "AM"
+                  currency: "USD"
+                  checkInDate: "2026-03-10"
+                  checkOutDate: "2026-03-15"
+                  rooms:
+                    - roomIdentifier: 1
+                      adults: 2
+                      childrenAges: []
       responses:
         "200":
           description: Search results
@@ -387,6 +526,11 @@ paths:
     post:
       operationId: postTransferSearch
       summary: Search transfer options with facets
+      tags:
+        - Transfers
+      description: |
+        Required body field: one of `destinationLocationCode` or `destinationName`.
+        Optional body fields: `transferType`, `paxCount`, `travelDate`.
       x-required-scope: hotels:search
       requestBody:
         required: true
@@ -394,6 +538,19 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/TransfersSearchRequest"
+            examples:
+              by_location_code:
+                summary: Search by destination location code
+                value:
+                  destinationLocationCode: "160-0"
+                  transferType: "INDIVIDUAL"
+                  paxCount: 2
+                  travelDate: "2026-03-10"
+              by_destination_name:
+                summary: Search by destination name
+                value:
+                  destinationName: "Dubai"
+                  paxCount: 2
       responses:
         "200":
           description: Transfer search result
@@ -433,6 +590,11 @@ paths:
     post:
       operationId: postExcursionSearch
       summary: Search excursions with facets
+      tags:
+        - Excursions
+      description: |
+        Body is optional.
+        Optional body field: `limit` (default 200, max 200).
       x-required-scope: hotels:search
       requestBody:
         required: false
@@ -440,6 +602,11 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/ExcursionsSearchRequest"
+            examples:
+              default_limit:
+                summary: Optional payload with explicit limit
+                value:
+                  limit: 50
       responses:
         "200":
           description: Excursion search result
@@ -477,6 +644,11 @@ paths:
     post:
       operationId: postInsuranceQuote
       summary: Get travel insurance quote through Efes
+      tags:
+        - Insurance
+      description: |
+        Required body fields: `startDate`, `endDate`, `territoryCode`, `riskAmount`, `riskCurrency`, `travelers[]`.
+        Traveler required field for quote: `age`.
       x-required-scope: insurance:quote
       requestBody:
         required: true
@@ -484,6 +656,34 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/InsuranceQuoteRequest"
+            examples:
+              minimal_required:
+                summary: Minimal required payload
+                value:
+                  startDate: "2026-03-10"
+                  endDate: "2026-03-15"
+                  territoryCode: "25"
+                  riskAmount: 15000
+                  riskCurrency: "EUR"
+                  travelers:
+                    - id: "t1"
+                      age: 33
+              with_optional_fields:
+                summary: With optional fields
+                value:
+                  startDate: "2026-03-10"
+                  endDate: "2026-03-15"
+                  territoryCode: "25"
+                  riskAmount: 15000
+                  riskCurrency: "EUR"
+                  riskLabel: "STANDARD"
+                  days: 6
+                  subrisks:
+                    - "BAGGAGE_EXPENCES"
+                  travelers:
+                    - id: "t1"
+                      age: 33
+                      passportNumber: "AB1234567"
       responses:
         "200":
           description: Insurance quote result
@@ -757,10 +957,10 @@ components:
           type: [string, "null"]
         totalPrice:
           type: [number, "null"]
-          description: Public sell rate after Megatours platform markup.
+          description: Final partner-facing rate.
         displayTotalPrice:
           type: [number, "null"]
-          description: Public sell rate after Megatours platform markup (same pricing view as totalPrice).
+          description: Final partner-facing rate (same pricing view as totalPrice).
         availableRooms:
           type: [number, "null"]
         cancellationPolicy:
@@ -913,6 +1113,7 @@ components:
           description: Required when using raw rate keys; optional when using rate tokens.
         rateKeys:
           type: array
+          minItems: 1
           items:
             type: string
           description: |
@@ -1042,6 +1243,7 @@ components:
           description: Optional when rateKey tokens contain the group.
         rooms:
           type: array
+          minItems: 1
           items:
             $ref: "#/components/schemas/HotelsBookRoom"
         transferSelection:
@@ -1249,6 +1451,11 @@ components:
       required:
         - checkInDate
         - checkOutDate
+      anyOf:
+        - required:
+            - destinationCode
+        - required:
+            - hotelCode
     HotelSummary:
       type: object
       properties:
@@ -1258,7 +1465,7 @@ components:
           type: [string, "null"]
         minPrice:
           type: [number, "null"]
-          description: Public sell rate after Megatours platform markup.
+          description: Final partner-facing rate.
         currency:
           type: [string, "null"]
         rating:
@@ -1360,6 +1567,11 @@ components:
         travelDate:
           type: [string, "null"]
       description: destinationLocationCode or destinationName is required.
+      anyOf:
+        - required:
+            - destinationLocationCode
+        - required:
+            - destinationName
     TransfersSearchResponse:
       type: object
       properties:
@@ -1553,7 +1765,6 @@ components:
       description: |
         EFES policy issuance payload for `/v1/hotels/book`.
         Partners should send traveler fields captured from UI inputs.
-        Internal/defaulted EFES fields are resolved server-side.
       properties:
         provider:
           type: [string, "null"]
@@ -1611,6 +1822,7 @@ components:
           type: [string, "null"]
         travelers:
           type: array
+          minItems: 1
           items:
             $ref: "#/components/schemas/HotelsBookInsuranceTravelerInput"
       required:
@@ -1657,6 +1869,7 @@ components:
           type: [string, "null"]
         travelers:
           type: array
+          minItems: 1
           items:
             $ref: "#/components/schemas/InsuranceTraveler"
         subrisks:

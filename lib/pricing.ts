@@ -87,6 +87,20 @@ const normalizePercent = (raw: number | null): number => {
   return raw > 1 ? raw / 100 : raw;
 };
 
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+const getSettingsRecords = async (): Promise<Record<string, unknown>[]> => {
+  const db = await getDb();
+  const docs = await db
+    .collection("settings")
+    .find({})
+    .sort({ updatedAt: -1, _id: -1 })
+    .limit(20)
+    .toArray();
+  return docs.map((doc) => asRecord(doc));
+};
+
 export { convertToAmd } from "@/lib/currency";
 
 async function fetchAmdRates(): Promise<AmdRates> {
@@ -162,22 +176,23 @@ export async function getAoryxHotelPlatformFee(): Promise<number> {
 
 export async function getAoryxHotelB2BPlatformFee(): Promise<number> {
   try {
-    const db = await getDb();
-    const doc = await db.collection("settings").findOne({});
-    const record = (doc as Record<string, unknown>) ?? {};
-    const aoryx = (record.aoryx as Record<string, unknown>) ?? {};
-    const b2b = (record.b2b as Record<string, unknown>) ?? {};
-
-    const rawHotel =
-      toNumber(record.aoryxHotelsB2BPlatformFee) ??
-      toNumber(aoryx.hotelsB2BPlatformFee) ??
-      toNumber(b2b.aoryxHotelsPlatformFee) ??
-      toNumber(record.aoryxHotelsB2CPlatformFee) ??
-      toNumber(aoryx.hotelsB2CPlatformFee) ??
-      toNumber(aoryx.hotelsPlatformFee) ??
-      toNumber(record.aoryxHotelsPlatformFee);
-
-    return normalizePercent(rawHotel);
+    const records = await getSettingsRecords();
+    for (const record of records) {
+      const aoryx = asRecord(record.aoryx);
+      const b2b = asRecord(record.b2b);
+      const rawHotel =
+        toNumber(record.aoryxHotelsB2BPlatformFee) ??
+        toNumber(aoryx.hotelsB2BPlatformFee) ??
+        toNumber(b2b.aoryxHotelsPlatformFee) ??
+        toNumber(record.aoryxHotelsB2CPlatformFee) ??
+        toNumber(aoryx.hotelsB2CPlatformFee) ??
+        toNumber(aoryx.hotelsPlatformFee) ??
+        toNumber(record.aoryxHotelsPlatformFee);
+      if (rawHotel !== null) {
+        return normalizePercent(rawHotel);
+      }
+    }
+    return 0;
   } catch (error) {
     console.error("[Pricing] Failed to fetch B2B platform fee", error);
     return 0;
@@ -216,22 +231,23 @@ export async function getAoryxExcursionPlatformFee(): Promise<number> {
 
 export async function getAoryxExcursionB2BPlatformFee(): Promise<number> {
   try {
-    const db = await getDb();
-    const doc = await db.collection("settings").findOne({});
-    const record = (doc as Record<string, unknown>) ?? {};
-    const aoryx = (record.aoryx as Record<string, unknown>) ?? {};
-    const b2b = (record.b2b as Record<string, unknown>) ?? {};
-
-    const rawExcursions =
-      toNumber(record.aoryxExcursionsB2BPlatformFee) ??
-      toNumber(aoryx.excursionsB2BPlatformFee) ??
-      toNumber(b2b.aoryxExcursionsPlatformFee) ??
-      toNumber(record.aoryxExcursionsB2CPlatformFee) ??
-      toNumber(aoryx.excursionsB2CPlatformFee) ??
-      toNumber(record.aoryxExcursionsPlatformFee) ??
-      toNumber(aoryx.excursionsPlatformFee);
-
-    return rawExcursions ?? 0;
+    const records = await getSettingsRecords();
+    for (const record of records) {
+      const aoryx = asRecord(record.aoryx);
+      const b2b = asRecord(record.b2b);
+      const rawExcursions =
+        toNumber(record.aoryxExcursionsB2BPlatformFee) ??
+        toNumber(aoryx.excursionsB2BPlatformFee) ??
+        toNumber(b2b.aoryxExcursionsPlatformFee) ??
+        toNumber(record.aoryxExcursionsB2CPlatformFee) ??
+        toNumber(aoryx.excursionsB2CPlatformFee) ??
+        toNumber(record.aoryxExcursionsPlatformFee) ??
+        toNumber(aoryx.excursionsPlatformFee);
+      if (rawExcursions !== null) {
+        return rawExcursions;
+      }
+    }
+    return 0;
   } catch (error) {
     console.error("[Pricing] Failed to fetch B2B excursion platform fee", error);
     return 0;
