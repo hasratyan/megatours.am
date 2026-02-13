@@ -81,7 +81,7 @@ curl -s https://megatours.cloud/v1/health
 ### 2) Aoryx hotel search
 
 Use supplier destination codes (example: `160-0` for Dubai).  
-You can fetch valid destination codes from `GET /v1/destinations`.
+You can fetch valid destination codes from `GET /v1/destinations` (this endpoint returns only top-level codes ending with `-0`).
 
 ```bash
 curl -s https://megatours.cloud/v1/hotels/search \

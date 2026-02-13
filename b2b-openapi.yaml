@@ -47,6 +47,7 @@ paths:
     get:
       operationId: getDestinations
       summary: List supplier destination codes for hotel search
+      description: Returns top-level destination codes only (codes ending with `-0`).
       x-required-scope: hotels:search
       parameters:
         - name: countryCode
@@ -1271,7 +1272,9 @@ components:
       properties:
         destinationCode:
           type: string
+          pattern: ".*-0$"
           example: "160-0"
+          description: Top-level destination code. Only values ending with `-0` are returned.
         name:
           type: string
           example: Dubai
