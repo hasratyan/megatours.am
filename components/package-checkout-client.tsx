@@ -68,6 +68,15 @@ type InsuranceTravelerFieldErrors = {
   birthDate?: string;
 };
 
+type TransferFlightDetailsForm = {
+  flightNumber: string;
+  arrivalDateTime: string;
+  departureFlightNumber: string;
+  departureDateTime: string;
+};
+
+type TransferFlightFieldErrors = Partial<Record<keyof TransferFlightDetailsForm, string>>;
+
 type BookingPayloadInput = Omit<AoryxBookingPayload, "sessionId" | "groupCode"> & {
   sessionId?: string;
   groupCode?: number;
@@ -582,6 +591,12 @@ const buildGuestDetails = (
 const CHECKOUT_DRAFTS_STORAGE_KEY = "megatours-checkout-drafts";
 const CHECKOUT_DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_CHECKOUT_DRAFT_COUNT = 20;
+const EMPTY_TRANSFER_FLIGHT_DETAILS: TransferFlightDetailsForm = {
+  flightNumber: "",
+  arrivalDateTime: "",
+  departureFlightNumber: "",
+  departureDateTime: "",
+};
 
 type CheckoutDraft = {
   version: 1;
@@ -764,6 +779,10 @@ export default function PackageCheckoutClient() {
     address: "",
     zip: "",
   });
+  const [transferFlightDetails, setTransferFlightDetails] = useState<TransferFlightDetailsForm>(
+    EMPTY_TRANSFER_FLIGHT_DETAILS
+  );
+  const [transferFieldErrors, setTransferFieldErrors] = useState<TransferFlightFieldErrors>({});
   const [insuranceTravelers, setInsuranceTravelers] = useState<InsuranceTravelerForm[]>([]);
   const [efesCountries, setEfesCountries] = useState<EfesCountry[]>([]);
   const [efesCountriesLoading, setEfesCountriesLoading] = useState(false);
@@ -915,6 +934,25 @@ export default function PackageCheckoutClient() {
   const excursion = builderState.excursion;
   const insuranceSelection = builderState.insurance;
   const insuranceActive = insuranceSelection?.selected === true;
+  useEffect(() => {
+    if (transfer?.selected === true) return;
+    setTransferFieldErrors({});
+    setTransferFlightDetails(EMPTY_TRANSFER_FLIGHT_DETAILS);
+  }, [transfer?.selected]);
+
+  useEffect(() => {
+    if (transfer?.includeReturn === true) return;
+    setTransferFieldErrors((prev) => {
+      if (!prev.departureFlightNumber && !prev.departureDateTime) {
+        return prev;
+      }
+      return {
+        ...prev,
+        departureFlightNumber: undefined,
+        departureDateTime: undefined,
+      };
+    });
+  }, [transfer?.includeReturn]);
   const prebookReturnHref = useMemo(() => {
     if (!hotel?.selected) return null;
     const hotelCode = hotel.hotelCode?.trim() ?? "";
@@ -1492,6 +1530,43 @@ export default function PackageCheckoutClient() {
     );
   };
 
+  const updateTransferFlightField = useCallback(
+    (field: keyof TransferFlightDetailsForm, value: string) => {
+      setTransferFlightDetails((prev) => ({
+        ...prev,
+        [field]: value,
+      }));
+      setTransferFieldErrors((prev) => {
+        if (!prev[field]) return prev;
+        return {
+          ...prev,
+          [field]: undefined,
+        };
+      });
+    },
+    []
+  );
+
+  const resolveTransferFlightFieldErrors = useCallback((): TransferFlightFieldErrors => {
+    if (transfer?.selected !== true) return {};
+    const errors: TransferFlightFieldErrors = {};
+    if (!transferFlightDetails.flightNumber.trim()) {
+      errors.flightNumber = t.hotel.addons.transfers.flightNumberRequired;
+    }
+    if (!transferFlightDetails.arrivalDateTime.trim()) {
+      errors.arrivalDateTime = t.hotel.addons.transfers.arrivalRequired;
+    }
+    if (transfer?.includeReturn) {
+      if (!transferFlightDetails.departureFlightNumber.trim()) {
+        errors.departureFlightNumber = t.hotel.addons.transfers.departureFlightNumberRequired;
+      }
+      if (!transferFlightDetails.departureDateTime.trim()) {
+        errors.departureDateTime = t.hotel.addons.transfers.departureRequired;
+      }
+    }
+    return errors;
+  }, [t, transfer?.selected, transfer?.includeReturn, transferFlightDetails]);
+
   const normalizeOptional = (value: string | null | undefined) => {
     if (typeof value !== "string") return null;
     const trimmed = value.trim();
@@ -2004,6 +2079,14 @@ export default function PackageCheckoutClient() {
       return;
     }
 
+    const transferValidationErrors = resolveTransferFlightFieldErrors();
+    if (Object.keys(transferValidationErrors).length > 0) {
+      setTransferFieldErrors(transferValidationErrors);
+      setPaymentError(t.hotel.addons.transfers.detailsRequired);
+      return;
+    }
+    setTransferFieldErrors({});
+
     if (insuranceActive && !insuranceDetailsValid) {
       setPaymentError(t.packageBuilder.checkout.errors.insuranceDetailsRequired);
       return;
@@ -2089,6 +2172,11 @@ export default function PackageCheckoutClient() {
                       }
                     : undefined);
                 const pricingSource = transferSelection.pricing ?? null;
+                const transferFlightNumber = transferFlightDetails.flightNumber.trim();
+                const transferArrivalDateTime = transferFlightDetails.arrivalDateTime.trim();
+                const transferDepartureFlightNumber =
+                  transferFlightDetails.departureFlightNumber.trim();
+                const transferDepartureDateTime = transferFlightDetails.departureDateTime.trim();
                 const pricing = pricingSource
                   ? {
                       currency: pricingSource.currency ?? transferSelection.currency ?? undefined,
@@ -2123,6 +2211,16 @@ export default function PackageCheckoutClient() {
                 return {
                   id: transferSelection.selectionId ?? "transfer",
                   includeReturn: transferSelection.includeReturn ?? undefined,
+                  flightDetails: {
+                    flightNumber: transferFlightNumber,
+                    arrivalDateTime: transferArrivalDateTime,
+                    ...(transferSelection.includeReturn
+                      ? {
+                          departureFlightNumber: transferDepartureFlightNumber,
+                          departureDateTime: transferDepartureDateTime,
+                        }
+                      : {}),
+                  },
                   transferType: normalizeTransferType(transferSelection.transferType ?? null),
                   origin,
                   destination,
@@ -2427,6 +2525,28 @@ export default function PackageCheckoutClient() {
       transfer?.includeReturn ? t.common.yes : t.common.no
     );
     if (includeReturnLine) transferDetails.push(includeReturnLine);
+    const transferArrivalFlightLine = buildDetailLine(
+      t.hotel.addons.transfers.flightNumber,
+      transferFlightDetails.flightNumber.trim() || null
+    );
+    if (transferArrivalFlightLine) transferDetails.push(transferArrivalFlightLine);
+    const transferArrivalDateLine = buildDetailLine(
+      t.hotel.addons.transfers.arrivalDate,
+      transferFlightDetails.arrivalDateTime.trim() || null
+    );
+    if (transferArrivalDateLine) transferDetails.push(transferArrivalDateLine);
+    if (transfer?.includeReturn) {
+      const transferDepartureFlightLine = buildDetailLine(
+        t.hotel.addons.transfers.departureFlightNumber,
+        transferFlightDetails.departureFlightNumber.trim() || null
+      );
+      if (transferDepartureFlightLine) transferDetails.push(transferDepartureFlightLine);
+      const transferDepartureDateLine = buildDetailLine(
+        t.hotel.addons.transfers.departureDate,
+        transferFlightDetails.departureDateTime.trim() || null
+      );
+      if (transferDepartureDateLine) transferDetails.push(transferDepartureDateLine);
+    }
     const vehicleName = transfer?.vehicleName?.trim() ?? null;
     const vehicleQty =
       typeof transfer?.vehicleQuantity === "number" ? transfer.vehicleQuantity : null;
@@ -2717,6 +2837,9 @@ export default function PackageCheckoutClient() {
   })();
   const hideTotalLabel = estimatedTotal === t.common.contactForRates;
 
+  const transferDetailsValid =
+    transfer?.selected !== true || Object.keys(resolveTransferFlightFieldErrors()).length === 0;
+
   const guestDetailsValid =
     guestDetails.length > 0 &&
     guestDetails.every(
@@ -2844,6 +2967,7 @@ export default function PackageCheckoutClient() {
       (!insuranceActive || insuranceTermsAccepted) &&
       contact.firstName.trim().length > 0 &&
       contact.email.trim().length > 0 &&
+      transferDetailsValid &&
       guestDetailsValid &&
       insuranceDetailsValid &&
       !insuranceQuoteLoading &&
@@ -2980,6 +3104,98 @@ export default function PackageCheckoutClient() {
                 </label>
               </div>
             </div>
+
+            {transfer?.selected ? (
+              <div className="checkout-section">
+                <div className="checkout-section__heading">
+                  <h2>{t.packageBuilder.services.transfer}</h2>
+                  <p className="checkout-section__hint">
+                    {t.hotel.addons.transfers.detailsRequired}
+                  </p>
+                </div>
+                <div className="checkout-field-grid">
+                  <label className="checkout-field">
+                    <span>{t.hotel.addons.transfers.flightNumber}</span>
+                    <input
+                      className={`checkout-input${transferFieldErrors.flightNumber ? " error" : ""}`}
+                      type="text"
+                      value={transferFlightDetails.flightNumber}
+                      onChange={(event) =>
+                        updateTransferFlightField("flightNumber", event.target.value)
+                      }
+                      required
+                    />
+                    {transferFieldErrors.flightNumber ? (
+                      <span className="field-error" role="alert">
+                        {transferFieldErrors.flightNumber}
+                      </span>
+                    ) : null}
+                  </label>
+                  <label className="checkout-field">
+                    <span>{t.hotel.addons.transfers.arrivalDate}</span>
+                    <input
+                      className={`checkout-input${transferFieldErrors.arrivalDateTime ? " error" : ""}`}
+                      type="datetime-local"
+                      value={transferFlightDetails.arrivalDateTime}
+                      onChange={(event) =>
+                        updateTransferFlightField("arrivalDateTime", event.target.value)
+                      }
+                      required
+                    />
+                    {transferFieldErrors.arrivalDateTime ? (
+                      <span className="field-error" role="alert">
+                        {transferFieldErrors.arrivalDateTime}
+                      </span>
+                    ) : null}
+                  </label>
+                  {transfer?.includeReturn ? (
+                    <>
+                      <label className="checkout-field">
+                        <span>{t.hotel.addons.transfers.departureFlightNumber}</span>
+                        <input
+                          className={`checkout-input${
+                            transferFieldErrors.departureFlightNumber ? " error" : ""
+                          }`}
+                          type="text"
+                          value={transferFlightDetails.departureFlightNumber}
+                          onChange={(event) =>
+                            updateTransferFlightField(
+                              "departureFlightNumber",
+                              event.target.value
+                            )
+                          }
+                          required
+                        />
+                        {transferFieldErrors.departureFlightNumber ? (
+                          <span className="field-error" role="alert">
+                            {transferFieldErrors.departureFlightNumber}
+                          </span>
+                        ) : null}
+                      </label>
+                      <label className="checkout-field">
+                        <span>{t.hotel.addons.transfers.departureDate}</span>
+                        <input
+                          className={`checkout-input${
+                            transferFieldErrors.departureDateTime ? " error" : ""
+                          }`}
+                          type="datetime-local"
+                          value={transferFlightDetails.departureDateTime}
+                          onChange={(event) =>
+                            updateTransferFlightField("departureDateTime", event.target.value)
+                          }
+                          required
+                        />
+                        {transferFieldErrors.departureDateTime ? (
+                          <span className="field-error" role="alert">
+                            {transferFieldErrors.departureDateTime}
+                          </span>
+                        ) : null}
+                      </label>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
             <div className="checkout-section">
               <div className="checkout-section__heading">

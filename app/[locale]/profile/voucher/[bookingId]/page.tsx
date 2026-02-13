@@ -54,6 +54,19 @@ const formatDate = (value: Date | string | null | undefined, locale: string) => 
   return new Intl.DateTimeFormat(locale, { day: "2-digit", month: "short", year: "numeric" }).format(parsed);
 };
 
+const formatDateTime = (value: string | null | undefined, locale: string) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
+};
+
 const formatDateRange = (start?: string | null, end?: string | null, locale?: string) => {
   const parsedStart = parseSearchDate(start ?? null);
   const parsedEnd = parseSearchDate(end ?? null);
@@ -130,9 +143,12 @@ export default async function VoucherPage({ params }: PageProps) {
         projection: { resultSummary: 1 },
       }
     );
+    const destinationSummary = (
+      destinationSearch as { resultSummary?: { destinationName?: unknown } } | null
+    )?.resultSummary;
     const resolvedDestination =
-      typeof (destinationSearch as any)?.resultSummary?.destinationName === "string"
-        ? (destinationSearch as any).resultSummary.destinationName.trim()
+      typeof destinationSummary?.destinationName === "string"
+        ? destinationSummary.destinationName.trim()
         : "";
     destinationName = resolvedDestination || null;
   }
@@ -203,6 +219,17 @@ export default async function VoucherPage({ params }: PageProps) {
     const route = [payload.transferSelection.origin?.name, payload.transferSelection.destination?.name]
       .filter(Boolean)
       .join(" → ");
+    const transferFlightDetails = payload.transferSelection.flightDetails ?? null;
+    const arrivalFlightNumber = transferFlightDetails?.flightNumber?.trim() ?? "";
+    const arrivalDateTime = formatDateTime(
+      transferFlightDetails?.arrivalDateTime ?? null,
+      resolvedLocale
+    );
+    const departureFlightNumber = transferFlightDetails?.departureFlightNumber?.trim() ?? "";
+    const departureDateTime = formatDateTime(
+      transferFlightDetails?.departureDateTime ?? null,
+      resolvedLocale
+    );
     serviceCards.push({
       id: "transfer",
       title: t.packageBuilder.services.transfer,
@@ -212,6 +239,18 @@ export default async function VoucherPage({ params }: PageProps) {
       ),
       details: [
         route ? `${t.packageBuilder.checkout.labels.route}: ${route}` : null,
+        arrivalFlightNumber
+          ? `${t.hotel.addons.transfers.flightNumber}: ${arrivalFlightNumber}`
+          : null,
+        arrivalDateTime
+          ? `${t.hotel.addons.transfers.arrivalDate}: ${arrivalDateTime}`
+          : null,
+        payload.transferSelection.includeReturn && departureFlightNumber
+          ? `${t.hotel.addons.transfers.departureFlightNumber}: ${departureFlightNumber}`
+          : null,
+        payload.transferSelection.includeReturn && departureDateTime
+          ? `${t.hotel.addons.transfers.departureDate}: ${departureDateTime}`
+          : null,
         payload.transferSelection.vehicle?.name
           ? `${t.packageBuilder.checkout.labels.vehicle}: ${payload.transferSelection.vehicle.name}`
           : null,
