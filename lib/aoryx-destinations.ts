@@ -47,6 +47,8 @@ const normalizeDestinationCode = (rawCode: string) => {
   return trimmed.includes("-") ? trimmed : `${trimmed}-0`;
 };
 
+const isTopLevelDestinationCode = (destinationCode: string) => destinationCode.endsWith("-0");
+
 const includesQuery = (destination: AoryxDestination, query: string | null) => {
   if (!query) return true;
   const normalized = query.toLowerCase();
@@ -126,6 +128,7 @@ export async function listAoryxDestinations(
 
       const destinationCode = normalizeDestinationCode(rawCode);
       if (!destinationCode) continue;
+      if (!isTopLevelDestinationCode(destinationCode)) continue;
       if (
         EXCLUDED_DESTINATION_CODES.has(destinationCode) ||
         EXCLUDED_DESTINATION_CODES.has(rawCode)
