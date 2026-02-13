@@ -3,6 +3,8 @@ import { AoryxClientError, AoryxServiceError, preBook } from "@/lib/aoryx-client
 import { decodeRateToken, isRateToken, obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
 import { authenticateB2bRequest, withB2bGatewayHeaders } from "@/lib/b2b-gateway";
 import { buildRoomFacets } from "@/lib/b2b-facets";
+import { applyHotelMarkupToRooms } from "@/lib/b2b-hotel-markup";
+import { getAoryxHotelB2BPlatformFee } from "@/lib/pricing";
 
 export const runtime = "nodejs";
 
@@ -170,12 +172,14 @@ export async function POST(request: NextRequest) {
 
     const currency = parseString((body as { currency?: unknown }).currency) || undefined;
     const result = await preBook(sessionId, hotelCode, resolvedGroupCode, rateKeys, currency);
+    const hotelMarkup = await getAoryxHotelB2BPlatformFee();
     const resolvedSessionId = result.sessionId || sessionId;
-    const preparedRooms = obfuscateRoomOptions(result.rooms, {
+    const obfuscatedRooms = obfuscateRoomOptions(result.rooms, {
       sessionId: resolvedSessionId,
       hotelCode,
       groupCode: resolvedGroupCode,
     });
+    const preparedRooms = applyHotelMarkupToRooms(obfuscatedRooms, hotelMarkup);
     const facets = buildRoomFacets(preparedRooms, result.currency ?? currency ?? null);
 
     return withB2bGatewayHeaders(

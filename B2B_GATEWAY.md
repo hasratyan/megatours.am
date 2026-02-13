@@ -64,6 +64,18 @@ B2B_API_CLIENTS_JSON=[{"id":"partner-a","name":"Partner A","token":"replace_with
 # B2B_API_TOKEN=replace_with_single_shared_token
 ```
 
+Hotel markup for B2B API prices is read from `settings` collection in this order:
+
+- `aoryxHotelsB2BPlatformFee`
+- `aoryx.hotelsB2BPlatformFee`
+- fallback to existing B2C hotel fee fields if B2B fields are missing
+
+Excursion platform fee for B2B API is read in this order:
+
+- `aoryxExcursionsB2BPlatformFee`
+- `aoryx.excursionsB2BPlatformFee`
+- fallback to existing B2C/general excursion fee fields if B2B fields are missing
+
 Generate strong tokens:
 
 ```bash
@@ -82,6 +94,8 @@ curl -s https://megatours.cloud/v1/health
 
 Use supplier destination codes (example: `160-0` for Dubai).  
 You can fetch valid destination codes from `GET /v1/destinations` (this endpoint returns only top-level codes ending with `-0`).
+Hotel prices returned by `/v1/hotels/search`, `/v1/hotels/room-details`, and `/v1/hotels/prebook`
+already include Megatours platform markup (raw supplier rates are not exposed).
 
 ```bash
 curl -s https://megatours.cloud/v1/hotels/search \

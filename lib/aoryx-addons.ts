@@ -1,5 +1,9 @@
 import { getB2bDb } from "@/lib/db";
-import { getAoryxExcursionFee, getAoryxExcursionPlatformFee } from "@/lib/pricing";
+import {
+  getAoryxExcursionB2BPlatformFee,
+  getAoryxExcursionFee,
+  getAoryxExcursionPlatformFee,
+} from "@/lib/pricing";
 import type { AoryxExcursionTicket, AoryxTransferRate } from "@/types/aoryx";
 
 type TransferQueryInput = {
@@ -211,7 +215,12 @@ const buildTourProductType = (category: string | null, subcategory: string | nul
   return category ?? subcategory ?? null;
 };
 
-export async function fetchExcursions(limit = 200): Promise<{
+type ExcursionPricingMode = "b2c" | "b2b";
+
+export async function fetchExcursions(
+  limit = 200,
+  options?: { pricingMode?: ExcursionPricingMode }
+): Promise<{
   excursions: AoryxExcursionTicket[];
   excursionFee: number;
 }> {
@@ -219,6 +228,7 @@ export async function fetchExcursions(limit = 200): Promise<{
   const db = await getB2bDb();
   const query = { isActive: { $ne: false } };
 
+  const pricingMode = options?.pricingMode ?? "b2c";
   const [excursions, tourExcursions, excursionFee, platformFee] = await Promise.all([
     db
       .collection("aoryxExcursionTickets")
@@ -233,7 +243,7 @@ export async function fetchExcursions(limit = 200): Promise<{
       .limit(maxDocs)
       .toArray(),
     getAoryxExcursionFee(),
-    getAoryxExcursionPlatformFee(),
+    pricingMode === "b2b" ? getAoryxExcursionB2BPlatformFee() : getAoryxExcursionPlatformFee(),
   ]);
 
   const totalFee = excursionFee + platformFee;

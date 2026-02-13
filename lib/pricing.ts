@@ -160,6 +160,30 @@ export async function getAoryxHotelPlatformFee(): Promise<number> {
   }
 }
 
+export async function getAoryxHotelB2BPlatformFee(): Promise<number> {
+  try {
+    const db = await getDb();
+    const doc = await db.collection("settings").findOne({});
+    const record = (doc as Record<string, unknown>) ?? {};
+    const aoryx = (record.aoryx as Record<string, unknown>) ?? {};
+    const b2b = (record.b2b as Record<string, unknown>) ?? {};
+
+    const rawHotel =
+      toNumber(record.aoryxHotelsB2BPlatformFee) ??
+      toNumber(aoryx.hotelsB2BPlatformFee) ??
+      toNumber(b2b.aoryxHotelsPlatformFee) ??
+      toNumber(record.aoryxHotelsB2CPlatformFee) ??
+      toNumber(aoryx.hotelsB2CPlatformFee) ??
+      toNumber(aoryx.hotelsPlatformFee) ??
+      toNumber(record.aoryxHotelsPlatformFee);
+
+    return normalizePercent(rawHotel);
+  } catch (error) {
+    console.error("[Pricing] Failed to fetch B2B platform fee", error);
+    return 0;
+  }
+}
+
 export async function getAoryxExcursionFee(): Promise<number> {
   try {
     const db = await getDb();
@@ -186,6 +210,30 @@ export async function getAoryxExcursionPlatformFee(): Promise<number> {
     return rawExcursions ?? 0;
   } catch (error) {
     console.error("[Pricing] Failed to fetch excursion platform fee", error);
+    return 0;
+  }
+}
+
+export async function getAoryxExcursionB2BPlatformFee(): Promise<number> {
+  try {
+    const db = await getDb();
+    const doc = await db.collection("settings").findOne({});
+    const record = (doc as Record<string, unknown>) ?? {};
+    const aoryx = (record.aoryx as Record<string, unknown>) ?? {};
+    const b2b = (record.b2b as Record<string, unknown>) ?? {};
+
+    const rawExcursions =
+      toNumber(record.aoryxExcursionsB2BPlatformFee) ??
+      toNumber(aoryx.excursionsB2BPlatformFee) ??
+      toNumber(b2b.aoryxExcursionsPlatformFee) ??
+      toNumber(record.aoryxExcursionsB2CPlatformFee) ??
+      toNumber(aoryx.excursionsB2CPlatformFee) ??
+      toNumber(record.aoryxExcursionsPlatformFee) ??
+      toNumber(aoryx.excursionsPlatformFee);
+
+    return rawExcursions ?? 0;
+  } catch (error) {
+    console.error("[Pricing] Failed to fetch B2B excursion platform fee", error);
     return 0;
   }
 }

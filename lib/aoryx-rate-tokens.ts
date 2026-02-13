@@ -11,6 +11,10 @@ type RateTokenPayload = {
   sessionId?: string | null;
   hotelCode?: string | null;
   roomIdentifier?: number | null;
+  totalPrice?: number | null;
+  priceGross?: number | null;
+  priceNet?: number | null;
+  priceTax?: number | null;
   issuedAt: number;
 };
 
@@ -132,6 +136,19 @@ export const obfuscateRoomOptions = (
             hotelCode: context.hotelCode,
             roomIdentifier:
               typeof room.roomIdentifier === "number" ? room.roomIdentifier : null,
+            totalPrice: typeof room.totalPrice === "number" && Number.isFinite(room.totalPrice) ? room.totalPrice : null,
+            priceGross:
+              typeof room.price?.gross === "number" && Number.isFinite(room.price.gross)
+                ? room.price.gross
+                : null,
+            priceNet:
+              typeof room.price?.net === "number" && Number.isFinite(room.price.net)
+                ? room.price.net
+                : null,
+            priceTax:
+              typeof room.price?.tax === "number" && Number.isFinite(room.price.tax)
+                ? room.price.tax
+                : null,
           })
         : null;
     return {

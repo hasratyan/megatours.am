@@ -113,6 +113,7 @@ paths:
     post:
       operationId: postHotelRoomDetails
       summary: Get room options with policies and meal/cancellation facets
+      description: Room prices in response include Megatours platform markup.
       x-required-scope: hotels:search
       requestBody:
         required: true
@@ -207,6 +208,7 @@ paths:
     post:
       operationId: postHotelPrebook
       summary: Validate selected room rates and return bookable result
+      description: Prebook prices in response include Megatours platform markup.
       x-required-scope: hotels:search
       requestBody:
         required: true
@@ -336,6 +338,7 @@ paths:
     post:
       operationId: postHotelSearch
       summary: Search hotels through Aoryx
+      description: Hotel minPrice values include Megatours platform markup.
       x-required-scope: hotels:search
       requestBody:
         required: true
@@ -754,8 +757,10 @@ components:
           type: [string, "null"]
         totalPrice:
           type: [number, "null"]
+          description: Public sell rate after Megatours platform markup.
         displayTotalPrice:
           type: [number, "null"]
+          description: Public sell rate after Megatours platform markup (same pricing view as totalPrice).
         availableRooms:
           type: [number, "null"]
         cancellationPolicy:
@@ -1253,6 +1258,7 @@ components:
           type: [string, "null"]
         minPrice:
           type: [number, "null"]
+          description: Public sell rate after Megatours platform markup.
         currency:
           type: [string, "null"]
         rating:

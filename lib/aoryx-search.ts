@@ -1,6 +1,6 @@
 import { search, AoryxClientError, AoryxServiceError } from "@/lib/aoryx-client";
 import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env";
-import { getAoryxHotelPlatformFee } from "@/lib/pricing";
+import { getAoryxHotelB2BPlatformFee } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
 import { isTechnicalErrorMessage } from "@/lib/error-utils";
 import type { AoryxSearchParams, AoryxSearchResult } from "@/types/aoryx";
@@ -16,8 +16,14 @@ export const withAoryxDefaults = (payload: AoryxSearchParams): AoryxSearchParams
 export async function runAoryxSearch(payload: AoryxSearchParams): Promise<SafeSearchResult> {
   const params = withAoryxDefaults(payload);
   const result = await search(params);
-  const { sessionId: _sessionId, ...safeResult } = result;
-  const hotelMarkup = await getAoryxHotelPlatformFee();
+  const safeResult: SafeSearchResult = {
+    currency: result.currency,
+    propertyCount: result.propertyCount,
+    responseTime: result.responseTime,
+    destination: result.destination,
+    hotels: result.hotels,
+  };
+  const hotelMarkup = await getAoryxHotelB2BPlatformFee();
   if (hotelMarkup && Array.isArray(safeResult.hotels)) {
     return {
       ...safeResult,
