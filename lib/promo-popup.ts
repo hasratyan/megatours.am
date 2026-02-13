@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { unstable_cache } from "next/cache";
 
 export type PromoPopupConfig = {
   enabled: boolean;
@@ -17,6 +18,7 @@ export type PromoPopupAdminConfig = PromoPopupConfig & {
 
 const COLLECTION = "promo_popup";
 const DOC_ID = "promo_popup";
+export const PROMO_POPUP_CACHE_TAG = "promo-popup-config";
 
 const DEFAULT_PROMO_POPUP: PromoPopupConfig = {
   enabled: false,
@@ -71,20 +73,35 @@ const serializeDate = (value?: Date | string | null): string | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 };
 
-export async function getPromoPopupConfig(): Promise<PromoPopupConfig> {
+type PromoPopupDoc = {
+  _id: string;
+  config?: PromoPopupConfig;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
+const readPromoPopupDoc = async (): Promise<PromoPopupDoc | null> => {
   const db = await getDb();
-  const doc = await db
-    .collection<{ _id: string; config?: PromoPopupConfig }>(COLLECTION)
+  return db
+    .collection<PromoPopupDoc>(COLLECTION)
     .findOne({ _id: DOC_ID });
+};
+
+const getPromoPopupConfigCached = unstable_cache(async (): Promise<PromoPopupConfig> => {
+  const doc = await readPromoPopupDoc();
   const config = doc && typeof doc === "object" ? doc.config : null;
   return normalizePromoPopupConfig(config ?? null);
+}, ["promo-popup-config"], {
+  tags: [PROMO_POPUP_CACHE_TAG],
+  revalidate: 60 * 60,
+});
+
+export async function getPromoPopupConfig(): Promise<PromoPopupConfig> {
+  return getPromoPopupConfigCached();
 }
 
 export async function getPromoPopupAdminConfig(): Promise<PromoPopupAdminConfig> {
-  const db = await getDb();
-  const doc = await db
-    .collection<{ _id: string; config?: PromoPopupConfig; createdAt?: Date; updatedAt?: Date }>(COLLECTION)
-    .findOne({ _id: DOC_ID });
+  const doc = await readPromoPopupDoc();
   const config = doc && typeof doc === "object" ? doc.config : null;
   return {
     ...normalizePromoPopupConfig(config ?? null),

@@ -122,7 +122,6 @@ export default function PromoPopup() {
             height={72}
             className="promo-popup-thumb__image"
             sizes="72px"
-            unoptimized
           />
         </button>
       )}
@@ -154,7 +153,6 @@ export default function PromoPopup() {
               width={1200}
               height={800}
               sizes="(max-width: 720px) 90vw, 720px"
-              unoptimized
             />
           </div>
           {hasActions && (

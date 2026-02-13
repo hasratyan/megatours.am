@@ -1,4 +1,5 @@
-import type { ObjectId } from "mongodb";
+import type { Collection, Filter, ObjectId, Sort } from "mongodb";
+import { unstable_cache } from "next/cache";
 import type { Locale } from "@/lib/i18n";
 import { getB2bDb, getDb } from "@/lib/db";
 
@@ -68,6 +69,12 @@ type NormalizedAoryxHotel = {
   imageUrl: string | null;
   masterHotelAmenities: string[];
 };
+
+export const FEATURED_HOTELS_CACHE_TAG = "featured-hotels";
+const AORYX_HOTELS_COLLECTION = "aoryx_hotels";
+const MIN_ADMIN_SEARCH_CANDIDATES = 800;
+const MAX_ADMIN_SEARCH_CANDIDATES = 6000;
+let adminSearchIndexesEnsured = false;
 
 const toStringValue = (value: unknown): string | null => {
   if (typeof value === "string") {
@@ -169,12 +176,137 @@ const buildTranslationFallback = (): Record<Locale, FeaturedHotelTranslation> =>
   ru: { badge: "", availability: "" },
 });
 
-export async function searchAoryxHotels(query: string, limit = 40): Promise<AoryxHotelOption[]> {
+const AORYX_ADMIN_SEARCH_PROJECTION = {
+  _id: 1,
+  systemId: 1,
+  SystemId: 1,
+  hotelCode: 1,
+  HotelCode: 1,
+  code: 1,
+  Code: 1,
+  id: 1,
+  name: 1,
+  Name: 1,
+  hotelName: 1,
+  HotelName: 1,
+  destinationName: 1,
+  DestinationName: 1,
+  city: 1,
+  City: 1,
+  rating: 1,
+  Rating: 1,
+  starRating: 1,
+  StarRating: 1,
+  tripAdvisorRating: 1,
+  TripAdvisorRating: 1,
+  imageUrl: 1,
+  ImageUrl: 1,
+  image: 1,
+  Image: 1,
+  primaryImage: 1,
+  PrimaryImage: 1,
+  masterHotelAmenities: 1,
+  MasterHotelAmenities: 1,
+  hotelAmenities: 1,
+  HotelAmenities: 1,
+  amenities: 1,
+  Amenities: 1,
+};
+
+const AORYX_ADMIN_DEFAULT_SORT: Sort = {
+  rating: -1,
+  Rating: -1,
+  name: 1,
+  Name: 1,
+  hotelCode: 1,
+  HotelCode: 1,
+  systemId: 1,
+  SystemId: 1,
+};
+
+const escapeRegex = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const getAdminSearchCandidateLimit = (safeLimit: number) =>
+  Math.min(
+    Math.max(safeLimit * 20, MIN_ADMIN_SEARCH_CANDIDATES),
+    MAX_ADMIN_SEARCH_CANDIDATES
+  );
+
+const buildTokenFilter = (token: string): Filter<AoryxHotelDoc> => {
+  const escapedToken = escapeRegex(token);
+  const codeRegex = new RegExp(`^${escapedToken}`, "i");
+  const textRegex = new RegExp(escapedToken, "i");
+  return {
+    $or: [
+      { systemId: { $regex: codeRegex } },
+      { SystemId: { $regex: codeRegex } },
+      { hotelCode: { $regex: codeRegex } },
+      { HotelCode: { $regex: codeRegex } },
+      { code: { $regex: codeRegex } },
+      { Code: { $regex: codeRegex } },
+      { id: { $regex: codeRegex } },
+      { name: { $regex: textRegex } },
+      { Name: { $regex: textRegex } },
+      { hotelName: { $regex: textRegex } },
+      { HotelName: { $regex: textRegex } },
+      { destinationName: { $regex: textRegex } },
+      { DestinationName: { $regex: textRegex } },
+      { city: { $regex: textRegex } },
+      { City: { $regex: textRegex } },
+    ],
+  };
+};
+
+const buildAdminSearchFilter = (queryTokens: string[]): Filter<AoryxHotelDoc> => {
+  if (queryTokens.length === 0) return {};
+  return {
+    $and: queryTokens.map((token) => buildTokenFilter(token)),
+  };
+};
+
+const ensureAdminSearchIndexes = async (collection: Collection<AoryxHotelDoc>) => {
+  if (adminSearchIndexesEnsured) return;
+  adminSearchIndexesEnsured = true;
+  try {
+    await collection.createIndexes([
+      { key: { systemId: 1 }, name: "aoryx_hotels_systemId_1" },
+      { key: { SystemId: 1 }, name: "aoryx_hotels_SystemId_1" },
+      { key: { hotelCode: 1 }, name: "aoryx_hotels_hotelCode_1" },
+      { key: { HotelCode: 1 }, name: "aoryx_hotels_HotelCode_1" },
+      { key: { name: 1 }, name: "aoryx_hotels_name_1" },
+      { key: { Name: 1 }, name: "aoryx_hotels_Name_1" },
+      { key: { destinationName: 1 }, name: "aoryx_hotels_destinationName_1" },
+      { key: { DestinationName: 1 }, name: "aoryx_hotels_DestinationName_1" },
+      { key: { rating: -1 }, name: "aoryx_hotels_rating_desc" },
+      { key: { Rating: -1 }, name: "aoryx_hotels_Rating_desc" },
+    ]);
+  } catch (error) {
+    console.warn("[AdminHotels] Failed to ensure search indexes", error);
+  }
+};
+
+const loadAdminSearchCandidates = async (queryTokens: string[], safeLimit: number) => {
   const db = await getB2bDb();
-  const docs = await db.collection<AoryxHotelDoc>("aoryx_hotels").find({}).toArray();
+  const collection = db.collection<AoryxHotelDoc>(AORYX_HOTELS_COLLECTION);
+  await ensureAdminSearchIndexes(collection);
+
+  const filter = buildAdminSearchFilter(queryTokens);
+  const candidateLimit = getAdminSearchCandidateLimit(safeLimit);
+  const cursor = collection.find(filter, { projection: AORYX_ADMIN_SEARCH_PROJECTION }).limit(candidateLimit);
+
+  if (queryTokens.length === 0) {
+    cursor.sort(AORYX_ADMIN_DEFAULT_SORT);
+  }
+
+  return cursor.toArray();
+};
+
+export async function searchAoryxHotels(query: string, limit = 40): Promise<AoryxHotelOption[]> {
   const normalizedQuery = normalizeSearchText(query.trim());
   const queryTokens = normalizedQuery.split(/\s+/).filter((token) => token.length > 0);
   const safeLimit = Math.max(limit, 1);
+  const docs = await loadAdminSearchCandidates(queryTokens, safeLimit);
 
   const options = docs
     .map((doc) => normalizeAoryxHotelDoc(doc as AoryxHotelDoc))
@@ -339,7 +471,7 @@ export async function getAoryxHotelsByCodes(hotelCodes: string[]): Promise<Map<s
   const searchValues: Array<string | number> = [...hotelCodes, ...numericCodes];
 
   const docs = await db
-    .collection<AoryxHotelDoc>("aoryx_hotels")
+    .collection<AoryxHotelDoc>(AORYX_HOTELS_COLLECTION)
     .find({
       $or: [
         { systemId: { $in: searchValues } },
@@ -351,7 +483,7 @@ export async function getAoryxHotelsByCodes(hotelCodes: string[]): Promise<Map<s
         { id: { $in: searchValues } },
         { _id: { $in: searchValues } },
       ],
-    })
+    }, { projection: AORYX_ADMIN_SEARCH_PROJECTION })
     .toArray();
 
   const map = new Map<string, NormalizedAoryxHotel>();
@@ -363,7 +495,7 @@ export async function getAoryxHotelsByCodes(hotelCodes: string[]): Promise<Map<s
   return map;
 }
 
-export async function getFeaturedHotelCards(locale: Locale): Promise<FeaturedHotelCard[]> {
+const getFeaturedHotelCardsCached = unstable_cache(async (locale: Locale): Promise<FeaturedHotelCard[]> => {
   const selections = await getFeaturedHotelSelections();
   if (selections.length === 0) return [];
   const hotelMap = await getAoryxHotelsByCodes(selections.map((entry) => entry.hotelCode));
@@ -400,6 +532,13 @@ export async function getFeaturedHotelCards(locale: Locale): Promise<FeaturedHot
     });
   });
   return cards;
+}, ["featured-hotel-cards"], {
+  tags: [FEATURED_HOTELS_CACHE_TAG],
+  revalidate: 60 * 60,
+});
+
+export async function getFeaturedHotelCards(locale: Locale): Promise<FeaturedHotelCard[]> {
+  return getFeaturedHotelCardsCached(locale);
 }
 
 export async function getFeaturedHotelAdminItems(): Promise<FeaturedHotelAdminItem[]> {

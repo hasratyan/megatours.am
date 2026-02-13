@@ -197,7 +197,7 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
               </div>
             </div>
             <div className="container">
-              <Image height={100} width={100} src={"/images/icons/plane-ticket.webp"} unoptimized alt={t.home.flydubai.alt}/>
+              <Image height={100} width={100} src={"/images/icons/plane-ticket.webp"} sizes="100px" alt={t.home.flydubai.alt}/>
               <h2>{t.home.flydubai.title}</h2>
               <p>{t.home.flydubai.body}</p>
             </div>
@@ -210,7 +210,7 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
               </div>
             </div>
             <div className="container">
-              <Image height={100} width={100} src={"/images/icons/insurance.webp"} unoptimized alt={t.home.efes.alt}/>
+              <Image height={100} width={100} src={"/images/icons/insurance.webp"} sizes="100px" alt={t.home.efes.alt}/>
               <h2>{t.home.efes.title}</h2>
               <p>{t.home.efes.body}</p>
             </div>
@@ -223,7 +223,7 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
               </div>
             </div>
             <div className="container">
-              <Image height={100} width={100} src={"/images/icons/wifi.webp"} unoptimized alt={t.home.esim.alt}/>
+              <Image height={100} width={100} src={"/images/icons/wifi.webp"} sizes="100px" alt={t.home.esim.alt}/>
               <h2>{t.home.esim.title}</h2>
               <p>{t.home.esim.body}</p>
             </div>
