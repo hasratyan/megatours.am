@@ -110,6 +110,9 @@ const parseTransferSelection = (
     ? {
         flightNumber: sanitizeString(flightDetailsRaw.flightNumber) ?? "",
         arrivalDateTime: sanitizeString(flightDetailsRaw.arrivalDateTime) ?? "",
+        departureFlightNumber:
+          sanitizeString(flightDetailsRaw.departureFlightNumber) ?? "",
+        departureDateTime: sanitizeString(flightDetailsRaw.departureDateTime) ?? "",
       }
     : undefined;
 
@@ -191,7 +194,7 @@ const parseInsurance = (
   if (!input || typeof input !== "object") return undefined;
   const record = input as UnknownRecord;
   const planId = sanitizeString(record.planId);
-  if (!planId) return undefined;
+  const providerRaw = sanitizeString(record.provider)?.toLowerCase();
 
   const parseBoolean = (value: unknown): boolean | null => {
     if (typeof value === "boolean") return value;
@@ -258,31 +261,48 @@ const parseInsurance = (
     return travelers.length > 0 ? travelers : undefined;
   };
 
+  const travelers = parseTravelers(record.travelers);
+  const price = toNumber(record.price);
+  const riskAmount = toNumber(record.riskAmount);
+  const territoryCode = sanitizeString(record.territoryCode);
+  const startDate = sanitizeString(record.startDate);
+  const endDate = sanitizeString(record.endDate);
+  const hasInsurancePayload =
+    Boolean(planId) ||
+    Boolean(providerRaw) ||
+    Boolean(travelers && travelers.length > 0) ||
+    price !== null ||
+    riskAmount !== null ||
+    Boolean(territoryCode) ||
+    Boolean(startDate) ||
+    Boolean(endDate);
+
+  if (!hasInsurancePayload) return undefined;
+
   return {
-    planId,
+    planId: planId ?? "efes-travel",
     planName: sanitizeString(record.planName),
     planLabel: sanitizeString(record.planLabel),
     note: sanitizeString(record.note),
-    price: toNumber(record.price),
+    price,
     currency: sanitizeString(record.currency),
-    provider:
-      sanitizeString(record.provider)?.toLowerCase() === "efes" ? "efes" : null,
-    riskAmount: toNumber(record.riskAmount),
+    provider: providerRaw ? (providerRaw === "efes" ? "efes" : null) : "efes",
+    riskAmount,
     riskCurrency: sanitizeString(record.riskCurrency),
     riskLabel: sanitizeString(record.riskLabel),
-    territoryCode: sanitizeString(record.territoryCode),
+    territoryCode,
     territoryLabel: sanitizeString(record.territoryLabel),
     territoryPolicyLabel: sanitizeString(record.territoryPolicyLabel),
     travelCountries: sanitizeString(record.travelCountries),
-    startDate: sanitizeString(record.startDate),
-    endDate: sanitizeString(record.endDate),
+    startDate,
+    endDate,
     days: toNumber(record.days),
     subrisks: Array.isArray(record.subrisks)
       ? record.subrisks
           .map((entry) => sanitizeString(entry))
           .filter((entry): entry is string => Boolean(entry))
       : undefined,
-    travelers: parseTravelers(record.travelers),
+    travelers,
   };
 };
 

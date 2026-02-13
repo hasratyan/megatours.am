@@ -145,6 +145,30 @@ curl -s https://megatours.cloud/v1/hotels/prebook \
 
 Use selected room entries from `/v1/hotels/prebook` (keep `rateKey`, `price`, and guest details).
 
+You can include local addon bookings in the same request:
+
+- `transferSelection` (local transfer booking)
+- `excursions` (local excursion booking)
+- `insurance` with `provider: "efes"` (policy issuance through EFES endpoint)
+
+Transfer field rules:
+
+- Always required: `transferSelection.flightDetails.flightNumber`, `transferSelection.flightDetails.arrivalDateTime`
+- If `transferSelection.includeReturn` is `true`, also required:
+  `transferSelection.flightDetails.departureFlightNumber`,
+  `transferSelection.flightDetails.departureDateTime`
+
+Insurance input rules (for `insurance.provider = "efes"`):
+
+- Required insurance fields: `territoryCode`, `riskAmount`, `riskCurrency`, `travelers[]`
+- `provider` is optional (defaults to `efes`)
+- `planId` is optional (defaults to `efes-travel`)
+- For each traveler, send UI-entered identity/passport/contact/address fields:
+  `firstName`, `lastName`, `gender`, `birthDate`, `passportNumber`, `passportAuthority`,
+  `passportIssueDate`, `passportExpiryDate`, `residency`, `citizenship`,
+  `mobilePhone`, `email`, `premium`, `premiumCurrency`, and `address.{full,country,region,city}`
+- EFES internal/default fields are set server-side by Megatours.
+
 ```bash
 curl -s https://megatours.cloud/v1/hotels/book \
   -H "Authorization: Bearer <partner_token>" \
@@ -165,7 +189,56 @@ curl -s https://megatours.cloud/v1/hotels/book \
         { "firstName": "Jane", "lastName": "Doe", "type": "Adult", "age": 31 }
       ],
       "price": { "gross": 500, "net": 450, "tax": 50 }
-    }]
+    }],
+    "transferSelection": {
+      "id": "transfer-1",
+      "includeReturn": true,
+      "flightDetails": {
+        "flightNumber": "FZ171",
+        "arrivalDateTime": "2026-03-10T08:30:00+04:00",
+        "departureFlightNumber": "FZ172",
+        "departureDateTime": "2026-03-15T19:45:00+04:00"
+      },
+      "totalPrice": 120
+    },
+    "excursions": {
+      "totalAmount": 90,
+      "selections": [{ "id": "EXC-101", "quantityAdult": 2, "priceAdult": 45, "currency": "USD" }]
+    },
+    "insurance": {
+      "provider": "efes",
+      "planId": "efes-plan-1",
+      "territoryCode": "25",
+      "riskAmount": 15000,
+      "riskCurrency": "EUR",
+      "travelers": [{
+        "id": "trav-1",
+        "firstName": "Ջոն",
+        "lastName": "Դոե",
+        "firstNameEn": "John",
+        "lastNameEn": "Doe",
+        "gender": "M",
+        "birthDate": "1992-01-14",
+        "residency": true,
+        "socialCard": "1234567890",
+        "passportNumber": "AB1234567",
+        "passportAuthority": "Police of RA",
+        "passportIssueDate": "2022-01-10",
+        "passportExpiryDate": "2032-01-10",
+        "citizenship": "AM",
+        "mobilePhone": "+37491111222",
+        "email": "john.doe@example.com",
+        "premium": 12,
+        "premiumCurrency": "EUR",
+        "address": {
+          "full": "10 Northern Ave",
+          "fullEn": "10 Northern Ave, Yerevan",
+          "country": "AM",
+          "region": "YR",
+          "city": "YR01"
+        }
+      }]
+    }
   }'
 ```
 
@@ -215,6 +288,99 @@ curl -s https://megatours.cloud/v1/insurance/quote \
     "subrisks": ["BAGGAGE_EXPENCES"]
   }'
 ```
+
+## `/v1/hotels/book` response examples
+
+### All services booked
+
+```json
+{
+  "requestId": "4f18b2a2-0d33-44dd-9f7f-f8a7e95cfc0f",
+  "data": {
+    "sessionId": "",
+    "status": "Confirmed",
+    "hotelConfirmationNumber": "HTL-987654",
+    "adsConfirmationNumber": "ADS-445566",
+    "supplierConfirmationNumber": "SUP-22991",
+    "customerRefNumber": "PARTNER-1001",
+    "rooms": [
+      { "roomIdentifier": 1, "rateKey": null, "status": "Confirmed" }
+    ],
+    "services": {
+      "transfer": { "status": "booked", "referenceId": "TRF-20260213121010-ab12cd34", "message": null },
+      "excursions": { "status": "booked", "referenceId": "EXC-20260213121010-ef56gh78", "message": null, "items": 1 },
+      "insurance": {
+        "status": "booked",
+        "referenceId": "INS-20260213121010-ij90kl12",
+        "message": null,
+        "provider": "efes",
+        "policies": [
+          { "travelerId": "trav-1", "response": { "policy_number": "EF-123456" } }
+        ]
+      }
+    }
+  }
+}
+```
+
+### Hotel booked, insurance failed
+
+```json
+{
+  "requestId": "5b2e21ad-b9ce-4c7f-9504-c3e533110488",
+  "data": {
+    "sessionId": "",
+    "status": "Confirmed",
+    "hotelConfirmationNumber": "HTL-123456",
+    "adsConfirmationNumber": "ADS-778899",
+    "supplierConfirmationNumber": "SUP-99001",
+    "customerRefNumber": "PARTNER-1002",
+    "rooms": [
+      { "roomIdentifier": 1, "rateKey": null, "status": "Confirmed" }
+    ],
+    "services": {
+      "transfer": { "status": "booked", "referenceId": "TRF-20260213121540-aa11bb22", "message": null },
+      "excursions": { "status": "skipped", "referenceId": null, "message": null, "items": 0 },
+      "insurance": {
+        "status": "failed",
+        "referenceId": null,
+        "message": "Failed to issue EFES insurance policies.",
+        "provider": "efes",
+        "policies": null
+      }
+    }
+  }
+}
+```
+
+## Error catalog
+
+Common API errors:
+
+- `400 Invalid JSON payload` - malformed JSON body.
+- `400 Transfer flight details are required: flightNumber and arrivalDateTime.` - missing required transfer arrival fields.
+- `400 Return transfer requires departure flight details: departureFlightNumber and departureDateTime.` - return transfer selected but departure fields are missing.
+- `400 Invalid booking payload` - required booking fields are missing/invalid.
+- `400 Missing insurance field: territoryCode.` (or `riskAmount`, `riskCurrency`, `travelers`) - required insurance top-level field is missing.
+- `400 Incomplete insurance traveler field: travelers[0].<field> is required.` - traveler input is incomplete (for example: `passportNumber`, `birthDate`, `mobilePhone`, `address.full`).
+- `400 Unsupported insurance provider. Expected provider=efes.` - unsupported insurance provider value.
+- `401 Missing bearer token` - no `Authorization: Bearer ...` header.
+- `401 Invalid bearer token` - token not found in `B2B_API_CLIENTS_JSON`.
+- `403 Scope is not allowed for insurance policy issuance` - client called hotel booking with insurance payload without `insurance:quote` scope.
+- `403 Client IP is not allowed` - caller IP is not in `allowedIps`.
+- `429 Rate limit exceeded` - client hit per-minute request limit.
+- `503 B2B API clients are not configured` - server missing B2B client env config.
+
+## Partner onboarding checklist
+
+1. Issue partner token and configure `B2B_API_CLIENTS_JSON` with required scopes (`hotels:search`, `hotels:book`, and `insurance:quote` if using insurance).
+2. Add partner outbound static IPs to `allowedIps`.
+3. Share base URL (`https://megatours.cloud/v1`) and OpenAPI spec (`b2b-openapi.yaml`).
+4. Complete smoke flow:
+`/v1/destinations` -> `/v1/hotels/search` -> `/v1/hotels/room-details` -> `/v1/hotels/prebook` -> `/v1/hotels/book`.
+5. Check rate-limit headers on every request:
+`x-ratelimit-limit`, `x-ratelimit-remaining`, `x-ratelimit-reset`.
+6. Rotate tokens periodically and immediately after any exposure.
 
 ## Security notes
 

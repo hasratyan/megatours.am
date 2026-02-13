@@ -256,6 +256,32 @@ paths:
     post:
       operationId: postHotelBook
       summary: Complete hotel booking with selected rates and guests
+      description: |
+        Books hotel inventory through Aoryx and optionally processes local services:
+        transfer booking, excursion booking, and EFES insurance policy issuance.
+        For insurance, partners should send traveler form inputs; EFES internal/default fields are filled server-side.
+      x-error-catalog:
+        - status: 400
+          error: Invalid JSON payload
+          when: Request body is not valid JSON.
+        - status: 400
+          error: "Missing insurance field: territoryCode."
+          when: Insurance payload is present but missing required top-level fields (`territoryCode`, `riskAmount`, `riskCurrency`, `travelers`).
+        - status: 400
+          error: "Incomplete insurance traveler field: travelers[0].passportNumber is required."
+          when: Insurance traveler object is present but required traveler/address fields are incomplete.
+        - status: 400
+          error: Unsupported insurance provider. Expected provider=efes.
+          when: Insurance payload has unsupported provider value.
+        - status: 400
+          error: "Transfer flight details are required: flightNumber and arrivalDateTime."
+          when: transferSelection is provided without arrival flight details.
+        - status: 400
+          error: "Return transfer requires departure flight details: departureFlightNumber and departureDateTime."
+          when: transferSelection.includeReturn=true but departure flight details are missing.
+        - status: 403
+          error: Scope is not allowed for insurance policy issuance
+          when: insurance payload is sent without insurance:quote scope.
       x-required-scope: hotels:book
       requestBody:
         required: true
@@ -288,6 +314,11 @@ paths:
                     type: string
                   data:
                     $ref: "#/components/schemas/HotelsBookResponse"
+              examples:
+                all_services_booked:
+                  $ref: "#/components/examples/HotelsBookAllServicesBooked"
+                insurance_failed:
+                  $ref: "#/components/examples/HotelsBookInsuranceFailed"
         "400":
           $ref: "#/components/responses/ErrorResponse"
         "401":
@@ -492,6 +523,112 @@ components:
       type: http
       scheme: bearer
       bearerFormat: Token
+  examples:
+    MissingBearerTokenError:
+      summary: Missing bearer token
+      value:
+        error: Missing bearer token
+        requestId: 89eb0ba6-7092-4f90-b369-c3a97010ca0d
+    InvalidTransferFlightDetailsError:
+      summary: Missing arrival flight details
+      value:
+        error: "Transfer flight details are required: flightNumber and arrivalDateTime."
+        requestId: 20594efb-55d6-410d-84f1-b9de5f1b3254
+    MissingInsuranceFieldError:
+      summary: Missing top-level insurance field
+      value:
+        error: "Missing insurance field: territoryCode."
+        requestId: 7abf4e8f-4d8b-4e2f-bf1f-a5de55d0c134
+    IncompleteInsuranceTravelerFieldError:
+      summary: Missing required traveler field
+      value:
+        error: "Incomplete insurance traveler field: travelers[0].passportNumber is required."
+        requestId: 5e0ed3a2-365d-4858-8f4f-02a80d399fb5
+    UnsupportedInsuranceProviderError:
+      summary: Unsupported insurance provider
+      value:
+        error: Unsupported insurance provider. Expected provider=efes.
+        requestId: c3ea2e86-2f1c-44f7-b9a8-11de66d598dc
+    ReturnTransferDepartureDetailsError:
+      summary: Missing departure details for return transfer
+      value:
+        error: "Return transfer requires departure flight details: departureFlightNumber and departureDateTime."
+        requestId: c0e68ff5-8c1f-4aa4-bdb4-6adfda1c91ba
+    ScopeNotAllowedForInsuranceError:
+      summary: Missing insurance scope
+      value:
+        error: Scope is not allowed for insurance policy issuance
+        requestId: fdc0f7fd-d297-4e45-b4f8-96de62d4cc9f
+    IpNotAllowedError:
+      summary: Caller IP not in allowlist
+      value:
+        error: Client IP is not allowed
+        requestId: 0a042532-4cc3-48f9-afcc-ea9a18534e7f
+    HotelsBookAllServicesBooked:
+      summary: Hotel and all services booked
+      value:
+        requestId: 4f18b2a2-0d33-44dd-9f7f-f8a7e95cfc0f
+        data:
+          sessionId: ""
+          status: Confirmed
+          hotelConfirmationNumber: HTL-987654
+          adsConfirmationNumber: ADS-445566
+          supplierConfirmationNumber: SUP-22991
+          customerRefNumber: PARTNER-1001
+          rooms:
+            - roomIdentifier: 1
+              rateKey: null
+              status: Confirmed
+          services:
+            transfer:
+              status: booked
+              referenceId: TRF-20260213121010-ab12cd34
+              message: null
+            excursions:
+              status: booked
+              referenceId: EXC-20260213121010-ef56gh78
+              message: null
+              items: 1
+            insurance:
+              status: booked
+              referenceId: INS-20260213121010-ij90kl12
+              message: null
+              provider: efes
+              policies:
+                - travelerId: trav-1
+                  response:
+                    policy_number: EF-123456
+    HotelsBookInsuranceFailed:
+      summary: Hotel booked, insurance failed
+      value:
+        requestId: 5b2e21ad-b9ce-4c7f-9504-c3e533110488
+        data:
+          sessionId: ""
+          status: Confirmed
+          hotelConfirmationNumber: HTL-123456
+          adsConfirmationNumber: ADS-778899
+          supplierConfirmationNumber: SUP-99001
+          customerRefNumber: PARTNER-1002
+          rooms:
+            - roomIdentifier: 1
+              rateKey: null
+              status: Confirmed
+          services:
+            transfer:
+              status: booked
+              referenceId: TRF-20260213121540-aa11bb22
+              message: null
+            excursions:
+              status: skipped
+              referenceId: null
+              message: null
+              items: 0
+            insurance:
+              status: failed
+              referenceId: null
+              message: Failed to issue EFES insurance policies.
+              provider: efes
+              policies: null
   responses:
     ErrorResponse:
       description: Error response
@@ -506,6 +643,23 @@ components:
                 type: string
               code:
                 type: [string, "null"]
+          examples:
+            missing_bearer_token:
+              $ref: "#/components/examples/MissingBearerTokenError"
+            missing_insurance_field:
+              $ref: "#/components/examples/MissingInsuranceFieldError"
+            incomplete_insurance_traveler_field:
+              $ref: "#/components/examples/IncompleteInsuranceTravelerFieldError"
+            unsupported_insurance_provider:
+              $ref: "#/components/examples/UnsupportedInsuranceProviderError"
+            invalid_transfer_flight_details:
+              $ref: "#/components/examples/InvalidTransferFlightDetailsError"
+            return_transfer_departure_details_required:
+              $ref: "#/components/examples/ReturnTransferDepartureDetailsError"
+            scope_not_allowed_for_insurance:
+              $ref: "#/components/examples/ScopeNotAllowedForInsuranceError"
+            ip_not_allowed:
+              $ref: "#/components/examples/IpNotAllowedError"
   schemas:
     Room:
       type: object
@@ -885,14 +1039,71 @@ components:
           items:
             $ref: "#/components/schemas/HotelsBookRoom"
         transferSelection:
-          type: [object, "null"]
-          additionalProperties: true
+          type: ["null", object]
+          description: |
+            Local transfer booking payload.
+            flightDetails.flightNumber and flightDetails.arrivalDateTime are required.
+            If includeReturn is true, departureFlightNumber and departureDateTime are also required.
+          properties:
+            id:
+              type: [string, "null"]
+            includeReturn:
+              type: boolean
+            totalPrice:
+              type: [number, "null"]
+            paxCount:
+              type: [number, "null"]
+            flightDetails:
+              type: object
+              properties:
+                flightNumber:
+                  type: string
+                arrivalDateTime:
+                  type: string
+                departureFlightNumber:
+                  type: [string, "null"]
+                departureDateTime:
+                  type: [string, "null"]
+              required:
+                - flightNumber
+                - arrivalDateTime
+          required:
+            - flightDetails
         excursions:
-          type: [object, "null"]
-          additionalProperties: true
+          type: ["null", object]
+          properties:
+            totalAmount:
+              type: number
+            selections:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: [string, "null"]
+                  quantityAdult:
+                    type: [number, "null"]
+                  quantityChild:
+                    type: [number, "null"]
+                  priceAdult:
+                    type: [number, "null"]
+                  priceChild:
+                    type: [number, "null"]
+                  currency:
+                    type: [string, "null"]
+                  totalPrice:
+                    type: [number, "null"]
+                required:
+                  - id
+          required:
+            - totalAmount
+            - selections
         insurance:
-          type: [object, "null"]
-          additionalProperties: true
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/HotelsBookInsuranceInput"
         airTickets:
           type: [object, "null"]
           additionalProperties: true
@@ -934,9 +1145,72 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/HotelsBookRoomResult"
+        services:
+          type: object
+          properties:
+            transfer:
+              $ref: "#/components/schemas/B2bBookedService"
+            excursions:
+              allOf:
+                - $ref: "#/components/schemas/B2bBookedService"
+                - type: object
+                  properties:
+                    items:
+                      type: [number, "null"]
+            insurance:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum:
+                    - skipped
+                    - booked
+                    - failed
+                referenceId:
+                  type: [string, "null"]
+                message:
+                  type: [string, "null"]
+                provider:
+                  type: [string, "null"]
+                policies:
+                  type: [array, "null"]
+                  items:
+                    type: object
+                    properties:
+                      travelerId:
+                        type: [string, "null"]
+                      response:
+                        type: object
+                        additionalProperties: true
+                    required:
+                      - travelerId
+                      - response
+              required:
+                - status
+                - referenceId
+                - message
+                - provider
+                - policies
       required:
         - sessionId
         - rooms
+    B2bBookedService:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - skipped
+            - booked
+            - failed
+        referenceId:
+          type: [string, "null"]
+        message:
+          type: [string, "null"]
+      required:
+        - status
+        - referenceId
+        - message
     HotelSearchRequest:
       type: object
       properties:
@@ -1171,6 +1445,171 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/HotelSummary"
+    HotelsBookInsuranceAddressInput:
+      type: object
+      description: Traveler registration address fields collected from partner UI inputs.
+      properties:
+        full:
+          type: string
+        fullEn:
+          type: [string, "null"]
+        country:
+          type: string
+        countryId:
+          type: [string, "null"]
+        region:
+          type: string
+        city:
+          type: string
+      required:
+        - full
+        - country
+        - region
+        - city
+    HotelsBookInsuranceTravelerInput:
+      type: object
+      description: Insurance traveler details collected from partner UI inputs.
+      properties:
+        id:
+          type: [string, "null"]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        firstNameEn:
+          type: [string, "null"]
+        lastNameEn:
+          type: [string, "null"]
+        gender:
+          type: string
+          enum:
+            - M
+            - F
+        birthDate:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        residency:
+          type: boolean
+        socialCard:
+          type: [string, "null"]
+        passportNumber:
+          type: string
+        passportAuthority:
+          type: string
+        passportIssueDate:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        passportExpiryDate:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        mobilePhone:
+          type: string
+        phone:
+          type: [string, "null"]
+        email:
+          type: string
+          format: email
+        citizenship:
+          type: string
+        premium:
+          type: number
+        premiumCurrency:
+          type: string
+        policyPremium:
+          type: [number, "null"]
+        subrisks:
+          type: array
+          items:
+            type: string
+        address:
+          $ref: "#/components/schemas/HotelsBookInsuranceAddressInput"
+      required:
+        - firstName
+        - lastName
+        - gender
+        - birthDate
+        - residency
+        - passportNumber
+        - passportAuthority
+        - passportIssueDate
+        - passportExpiryDate
+        - mobilePhone
+        - email
+        - citizenship
+        - premium
+        - premiumCurrency
+        - address
+    HotelsBookInsuranceInput:
+      type: object
+      description: |
+        EFES policy issuance payload for `/v1/hotels/book`.
+        Partners should send traveler fields captured from UI inputs.
+        Internal/defaulted EFES fields are resolved server-side.
+      properties:
+        provider:
+          type: [string, "null"]
+          enum:
+            - efes
+            - null
+          default: efes
+        planId:
+          type: [string, "null"]
+          description: Optional partner-side plan reference. Defaults to `efes-travel` if omitted.
+        planName:
+          type: [string, "null"]
+        planLabel:
+          type: [string, "null"]
+        note:
+          type: [string, "null"]
+        startDate:
+          type: [string, "null"]
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          description: Optional. Defaults to booking check-in date.
+        endDate:
+          type: [string, "null"]
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          description: Optional. Defaults to booking check-out date.
+        days:
+          type: [number, "null"]
+          description: Optional. Calculated from dates when omitted.
+        territoryCode:
+          type: string
+          description: EFES territory code selected by partner from quote flow.
+        riskAmount:
+          type: number
+        riskCurrency:
+          type: string
+        riskLabel:
+          type: [string, "null"]
+          description: Optional override. Defaults server-side.
+        territoryLabel:
+          type: [string, "null"]
+          description: Optional override. Defaults server-side.
+        territoryPolicyLabel:
+          type: [string, "null"]
+          description: Optional override. Defaults server-side.
+        travelCountries:
+          type: [string, "null"]
+          description: Optional override. Defaults server-side.
+        subrisks:
+          type: array
+          items:
+            type: string
+        price:
+          type: [number, "null"]
+          description: Optional total premium. Used as fallback if traveler premium is not provided.
+        currency:
+          type: [string, "null"]
+        travelers:
+          type: array
+          items:
+            $ref: "#/components/schemas/HotelsBookInsuranceTravelerInput"
+      required:
+        - territoryCode
+        - riskAmount
+        - riskCurrency
+        - travelers
+      additionalProperties: true
     InsuranceTraveler:
       type: object
       properties:

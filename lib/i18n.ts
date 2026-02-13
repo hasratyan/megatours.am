@@ -839,6 +839,8 @@ export type Translation = {
         bothWays: string;
         flightNumber: string;
         arrivalDate: string;
+        departureFlightNumber: string;
+        departureDate: string;
         vehicleQty: string;
         loading: string;
         noOptions: string;
@@ -848,6 +850,8 @@ export type Translation = {
         detailsRequired: string;
         flightNumberRequired: string;
         arrivalRequired: string;
+        departureFlightNumberRequired: string;
+        departureRequired: string;
       };
       excursions: {
         title: string;
@@ -2143,8 +2147,10 @@ const translations: Record<Locale, Translation> = {
           perPax: "Մեկ ուղևոր",
           perVehicle: "Մեկ մեքենա",
           bothWays: "Երկու ուղղություն",
-          flightNumber: "Թռիչքի համարը",
+          flightNumber: "Ժամանման թռիչքի համարը",
           arrivalDate: "Ժամանման ամսաթիվ և ժամ",
+          departureFlightNumber: "Մեկնման թռիչքի համարը",
+          departureDate: "Մեկնման ամսաթիվ և ժամ",
           vehicleQty: "Մեքենաների քանակ",
           loading: "Բեռնվում են տրանսֆերի տարբերակները...",
           noOptions: "Տվյալ ուղղության համար տրանսֆերի տարբերակներ առկա չեն։",
@@ -2152,8 +2158,10 @@ const translations: Record<Locale, Translation> = {
           loadFailed: "Չհաջողվեց բեռնել տրանսֆերները։",
           selectRequired: "Խնդրում ենք ընտրել տրանսֆեր կամ անջատել տրանսֆերները։",
           detailsRequired: "Խնդրում ենք լրացնել թռիչքի տվյալները։",
-          flightNumberRequired: "Պետք է նշել թռիչքի համարը։",
-          arrivalRequired: "Պետք է նշել ժամանման ամսաթիվն ու ժամը։",
+          flightNumberRequired: "Խնդրում ենք նշել ժամանման թռիչքի համարը։",
+          arrivalRequired: "Խնդրում ենք նշել ժամանման ամսաթիվն ու ժամը։",
+          departureFlightNumberRequired: "Խնդրում ենք նշել մեկնման թռիչքի համարը։",
+          departureRequired: "Խնդրում ենք նշել մեկնման ամսաթիվն ու ժամը։",
         },
         excursions: {
           title: "Էքսկուրսիաներ",
@@ -3480,8 +3488,10 @@ const translations: Record<Locale, Translation> = {
           perPax: "Per pax",
           perVehicle: "Per vehicle",
           bothWays: "Both directions",
-          flightNumber: "Flight number",
+          flightNumber: "Arrival flight number",
           arrivalDate: "Arrival date & time",
+          departureFlightNumber: "Departure flight number",
+          departureDate: "Departure date & time",
           vehicleQty: "Vehicle quantity",
           loading: "Loading transfer options...",
           noOptions: "No transfer options available for this destination.",
@@ -3489,8 +3499,10 @@ const translations: Record<Locale, Translation> = {
           loadFailed: "Unable to load transfer options.",
           selectRequired: "Please select a transfer option or turn off transfers.",
           detailsRequired: "Please add flight details for your transfer.",
-          flightNumberRequired: "Flight number is required.",
+          flightNumberRequired: "Arrival flight number is required.",
           arrivalRequired: "Arrival date and time are required.",
+          departureFlightNumberRequired: "Departure flight number is required.",
+          departureRequired: "Departure date and time are required.",
         },
         excursions: {
           title: "Excursions",
@@ -4824,8 +4836,10 @@ const translations: Record<Locale, Translation> = {
           perPax: "За пассажира",
           perVehicle: "За автомобиль",
           bothWays: "В обе стороны",
-          flightNumber: "Номер рейса",
+          flightNumber: "Номер рейса прилета",
           arrivalDate: "Дата и время прилета",
+          departureFlightNumber: "Номер рейса вылета",
+          departureDate: "Дата и время вылета",
           vehicleQty: "Количество авто",
           loading: "Загружаем варианты трансфера...",
           noOptions: "Нет доступных вариантов трансфера.",
@@ -4833,8 +4847,10 @@ const translations: Record<Locale, Translation> = {
           loadFailed: "Не удалось загрузить трансферы.",
           selectRequired: "Выберите трансфер или отключите эту опцию.",
           detailsRequired: "Заполните данные рейса для трансфера.",
-          flightNumberRequired: "Номер рейса обязателен.",
+          flightNumberRequired: "Номер рейса прилета обязателен.",
           arrivalRequired: "Дата и время прилета обязательны.",
+          departureFlightNumberRequired: "Номер рейса вылета обязателен.",
+          departureRequired: "Дата и время вылета обязательны.",
         },
         excursions: {
           title: "Экскурсии",

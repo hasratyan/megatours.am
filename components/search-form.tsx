@@ -139,6 +139,107 @@ const formatDateDisplay = (date: Date, locale: string): string => {
 const clampNumber = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
+const ignoredSearchTokens = new Set([
+  "hotel",
+  "hotels",
+  "resort",
+  "resorts",
+  "the",
+  "and",
+]);
+
+const normalizeSearchText = (value: string) =>
+  value
+    .toLocaleLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const tokenizeSearchText = (value: string) =>
+  value
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length > 1 && !ignoredSearchTokens.has(token));
+
+const isWithinEditDistance = (source: string, target: string, maxDistance: number) => {
+  if (source === target) return true;
+  if (maxDistance < 0) return false;
+
+  const sourceLength = source.length;
+  const targetLength = target.length;
+  const lengthDiff = Math.abs(sourceLength - targetLength);
+  if (lengthDiff > maxDistance) return false;
+
+  let previous = Array.from({ length: targetLength + 1 }, (_, index) => index);
+
+  for (let sourceIndex = 1; sourceIndex <= sourceLength; sourceIndex += 1) {
+    const current = [sourceIndex];
+    let rowMin = current[0];
+
+    for (let targetIndex = 1; targetIndex <= targetLength; targetIndex += 1) {
+      const substitutionCost =
+        source[sourceIndex - 1] === target[targetIndex - 1] ? 0 : 1;
+      const insertion = current[targetIndex - 1] + 1;
+      const deletion = previous[targetIndex] + 1;
+      const substitution = previous[targetIndex - 1] + substitutionCost;
+      const value = Math.min(insertion, deletion, substitution);
+      current.push(value);
+      if (value < rowMin) rowMin = value;
+    }
+
+    if (rowMin > maxDistance) return false;
+    previous = current;
+  }
+
+  return previous[targetLength] <= maxDistance;
+};
+
+const tokenMatches = (queryToken: string, labelToken: string) => {
+  if (labelToken === queryToken) return true;
+  if (labelToken.startsWith(queryToken) || queryToken.startsWith(labelToken)) return true;
+  if (labelToken.includes(queryToken) || queryToken.includes(labelToken)) return true;
+
+  if (queryToken.length < 4 || labelToken.length < 4) return false;
+  if (queryToken[0] !== labelToken[0]) return false;
+  const maxDistance = queryToken.length <= 5 ? 1 : 2;
+  return isWithinEditDistance(queryToken, labelToken, maxDistance);
+};
+
+const matchesLocationSearch = (searchableValue: string, userInput: string) => {
+  const normalizedInput = normalizeSearchText(userInput);
+  if (!normalizedInput) return true;
+
+  const normalizedValue = normalizeSearchText(searchableValue);
+  if (!normalizedValue) return false;
+  if (normalizedValue.includes(normalizedInput)) return true;
+
+  const queryTokens = tokenizeSearchText(normalizedInput);
+  if (queryTokens.length === 0) return normalizedValue.includes(normalizedInput);
+
+  const valueTokens = tokenizeSearchText(normalizedValue);
+  if (valueTokens.length === 0) return false;
+
+  let matchedTokens = 0;
+  const primaryToken = queryTokens.reduce(
+    (current, token) => (token.length > current.length ? token : current),
+    queryTokens[0] ?? ""
+  );
+  let primaryMatched = false;
+
+  queryTokens.forEach((queryToken) => {
+    const matched = valueTokens.some((valueToken) => tokenMatches(queryToken, valueToken));
+    if (!matched) return;
+    matchedTokens += 1;
+    if (queryToken === primaryToken) primaryMatched = true;
+  });
+
+  const minimumMatchedTokens =
+    queryTokens.length <= 2 ? 1 : Math.ceil(queryTokens.length * 0.67);
+  return primaryMatched && matchedTokens >= minimumMatchedTokens;
+};
+
 const dateFnsLocales: Record<AppLocale, DateFnsLocale> = {
   hy,
   en: enGB,
@@ -578,18 +679,7 @@ export default function SearchForm({
       queueMicrotask(() => {
         setSelectedLocation(referrerDestination);
         setDestinationsInitialized(true);
-        setHotelsLoading(true);
-        fetchHotelsForDestination(referrerDestination)
-          .then((options) => {
-            setHotels(options);
-          })
-          .catch((error: unknown) => {
-            console.error("Failed to load hotels for referrer destination:", error);
-            setHotels([]);
-          })
-          .finally(() => {
-            setHotelsLoading(false);
-          });
+        void loadHotelsForAllDestinations(destinations);
       });
       return;
     }
@@ -602,48 +692,25 @@ export default function SearchForm({
     destinationsInitialized,
     destinations,
     hideLocationFields,
-    fetchHotelsForDestination,
     loadHotelsForAllDestinations,
     referrerChecked,
     referrerPreset,
   ]);
 
-  // Load hotels for preset destination on mount (even if a hotel is pre-selected)
+  // Keep preset hotel selection synced with full hotel list labels.
   useEffect(() => {
     if (hideLocationFields) return;
-    if (!presetDestinationOption) return;
+    if (!presetHotelOption) return;
+    if (hotels.length === 0) return;
 
-    // Load hotels for the preset destination
-    setHotelsLoading(true);
-    const destinationId = presetDestinationOption.rawId ?? presetDestinationOption.value;
-
-    fetchHotelsForDestination({
-      ...presetDestinationOption,
-      rawId: destinationId,
-    })
-      .then((options) => {
-
-        console.log("Hotels loaded for preset destination", { count: options.length, first: options[0] });
-        setHotels(options);
-
-        // If a hotel is pre-selected, update selectedLocation with the proper name from loaded hotels
-        if (presetHotelOption) {
-          const matchedHotel = options.find((opt) => opt.value === presetHotelOption.value);
-          if (matchedHotel) {
-            console.log("Updating preset hotel with proper name:", matchedHotel.label);
-            setSelectedLocation(matchedHotel);
-          }
-        }
-      })
-      .catch((error: unknown) => {
-        console.error("Failed to load hotels for preset destination:", error);
-        setHotels([]);
-      })
-      .finally(() => {
-        setHotelsLoading(false);
-      });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hideLocationFields]); // Only run on mount, presetDestinationOption and presetHotelOption are stable
+    setSelectedLocation((current) => {
+      if (!current || current.type !== "hotel" || current.value !== presetHotelOption.value) {
+        return current;
+      }
+      const matchedHotel = hotels.find((option) => option.value === presetHotelOption.value);
+      return matchedHotel ?? current;
+    });
+  }, [hideLocationFields, hotels, presetHotelOption]);
 
   // Load hotels for a destination from the API
   const loadHotelsForDestination = useCallback((destination: LocationOption | null) => {
@@ -663,20 +730,11 @@ export default function SearchForm({
       return;
     }
 
-    setHotelsLoading(true);
-    fetchHotelsForDestination(destination)
-      .then((options) => {
-        console.log("Hotels loaded", { count: options.length, first: options[0] });
-        setHotels(options);
-      })
-      .catch((error: unknown) => {
-        console.error("Failed to load hotels:", error);
-        setHotels([]);
-      })
-      .finally(() => {
-        setHotelsLoading(false);
-      });
-  }, [destinations, fetchHotelsForDestination, hideLocationFields, loadHotelsForAllDestinations]);
+    // Keep the hotel pool global across all destinations even when a destination is selected.
+    if (hotels.length === 0 && destinations.length > 0) {
+      void loadHotelsForAllDestinations(destinations);
+    }
+  }, [destinations, hideLocationFields, hotels.length, loadHotelsForAllDestinations]);
 
   // Guest handlers
 
@@ -964,14 +1022,8 @@ export default function SearchForm({
                 : copy.noLocations
             }
             filterOption={(option, input) => {
-              const label = option.label.toLowerCase();
-              const search = input.toLowerCase();
-              if (!search) return true;
-              // Prioritize destinations by always allowing them when they match
-              if (option.data.type === "destination") {
-                return label.includes(search);
-              }
-              return label.includes(search);
+              const searchableValue = `${option.label} ${option.data.value}`;
+              return matchesLocationSearch(searchableValue, input);
             }}
             components={{
               IndicatorSeparator: () => null,

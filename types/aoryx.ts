@@ -447,7 +447,12 @@ export interface AoryxTransferSelection extends AoryxTransferRate {
   id?: string | null;
   includeReturn?: boolean;
   quantity?: number | null;
-  flightDetails?: { flightNumber?: string | null; arrivalDateTime?: string | null } | null;
+  flightDetails?: {
+    flightNumber?: string | null;
+    arrivalDateTime?: string | null;
+    departureFlightNumber?: string | null;
+    departureDateTime?: string | null;
+  } | null;
   totalPrice?: number | null;
   paxCount?: number | null;
 }
