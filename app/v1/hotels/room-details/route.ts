@@ -4,6 +4,8 @@ import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env"
 import { obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
 import { authenticateB2bRequest, withB2bGatewayHeaders } from "@/lib/b2b-gateway";
 import { buildRoomFacets } from "@/lib/b2b-facets";
+import { applyHotelMarkupToRooms } from "@/lib/b2b-hotel-markup";
+import { getAoryxHotelB2BPlatformFee } from "@/lib/pricing";
 import type { AoryxRoomSearch, AoryxSearchParams } from "@/types/aoryx";
 
 export const runtime = "nodejs";
@@ -106,10 +108,12 @@ export async function POST(request: NextRequest) {
     };
 
     const result = await roomDetails(params);
-    const preparedRooms = obfuscateRoomOptions(result.rooms, {
+    const hotelMarkup = await getAoryxHotelB2BPlatformFee();
+    const obfuscatedRooms = obfuscateRoomOptions(result.rooms, {
       sessionId: result.sessionId,
       hotelCode,
     });
+    const preparedRooms = applyHotelMarkupToRooms(obfuscatedRooms, hotelMarkup);
     const facets = buildRoomFacets(preparedRooms, result.currency ?? null);
 
     return withB2bGatewayHeaders(
@@ -163,4 +167,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

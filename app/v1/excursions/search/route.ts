@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const limit = parseLimit((body as { limit?: unknown }).limit);
 
-    const { excursions, excursionFee } = await fetchExcursions(limit);
+    const { excursions, excursionFee } = await fetchExcursions(limit, { pricingMode: "b2b" });
     const facets = buildExcursionFacets(excursions);
 
     return withB2bGatewayHeaders(
@@ -48,4 +48,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

@@ -435,9 +435,9 @@ const parseRooms = (
       | { gross?: unknown; net?: unknown; tax?: unknown }
       | undefined;
 
-    const gross = toNumber(price?.gross);
-    const net = toNumber(price?.net);
-    const tax = toNumber(price?.tax) ?? 0;
+    let gross = toNumber(price?.gross);
+    let net = toNumber(price?.net);
+    let tax = toNumber(price?.tax) ?? 0;
 
     const roomIdentifier = typeof roomIdentifierRaw === "number" ? roomIdentifierRaw : index + 1;
 
@@ -455,6 +455,15 @@ const parseRooms = (
       groupCodes.push(decoded.groupCode);
       if (decoded.sessionId) {
         sessionIds.push(decoded.sessionId);
+      }
+
+      const tokenGross = toNumber((decoded as { priceGross?: unknown }).priceGross);
+      const tokenNet = toNumber((decoded as { priceNet?: unknown }).priceNet);
+      const tokenTax = toNumber((decoded as { priceTax?: unknown }).priceTax);
+      if (tokenGross !== null && tokenNet !== null) {
+        gross = tokenGross;
+        net = tokenNet;
+        tax = tokenTax ?? tokenGross - tokenNet;
       }
     } else {
       sawRaw = true;
