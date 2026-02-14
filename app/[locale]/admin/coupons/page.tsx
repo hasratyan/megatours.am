@@ -4,9 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { hasAdminConfig, isAdminUser } from "@/lib/admin";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
-import AdminServicesClient from "./admin-services-client";
-import { getServiceFlags } from "@/lib/service-flags";
-import { getPaymentMethodFlags } from "@/lib/payment-method-flags";
+import { getAdminCoupons } from "@/lib/coupons";
+import AdminCouponsClient from "./admin-coupons-client";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +22,13 @@ export async function generateMetadata({ params }: PageProps) {
   const t = getTranslations(resolvedLocale);
   return buildLocalizedMetadata({
     locale: resolvedLocale,
-    title: t.admin.services.title,
-    description: t.admin.services.subtitle,
-    path: "/admin/services",
+    title: `${t.admin.title} • Coupons`,
+    description: "Manage checkout coupon codes and discount rules.",
+    path: "/admin/coupons",
   });
 }
 
-export default async function AdminServicesPage({ params }: PageProps) {
+export default async function AdminCouponsPage({ params }: PageProps) {
   const { locale } = await params;
   const resolvedLocale = resolveLocale(locale);
   const t = getTranslations(resolvedLocale);
@@ -73,20 +72,16 @@ export default async function AdminServicesPage({ params }: PageProps) {
     );
   }
 
-  const [flags, paymentMethodFlags] = await Promise.all([
-    getServiceFlags(),
-    getPaymentMethodFlags(),
-  ]);
+  const initialCoupons = await getAdminCoupons();
 
   return (
     <main className="container admin-page">
-      <AdminServicesClient
+      <AdminCouponsClient
         adminUser={{
           name: session.user.name ?? null,
           email: session.user.email ?? null,
         }}
-        initialFlags={flags}
-        initialPaymentMethodFlags={paymentMethodFlags}
+        initialCoupons={initialCoupons}
       />
     </main>
   );

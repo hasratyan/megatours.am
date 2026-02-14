@@ -2468,7 +2468,7 @@ footer{
 
       .payment{
         img{
-          filter: drop-shadow(0 12px 30px rgba(15, 23, 42, 0.6));
+          filter: drop-shadow(0 15px 30px rgba(15, 23, 42, 0.6));
         }
       }
 
@@ -6410,9 +6410,7 @@ main.payment-status{
 }
 
 .admin-page{
-  padding-bottom: 4rem;
   color: #e2e8f0;
-  display: grid;
   gap: 2rem;
 }
 
@@ -6582,7 +6580,8 @@ main.payment-status{
   }
 
   input,
-  select{
+  select,
+  textarea{
     border-radius: 0.9em;
     border: 1px solid rgba(255, 255, 255, 0.2);
     background: rgba(15, 23, 42, 0.6);
@@ -6593,10 +6592,20 @@ main.payment-status{
   }
 
   input:focus,
-  select:focus{
+  select:focus,
+  textarea:focus{
     border-color: rgba(125, 211, 252, 0.7);
     box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
   }
+
+  textarea{
+    min-height: 88px;
+    resize: vertical;
+  }
+}
+
+.admin-control-wide{
+  grid-column: 1 / -1;
 }
 
 .admin-reset{
@@ -6648,6 +6657,12 @@ main.payment-status{
   tbody tr{
     border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
+}
+
+.admin-empty-cell{
+  text-align: center !important;
+  color: #94a3b8;
+  padding: 1.2rem !important;
 }
 
 .admin-cell-stack{
@@ -6736,6 +6751,86 @@ main.payment-status{
 .admin-action-row{
   display: grid;
   gap: 0.45rem;
+}
+
+.admin-b2b-service-list{
+  display: grid;
+  gap: 0.35rem;
+}
+
+.admin-service-chip{
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.2em 0.6em;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.service-booked{
+  background: rgba(52, 211, 153, 0.16);
+  color: #a7f3d0;
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+.service-failed{
+  background: rgba(248, 113, 113, 0.18);
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.service-skipped{
+  background: rgba(148, 163, 184, 0.16);
+  color: #e2e8f0;
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+.admin-review-chip{
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.22em 0.62em;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.review-new{
+  background: rgba(125, 211, 252, 0.16);
+  color: #bae6fd;
+  border-color: rgba(125, 211, 252, 0.45);
+}
+
+.review-in_progress{
+  background: rgba(251, 191, 36, 0.16);
+  color: #fde68a;
+  border-color: rgba(251, 191, 36, 0.42);
+}
+
+.review-needs_followup{
+  background: rgba(244, 114, 182, 0.16);
+  color: #f9a8d4;
+  border-color: rgba(244, 114, 182, 0.45);
+}
+
+.review-resolved{
+  background: rgba(74, 222, 128, 0.16);
+  color: #bbf7d0;
+  border-color: rgba(74, 222, 128, 0.42);
+}
+
+.admin-b2b-manage{
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.95rem;
+  display: grid;
+  gap: 0.8rem;
 }
 
 .admin-inline-success{
@@ -8410,12 +8505,47 @@ select:focus-visible {
     button{
       border-radius: .75rem;
     }
+    button:disabled{
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
   }
 
-  .checkout-error{
+  .checkout-summary__amount--striked{
+    color: #fca5a5;
+    text-decoration: line-through;
+    text-decoration-thickness: 2px;
+    text-decoration-color: rgba(248, 113, 113, 0.95);
+  }
+
+  .checkout-summary__line--discount{
+    color: #a7f3d0;
+    strong{
+      color: #7cf2d4;
+    }
+  }
+
+  .checkout-summary__line--final{
+    b{
+      color: #bae6fd;
+    }
+    strong{
+      color: #f8fafc;
+      font-size: 1.05rem;
+    }
+  }
+
+  .checkout-coupon__feedback{
     margin: 0;
+    font-size: 0.88rem;
+  }
+
+  .checkout-coupon__feedback--error{
     color: #fecaca;
-    font-size: 0.9rem;
+  }
+
+  .checkout-coupon__feedback--success{
+    color: #86efac;
   }
 
   .checkout-error__link{
@@ -8447,6 +8577,12 @@ select:focus-visible {
     opacity: 0.5;
     cursor: not-allowed;
   }
+}
+
+.checkout-error{
+  margin: 0;
+  color: #fecaca;
+  font-size: 0.9rem;
 }
 
 .checkout-draft-modal__overlay{

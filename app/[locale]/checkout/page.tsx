@@ -4,6 +4,7 @@ import ProfileSignIn from "@/components/profile-signin";
 import { authOptions } from "@/lib/auth";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { DEFAULT_PAYMENT_METHOD_FLAGS, getPaymentMethodFlags } from "@/lib/payment-method-flags";
 
 type PageProps = {
   params: Promise<{ locale: string }>;
@@ -26,7 +27,7 @@ export async function generateMetadata({ params }: PageProps) {
   });
 }
 
-export default async function CheckoutPage({ params }: PageProps) {
+export default async function CheckoutPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return (
@@ -35,5 +36,11 @@ export default async function CheckoutPage({ params }: PageProps) {
       </main>
     );
   }
-  return <PackageCheckoutClient />;
+  let paymentMethodFlags = DEFAULT_PAYMENT_METHOD_FLAGS;
+  try {
+    paymentMethodFlags = await getPaymentMethodFlags();
+  } catch (error) {
+    console.error("[CheckoutPage] Failed to load payment method flags", error);
+  }
+  return <PackageCheckoutClient initialPaymentMethodFlags={paymentMethodFlags} />;
 }

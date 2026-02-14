@@ -14,7 +14,7 @@ import { ApiError, postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { Locale as AppLocale } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
-import { getCountryOptions, resolveCountryAlpha2 } from "@/lib/countries";
+import { resolveCountryAlpha2 } from "@/lib/countries";
 import { buildSearchQuery } from "@/lib/search-query";
 import {
   EFES_DEFAULT_COUNTRY_ID,
@@ -35,6 +35,7 @@ import {
   updatePackageBuilderState,
 } from "@/lib/package-builder-state";
 import { useAmdRates } from "@/lib/use-amd-rates";
+import type { CheckoutPaymentMethod, PaymentMethodFlags } from "@/lib/payment-method-flags";
 import type {
   AoryxBookingPayload,
   AoryxRoomSearch,
@@ -42,8 +43,6 @@ import type {
   BookingInsuranceTraveler,
 } from "@/types/aoryx";
 import type { EfesQuoteRequest, EfesQuoteResult } from "@/types/efes";
-
-type PaymentMethod = "idram" | "idbank_card" | "ameria_card";
 
 type GuestForm = {
   id: string;
@@ -94,11 +93,26 @@ type VposCheckoutResponse = {
   orderNumber: string;
 };
 
+type CouponValidationResponse = {
+  coupon: {
+    code: string;
+    discountPercent: number;
+    expiresAt: string | null;
+    status: "active" | "disabled" | "scheduled" | "expired" | "paused";
+  };
+};
+
+type AppliedCoupon = CouponValidationResponse["coupon"];
+
 const intlLocales: Record<AppLocale, string> = {
   hy: "hy-AM",
   en: "en-GB",
   ru: "ru-RU",
 };
+
+type PaymentMethod = CheckoutPaymentMethod;
+
+const paymentMethodOrder: PaymentMethod[] = ["idram", "idbank_card", "ameria_card"];
 
 type AddressSelectOption = {
   value: string;
@@ -608,12 +622,6 @@ type CheckoutDraft = {
     email: string;
     phone: string;
   };
-  billing: {
-    country: string;
-    city: string;
-    address: string;
-    zip: string;
-  };
   guestDetails: RoomGuestForm[];
   insuranceTravelers: InsuranceTravelerForm[];
 };
@@ -742,24 +750,37 @@ const hasManualInsuranceInput = (travelers: InsuranceTravelerForm[]) =>
 
 const hasMeaningfulCheckoutDraft = (draft: CheckoutDraft) =>
   hasNonEmptyValue(draft.contact.phone) ||
-  hasNonEmptyValue(draft.billing.country) ||
-  hasNonEmptyValue(draft.billing.city) ||
-  hasNonEmptyValue(draft.billing.address) ||
-  hasNonEmptyValue(draft.billing.zip) ||
   hasManualGuestInput(draft.guestDetails) ||
   hasManualInsuranceInput(draft.insuranceTravelers);
 
-export default function PackageCheckoutClient() {
+type PackageCheckoutClientProps = {
+  initialPaymentMethodFlags: PaymentMethodFlags;
+};
+
+export default function PackageCheckoutClient({
+  initialPaymentMethodFlags,
+}: PackageCheckoutClientProps) {
   const { locale, t } = useLanguage();
   const intlLocale = intlLocales[locale] ?? "en-GB";
   const { data: session } = useSession();
   const { rates: hotelRates } = useAmdRates();
   const baseRates = hotelRates;
+  const enabledPaymentMethods = useMemo(
+    () =>
+      paymentMethodOrder.filter((method) => initialPaymentMethodFlags[method] !== false),
+    [initialPaymentMethodFlags]
+  );
   const [builderState, setBuilderState] = useState<PackageBuilderState>({});
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("idram");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(
+    () => enabledPaymentMethods[0] ?? null
+  );
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [insuranceTermsAccepted, setInsuranceTermsAccepted] = useState(false);
   const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponMessage, setCouponMessage] = useState<string | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [devInsuranceLoading, setDevInsuranceLoading] = useState(false);
@@ -773,12 +794,6 @@ export default function PackageCheckoutClient() {
     phone: "",
   });
   const [guestDetails, setGuestDetails] = useState<RoomGuestForm[]>([]);
-  const [billing, setBilling] = useState({
-    country: "",
-    city: "",
-    address: "",
-    zip: "",
-  });
   const [transferFlightDetails, setTransferFlightDetails] = useState<TransferFlightDetailsForm>(
     EMPTY_TRANSFER_FLIGHT_DETAILS
   );
@@ -809,10 +824,73 @@ export default function PackageCheckoutClient() {
   const restoredDraftSignatureRef = useRef<string | null>(null);
   const draftLookupCompletedSignatureRef = useRef<string | null>(null);
   const isDevEnvironment = process.env.NODE_ENV === "development";
-  const countryOptions = useMemo(
-    () => (isMounted ? getCountryOptions(intlLocale) : []),
-    [intlLocale, isMounted]
+  const couponUiText = useMemo(
+    () => ({
+      applied: t.packageBuilder.checkout.couponApplied,
+      invalid: t.packageBuilder.checkout.couponInvalid,
+      disabled: t.packageBuilder.checkout.couponDisabled,
+      notStarted: t.packageBuilder.checkout.couponNotStarted,
+      expired: t.packageBuilder.checkout.couponExpired,
+      limitReached: t.packageBuilder.checkout.couponLimitReached,
+      temporarilyDisabled: t.packageBuilder.checkout.couponTemporarilyDisabled,
+      rateLimited: t.packageBuilder.checkout.couponRateLimited,
+      unavailable: t.packageBuilder.checkout.couponUnavailable,
+      discountLabel: t.packageBuilder.checkout.couponDiscountLabel,
+      totalAfterDiscount: t.packageBuilder.checkout.couponTotalAfterDiscount,
+      enterCode: t.packageBuilder.checkout.couponEnterCode,
+      applying: t.packageBuilder.checkout.couponApplying,
+    }),
+    [
+      t.packageBuilder.checkout.couponApplied,
+      t.packageBuilder.checkout.couponApplying,
+      t.packageBuilder.checkout.couponDisabled,
+      t.packageBuilder.checkout.couponDiscountLabel,
+      t.packageBuilder.checkout.couponEnterCode,
+      t.packageBuilder.checkout.couponExpired,
+      t.packageBuilder.checkout.couponInvalid,
+      t.packageBuilder.checkout.couponLimitReached,
+      t.packageBuilder.checkout.couponNotStarted,
+      t.packageBuilder.checkout.couponRateLimited,
+      t.packageBuilder.checkout.couponTemporarilyDisabled,
+      t.packageBuilder.checkout.couponTotalAfterDiscount,
+      t.packageBuilder.checkout.couponUnavailable,
+    ]
   );
+  const paymentMethodsUnavailableText = t.packageBuilder.checkout.paymentMethodsUnavailable;
+  const paymentMethodOptions = useMemo(
+    () => [
+      {
+        value: "idram" as PaymentMethod,
+        label: t.packageBuilder.checkout.methodIdram,
+        payLabel: t.packageBuilder.checkout.payIdram,
+      },
+      {
+        value: "idbank_card" as PaymentMethod,
+        label: t.packageBuilder.checkout.methodCard,
+        payLabel: t.packageBuilder.checkout.payCard,
+      },
+      {
+        value: "ameria_card" as PaymentMethod,
+        label: t.packageBuilder.checkout.methodCardAmeria,
+        payLabel: t.packageBuilder.checkout.payCardAmeria,
+      },
+    ],
+    [
+      t.packageBuilder.checkout.methodCard,
+      t.packageBuilder.checkout.methodCardAmeria,
+      t.packageBuilder.checkout.methodIdram,
+      t.packageBuilder.checkout.payCard,
+      t.packageBuilder.checkout.payCardAmeria,
+      t.packageBuilder.checkout.payIdram,
+    ]
+  );
+  const enabledPaymentMethodOptions = useMemo(
+    () =>
+      paymentMethodOptions.filter((option) => initialPaymentMethodFlags[option.value] !== false),
+    [initialPaymentMethodFlags, paymentMethodOptions]
+  );
+  const selectedPaymentMethodOption =
+    enabledPaymentMethodOptions.find((option) => option.value === paymentMethod) ?? null;
   const efesCountryOptions = useMemo(
     () =>
       getEfesCountryOptions(locale, efesCountries).map<AddressSelectOption>((option) => ({
@@ -894,6 +972,11 @@ export default function PackageCheckoutClient() {
     });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (paymentMethod && enabledPaymentMethods.includes(paymentMethod)) return;
+    setPaymentMethod(enabledPaymentMethods[0] ?? null);
+  }, [enabledPaymentMethods, paymentMethod]);
 
   const hasHotel = builderState.hotel?.selected === true;
   const sessionExpiresAt =
@@ -1283,10 +1366,7 @@ export default function PackageCheckoutClient() {
               mobilePhone: existing?.mobilePhone ?? contact.phone ?? "",
               email: existing?.email ?? contact.email ?? "",
               address: (() => {
-                const normalizedCountry =
-                  resolveCountryAlpha2(address.country) ??
-                  resolveCountryAlpha2(billing.country) ??
-                  "";
+                const normalizedCountry = resolveCountryAlpha2(address.country) ?? "";
                 const countryId =
                   address.countryId?.trim() ||
                   (normalizedCountry
@@ -1298,12 +1378,12 @@ export default function PackageCheckoutClient() {
                   normalizedCountry ??
                   "AM";
                 return {
-                  full: address.full ?? billing.address ?? "",
-                  fullEn: address.fullEn ?? billing.address ?? "",
+                  full: address.full ?? "",
+                  fullEn: address.fullEn ?? "",
                   country: countryCode,
                   countryId,
                   region: address.region ?? "",
-                  city: address.city ?? billing.city ?? "",
+                  city: address.city ?? "",
                 };
               })(),
               citizenship: existing?.citizenship ?? fallbackCitizenship,
@@ -1320,9 +1400,6 @@ export default function PackageCheckoutClient() {
       return next;
     });
   }, [
-    billing.address,
-    billing.city,
-    billing.country,
     contact.email,
     contact.phone,
     guestDetails,
@@ -1968,7 +2045,6 @@ export default function PackageCheckoutClient() {
       signature: checkoutDraftSignature,
       updatedAt: Date.now(),
       contact,
-      billing,
       guestDetails,
       insuranceTravelers,
     };
@@ -1977,7 +2053,6 @@ export default function PackageCheckoutClient() {
     store[checkoutDraftSignature] = draft;
     writeCheckoutDraftStore(store);
   }, [
-    billing,
     checkoutDraftSignature,
     checkoutRestoreDraftModal,
     contact,
@@ -2045,12 +2120,6 @@ export default function PackageCheckoutClient() {
       email: draft.contact.email ?? "",
       phone: draft.contact.phone ?? "",
     });
-    setBilling({
-      country: draft.billing.country ?? "",
-      city: draft.billing.city ?? "",
-      address: draft.billing.address ?? "",
-      zip: draft.billing.zip ?? "",
-    });
     setGuestDetails(
       buildGuestDetails(
         hotelRooms,
@@ -2067,6 +2136,74 @@ export default function PackageCheckoutClient() {
     }
     setCheckoutRestoreDraftModal(null);
   }, [checkoutRestoreDraftModal, hotelRooms, insuranceSelection?.selected]);
+
+  const normalizeCouponInput = useCallback(
+    (value: string) => value.trim().toUpperCase().replace(/\s+/g, ""),
+    []
+  );
+
+  const handleCouponInputChange = useCallback(
+    (nextValue: string) => {
+      setCouponCode(nextValue);
+      setCouponError(null);
+      setCouponMessage(null);
+      if (appliedCoupon && normalizeCouponInput(nextValue) !== appliedCoupon.code) {
+        setAppliedCoupon(null);
+      }
+    },
+    [appliedCoupon, normalizeCouponInput]
+  );
+
+  const resolveCouponErrorMessage = useCallback(
+    (error: unknown) => {
+      if (error instanceof ApiError) {
+        if (error.code === "coupon_disabled") return couponUiText.disabled;
+        if (error.code === "coupon_not_started") return couponUiText.notStarted;
+        if (error.code === "coupon_expired") return couponUiText.expired;
+        if (error.code === "coupon_limit_reached") return couponUiText.limitReached;
+        if (error.code === "coupon_temporarily_disabled") return couponUiText.temporarilyDisabled;
+        if (error.code === "coupon_rate_limited") return couponUiText.rateLimited;
+        if (error.code === "coupon_validation_unavailable") return couponUiText.unavailable;
+        if (error.code === "invalid_coupon") return couponUiText.invalid;
+      }
+      return resolveSafeErrorFromUnknown(error, couponUiText.invalid);
+    },
+    [couponUiText]
+  );
+
+  const handleApplyCoupon = useCallback(async () => {
+    if (couponLoading || paymentLoading) return;
+    const code = normalizeCouponInput(couponCode);
+    if (!code) {
+      setCouponError(couponUiText.enterCode);
+      setCouponMessage(null);
+      setAppliedCoupon(null);
+      return;
+    }
+
+    setCouponLoading(true);
+    setCouponError(null);
+    setCouponMessage(null);
+    try {
+      const response = await postJson<CouponValidationResponse>("/api/coupons/validate", { code });
+      setCouponCode(response.coupon.code);
+      setAppliedCoupon(response.coupon);
+      setCouponMessage(couponUiText.applied);
+    } catch (error) {
+      setAppliedCoupon(null);
+      setCouponError(resolveCouponErrorMessage(error));
+    } finally {
+      setCouponLoading(false);
+    }
+  }, [
+    couponCode,
+    couponLoading,
+    couponUiText.applied,
+    couponUiText.enterCode,
+    normalizeCouponInput,
+    paymentLoading,
+    resolveCouponErrorMessage,
+  ]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2324,7 +2461,14 @@ export default function PackageCheckoutClient() {
 
     setPaymentLoading(true);
     try {
-      const requestPayload = { ...payload, locale };
+      if (!paymentMethod) {
+        throw new Error(paymentMethodsUnavailableText);
+      }
+      const requestPayload = {
+        ...payload,
+        locale,
+        couponCode: appliedCoupon?.code ?? undefined,
+      };
       if (paymentMethod === "idram") {
         const checkout = await postJson<IdramCheckoutResponse>(
           "/api/payments/idram/checkout",
@@ -2358,6 +2502,14 @@ export default function PackageCheckoutClient() {
       }
       window.location.assign(checkout.formUrl);
     } catch (error) {
+      if (
+        error instanceof ApiError &&
+        (error.code === "invalid_coupon" || error.code?.startsWith("coupon"))
+      ) {
+        setAppliedCoupon(null);
+        setCouponMessage(null);
+        setCouponError(resolveCouponErrorMessage(error));
+      }
       setPaymentError(resolveCheckoutError(error));
       setPaymentLoading(false);
     }
@@ -2828,14 +2980,59 @@ export default function PackageCheckoutClient() {
       );
     }
 
-    if (selectedCount === 0) return null;
-    if (totals.length === 0 || missingPrice) return t.common.contactForRates;
+    if (selectedCount === 0) {
+      return {
+        label: null as string | null,
+        amount: null as number | null,
+        currency: null as string | null,
+        contactForRates: false,
+      };
+    }
+    if (totals.length === 0 || missingPrice) {
+      return {
+        label: t.common.contactForRates,
+        amount: null as number | null,
+        currency: null as string | null,
+        contactForRates: true,
+      };
+    }
     const currency = totals[0].currency;
-    if (totals.some((item) => item.currency !== currency)) return t.common.contactForRates;
+    if (totals.some((item) => item.currency !== currency)) {
+      return {
+        label: t.common.contactForRates,
+        amount: null as number | null,
+        currency: null as string | null,
+        contactForRates: true,
+      };
+    }
     const totalAmount = totals.reduce((sum, item) => sum + item.amount, 0);
-    return formatCurrencyAmount(totalAmount, currency, intlLocale);
+    return {
+      label: formatCurrencyAmount(totalAmount, currency, intlLocale),
+      amount: totalAmount,
+      currency,
+      contactForRates: false,
+    };
   })();
-  const hideTotalLabel = estimatedTotal === t.common.contactForRates;
+  const couponDiscountSummary = (() => {
+    if (!appliedCoupon || estimatedTotal.amount === null || !estimatedTotal.currency) return null;
+    const discountAmount = Math.round(
+      ((estimatedTotal.amount * appliedCoupon.discountPercent) / 100 + Number.EPSILON) * 100
+    ) / 100;
+    const discountedAmount = Math.round(
+      (Math.max(0, estimatedTotal.amount - discountAmount) + Number.EPSILON) * 100
+    ) / 100;
+    return {
+      discountAmount,
+      discountedAmount,
+      discountLabel: formatCurrencyAmount(discountAmount, estimatedTotal.currency, intlLocale),
+      discountedTotalLabel: formatCurrencyAmount(
+        discountedAmount,
+        estimatedTotal.currency,
+        intlLocale
+      ),
+    };
+  })();
+  const hideTotalLabel = estimatedTotal.contactForRates;
 
   const transferDetailsValid =
     transfer?.selected !== true || Object.keys(resolveTransferFlightFieldErrors()).length === 0;
@@ -2964,6 +3161,8 @@ export default function PackageCheckoutClient() {
 
   const canPay = Boolean(
     termsAccepted &&
+      enabledPaymentMethodOptions.length > 0 &&
+      paymentMethod &&
       (!insuranceActive || insuranceTermsAccepted) &&
       contact.firstName.trim().length > 0 &&
       contact.email.trim().length > 0 &&
@@ -3943,91 +4142,26 @@ export default function PackageCheckoutClient() {
 
             <div className="checkout-section">
               <div className="checkout-section__heading">
-                <h2>{t.packageBuilder.checkout.billingTitle}</h2>
-                <p className="checkout-section__hint">{t.packageBuilder.checkout.billingHint}</p>
-              </div>
-              <div className="checkout-field-grid">
-                <label className="checkout-field">
-                  <span>{t.packageBuilder.checkout.country}</span>
-                  <select
-                    className="checkout-input"
-                    value={resolveCountryAlpha2(billing.country) ?? ""}
-                    onChange={(event) =>
-                      setBilling((prev) => ({ ...prev, country: event.target.value }))
-                    }
-                    autoComplete="country-name"
-                  >
-                    <option value="">{t.packageBuilder.checkout.countryPlaceholder}</option>
-                    {countryOptions.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.flag} {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="checkout-field">
-                  <span>{t.packageBuilder.checkout.city}</span>
-                  <input
-                    className="checkout-input"
-                    type="text"
-                    value={billing.city}
-                    onChange={(event) =>
-                      setBilling((prev) => ({ ...prev, city: event.target.value }))
-                    }
-                    autoComplete="address-level2"
-                  />
-                </label>
-                <label className="checkout-field checkout-field--full">
-                  <span>{t.packageBuilder.checkout.address}</span>
-                  <input
-                    className="checkout-input"
-                    type="text"
-                    value={billing.address}
-                    onChange={(event) =>
-                      setBilling((prev) => ({ ...prev, address: event.target.value }))
-                    }
-                    autoComplete="street-address"
-                  />
-                </label>
-              </div>
-            </div>
-            <div className="checkout-section">
-              <div className="checkout-section__heading">
                 <h2>{t.packageBuilder.checkout.paymentTitle}</h2>
                 <p className="checkout-section__hint">{t.packageBuilder.checkout.paymentHint}</p>
               </div>
               <div className="checkout-payment">
-                <label className="checkout-radio">
-                  <input
-                    type="radio"
-                    name="payment-method"
-                    value="idram"
-                    checked={paymentMethod === "idram"}
-                    onChange={() => setPaymentMethod("idram")}
-                  />
-                  <span>{t.packageBuilder.checkout.methodIdram}</span>
-                </label>
-                <label className="checkout-radio">
-                  <input
-                    type="radio"
-                    name="payment-method"
-                    value="idbank_card"
-                    checked={paymentMethod === "idbank_card"}
-                    onChange={() => setPaymentMethod("idbank_card")}
-                  />
-                  <span>{t.packageBuilder.checkout.methodCard}</span>
-                </label>
-                <label className="checkout-radio">
-                  <input
-                    type="radio"
-                    name="payment-method"
-                    value="ameria_card"
-                    checked={paymentMethod === "ameria_card"}
-                    onChange={() => setPaymentMethod("ameria_card")}
-                  />
-                  <span>{t.packageBuilder.checkout.methodCardAmeria}</span>
-                </label>
+                {enabledPaymentMethodOptions.map((option) => (
+                  <label key={option.value} className="checkout-radio">
+                    <input
+                      type="radio"
+                      name="payment-method"
+                      value={option.value}
+                      checked={paymentMethod === option.value}
+                      onChange={() => setPaymentMethod(option.value)}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
               </div>
+              {enabledPaymentMethodOptions.length === 0 ? (
+                <p className="checkout-error" role="alert">{paymentMethodsUnavailableText}</p>
+              ) : null}
               <label className="checkout-terms">
                 <input
                   type="checkbox"
@@ -4080,8 +4214,25 @@ export default function PackageCheckoutClient() {
               ))}
               <div className="checkout-summary__line">
                 {hideTotalLabel ? null : <b>{t.packageBuilder.checkout.totalLabel}</b>}
-                <strong>{estimatedTotal ?? 0}</strong>
+                <strong className={couponDiscountSummary ? "checkout-summary__amount--striked" : ""}>
+                  {estimatedTotal.label ?? 0}
+                </strong>
               </div>
+              {couponDiscountSummary && appliedCoupon ? (
+                <>
+                  <div className="checkout-summary__line checkout-summary__line--discount">
+                    <span>
+                      {couponUiText.discountLabel} ({appliedCoupon.code} - {appliedCoupon.discountPercent}
+                      %)
+                    </span>
+                    <strong>-{couponDiscountSummary.discountLabel}</strong>
+                  </div>
+                  <div className="checkout-summary__line checkout-summary__line--final">
+                    <b>{couponUiText.totalAfterDiscount}</b>
+                    <strong>{couponDiscountSummary.discountedTotalLabel}</strong>
+                  </div>
+                </>
+              ) : null}
               {hideTotalLabel ? null : (
                 <div className="checkout-coupon">
                   <input
@@ -4089,13 +4240,26 @@ export default function PackageCheckoutClient() {
                     type="text"
                     placeholder={t.packageBuilder.checkout.couponTitle}
                     value={couponCode}
-                    onChange={(event) => setCouponCode(event.target.value)}
+                    onChange={(event) => handleCouponInputChange(event.target.value)}
                   />
-                  <button type="button" className="checkout-apply">
-                    {t.packageBuilder.checkout.applyCoupon}
+                  <button
+                    type="button"
+                    className="checkout-apply"
+                    onClick={handleApplyCoupon}
+                    disabled={couponLoading || paymentLoading}
+                  >
+                    {couponLoading ? couponUiText.applying : t.packageBuilder.checkout.applyCoupon}
                   </button>
                 </div>
               )}
+              {couponError ? (
+                <p className="checkout-coupon__feedback checkout-coupon__feedback--error" role="alert">
+                  {couponError}
+                </p>
+              ) : null}
+              {couponMessage ? (
+                <p className="checkout-coupon__feedback checkout-coupon__feedback--success">{couponMessage}</p>
+              ) : null}
               {paymentError ? (
                 <>
                   <p className="checkout-error" role="alert">
@@ -4110,11 +4274,7 @@ export default function PackageCheckoutClient() {
               ) : null}
               {hideTotalLabel ? null : (
                 <button type="submit" className="checkout-pay" disabled={!canPay}>
-                  {paymentMethod === "idram"
-                    ? t.packageBuilder.checkout.payIdram
-                    : paymentMethod === "ameria_card"
-                      ? t.packageBuilder.checkout.payCardAmeria
-                      : t.packageBuilder.checkout.payCard}
+                  {selectedPaymentMethodOption?.payLabel ?? t.packageBuilder.checkout.payCard}
                 </button>
               )}
             </div>

@@ -222,13 +222,7 @@ export type Translation = {
       guestChildLabel: string;
       guestLeadLabel: string;
       ageLabel: string;
-    billingTitle: string;
-    billingHint: string;
-    country: string;
     countryPlaceholder: string;
-    city: string;
-    address: string;
-    zip: string;
       insuranceTitle: string;
       insuranceHint: string;
       insuranceEmpty: string;
@@ -261,6 +255,19 @@ export type Translation = {
       couponTitle: string;
       couponPlaceholder: string;
       applyCoupon: string;
+      couponApplied: string;
+      couponInvalid: string;
+      couponDisabled: string;
+      couponNotStarted: string;
+      couponExpired: string;
+      couponLimitReached: string;
+      couponTemporarilyDisabled: string;
+      couponRateLimited: string;
+      couponUnavailable: string;
+      couponDiscountLabel: string;
+      couponTotalAfterDiscount: string;
+      couponEnterCode: string;
+      couponApplying: string;
       insuranceTerms: {
         prefix: string;
         link: string;
@@ -270,6 +277,7 @@ export type Translation = {
       devInsuranceSuccess: string;
       paymentTitle: string;
       paymentHint: string;
+      paymentMethodsUnavailable: string;
       methodIdram: string;
       methodCard: string;
       methodCardAmeria: string;
@@ -521,6 +529,7 @@ export type Translation = {
       open: string;
       cards: {
         bookings: string;
+        b2bBookings: string;
         featured: string;
         users: string;
         searches: string;
@@ -672,6 +681,79 @@ export type Translation = {
       subtitle: string;
       emptyTitle: string;
       emptyBody: string;
+    };
+    b2bBookings: {
+      title: string;
+      subtitle: string;
+      emptyTitle: string;
+      emptyBody: string;
+      stats: {
+        total: string;
+        partners: string;
+        open: string;
+        resolved: string;
+        serviceFailed: string;
+      };
+      filters: {
+        searchPlaceholder: string;
+        partnerLabel: string;
+        reviewLabel: string;
+        serviceLabel: string;
+        sortLabel: string;
+        reset: string;
+        all: string;
+        reviewOptions: {
+          new: string;
+          inProgress: string;
+          needsFollowup: string;
+          resolved: string;
+        };
+        serviceOptions: {
+          anyFailed: string;
+          transferFailed: string;
+          excursionsFailed: string;
+          insuranceFailed: string;
+        };
+        sortOptions: {
+          newest: string;
+          oldest: string;
+        };
+      };
+      columns: {
+        requestId: string;
+        partner: string;
+        bookingRef: string;
+        hotel: string;
+        services: string;
+        review: string;
+        createdAt: string;
+        actions: string;
+      };
+      labels: {
+        transfer: string;
+        excursions: string;
+        insurance: string;
+        bookingRef: string;
+        dates: string;
+        updatedBy: string;
+        updatedAt: string;
+        servicePayload: string;
+        serviceResult: string;
+        bookingResult: string;
+        reviewStatus: string;
+        note: string;
+      };
+      serviceStatus: {
+        booked: string;
+        failed: string;
+        skipped: string;
+      };
+      actions: {
+        save: string;
+        saving: string;
+        saveSuccess: string;
+        saveFailed: string;
+      };
     };
     filters: {
       searchPlaceholder: string;
@@ -1343,13 +1425,7 @@ const translations: Record<Locale, Translation> = {
         guestChildLabel: "Երեխա",
         guestLeadLabel: "Գլխավոր հյուր",
         ageLabel: "Տարիք",
-        billingTitle: "Վճարման տվյալներ",
-        billingHint: "Օգտագործվում է հաշիվների և հաստատման համար։",
-        country: "Երկիր",
         countryPlaceholder: "Ընտրել երկիր",
-        city: "Քաղաք",
-        address: "Հասցե",
-        zip: "Փոստային ինդեքս",
         insuranceTitle: "Ճանապարհորդական ապահովագրության համար անհրաժեշտ տվյալներ",
         insuranceHint: "Լրացրեք յուրաքանչյուր ճանապարհորդի անձնագրային և կոնտակտային տվյալները։",
         insuranceEmpty: "Ապահովագրությունը ընտրելուց հետո կլրացվեն տվյալները։",
@@ -1382,6 +1458,19 @@ const translations: Record<Locale, Translation> = {
         couponTitle: "Կտրոնի կամ նվեր քարտի կոդ",
         couponPlaceholder: "Մուտքագրեք կոդը",
         applyCoupon: "Կիրառել",
+        couponApplied: "Կտրոնը հաջողությամբ կիրառվեց։",
+        couponInvalid: "Կտրոնի կոդը սխալ է կամ այլևս վավեր չէ։",
+        couponDisabled: "Կտրոնը անհասանելի է։",
+        couponNotStarted: "Կտրոնը դեռ ակտիվ չէ։",
+        couponExpired: "Կտրոնի ժամկետը սպառվել է։",
+        couponLimitReached: "Կտրոնի օգտագործման սահմանաչափը սպառվել է։",
+        couponTemporarilyDisabled: "Կտրոնը ժամանակավորապես անհասանելի է։",
+        couponRateLimited: "Չափազանց շատ փորձեր են կատարվել։ Խնդրում ենք փորձել քիչ անց։",
+        couponUnavailable: "Այս պահին հնարավոր չէ ստուգել կտրոնը։ Խնդրում ենք փորձել ավելի ուշ։",
+        couponDiscountLabel: "Զեղչ",
+        couponTotalAfterDiscount: "Ընդհանուր զեղչով",
+        couponEnterCode: "Մուտքագրեք կտրոնի կոդը։",
+        couponApplying: "Կիրառվում է...",
         insuranceTerms: {
           prefix: "Ստացել, ծանոթացել և համաձայն եմ ",
           link: "Ճամփորդության ապահովագրության պայմանագրի պայմաններին",
@@ -1392,9 +1481,10 @@ const translations: Record<Locale, Translation> = {
         devInsuranceSuccess: "Ապահովագրությունը հաջողությամբ ուղարկվեց։",
         paymentTitle: "Վճարման եղանակ",
         paymentHint: "Ընտրեք վճարման տարբերակը։",
+        paymentMethodsUnavailable: "Այս պահին վճարման եղանակները ժամանակավորապես հասանելի չեն։",
         methodIdram: "Idram",
-        methodCard: "IDBank-ի վճարային տերմինալ",
-        methodCardAmeria: "Ameriabank-ի վճարային տերմինալ",
+        methodCard: "Այդի Բանկի վճարային տերմինալ",
+        methodCardAmeria: "Ամերիաբանկի վճարային տերմինալ",
         cardName: "Քարտի վրա նշված անուն",
         cardNumber: "Քարտի համար",
         cardExpiry: "Վավերականություն (MM/YY)",
@@ -1402,8 +1492,8 @@ const translations: Record<Locale, Translation> = {
         termsLabel: "Համաձայն եմ",
         termsConnector: "և",
         payIdram: "Վճարել Idram-ով",
-        payCard: "Վճարել IDBank-ի վճարային տերմինալով",
-        payCardAmeria: "Վճարել Ameriabank-ի վճարային տերմինալով",
+        payCard: "Վճարել Այդի Բանկի վճարային տերմինալով",
+        payCardAmeria: "Վճարել Ամերիաբանկի վճարային տերմինալով",
         totalTitle: "Վճարման ամփոփում",
         totalLabel: "Ընդհանուր",
         nonRefundableWarning:
@@ -1839,6 +1929,7 @@ const translations: Record<Locale, Translation> = {
       open: "Բացել",
       cards: {
         bookings: "Դիտեք և վերահսկեք բոլոր ամրագրումները։",
+        b2bBookings: "Հետևեք և կառավարեք API գործընկերների ամրագրումները։",
         featured: "Կազմեք գլխավոր էջի հյուրանոցների շարքը։",
         users: "Դիտեք օգտատերերի տվյալները և ակտիվությունը։",
         searches: "Վերահսկեք օգտատերերի որոնումները։",
@@ -1990,6 +2081,79 @@ const translations: Record<Locale, Translation> = {
       subtitle: "Ֆիլտրեք ըստ հյուրանոցի, օգտատիրոջ կամ կարգավիճակի։",
       emptyTitle: "Ամրագրումներ չեն գտնվել",
       emptyBody: "Փորձեք փոխել ֆիլտրերը կամ որոնումը։",
+    },
+    b2bBookings: {
+      title: "B2B API ամրագրումներ",
+      subtitle: "Վերահսկեք գործընկերների ամրագրումները և ծառայությունների արդյունքները։",
+      emptyTitle: "B2B ամրագրումներ չեն գտնվել",
+      emptyBody: "Փորձեք փոխել ֆիլտրերը կամ կրկին ստուգել ավելի ուշ։",
+      stats: {
+        total: "Ընդհանուր գրառումներ",
+        partners: "Ակտիվ գործընկերներ",
+        open: "Բաց դիտարկումներ",
+        resolved: "Փակված",
+        serviceFailed: "Ծառայության ձախողում",
+      },
+      filters: {
+        searchPlaceholder: "Որոնել request ID, գործընկեր, booking ref...",
+        partnerLabel: "Գործընկեր",
+        reviewLabel: "Դիտարկման կարգավիճակ",
+        serviceLabel: "Ծառայության կարգավիճակ",
+        sortLabel: "Դասավորել",
+        reset: "Մաքրել",
+        all: "Բոլորը",
+        reviewOptions: {
+          new: "Նոր",
+          inProgress: "Ընթացքի մեջ",
+          needsFollowup: "Պահանջում է կապ",
+          resolved: "Փակված",
+        },
+        serviceOptions: {
+          anyFailed: "Ցանկացած ծառայություն ձախողված",
+          transferFailed: "Տրանսֆեր ձախողված",
+          excursionsFailed: "Էքսկուրսիա ձախողված",
+          insuranceFailed: "Ապահովագրություն ձախողված",
+        },
+        sortOptions: {
+          newest: "Նորից հին",
+          oldest: "Հնից նոր",
+        },
+      },
+      columns: {
+        requestId: "Request ID",
+        partner: "Գործընկեր",
+        bookingRef: "Booking ref",
+        hotel: "Հյուրանոց",
+        services: "Ծառայություններ",
+        review: "Դիտարկում",
+        createdAt: "Ստեղծվել է",
+        actions: "Մանրամասներ",
+      },
+      labels: {
+        transfer: "Տրանսֆեր",
+        excursions: "Էքսկուրսիա",
+        insurance: "Ապահովագրություն",
+        bookingRef: "Ամրագրման հղում",
+        dates: "Ճամփորդության ամսաթվեր",
+        updatedBy: "Թարմացրել է",
+        updatedAt: "Թարմացվել է",
+        servicePayload: "Ծառայության payload",
+        serviceResult: "Ծառայության արդյունք",
+        bookingResult: "Հյուրանոցի ամրագրման արդյունք",
+        reviewStatus: "Դիտարկման կարգավիճակ",
+        note: "Ներքին նշում",
+      },
+      serviceStatus: {
+        booked: "Ամրագրված",
+        failed: "Ձախողված",
+        skipped: "Բաց թողնված",
+      },
+      actions: {
+        save: "Պահպանել դիտարկումը",
+        saving: "Պահպանվում է...",
+        saveSuccess: "Դիտարկումը թարմացվեց։",
+        saveFailed: "Չհաջողվեց թարմացնել դիտարկումը։",
+      },
     },
     filters: {
       searchPlaceholder: "Որոնել հյուրանոց, ամրագրման ID, էլ. հասցե...",
@@ -2680,13 +2844,7 @@ const translations: Record<Locale, Translation> = {
         guestChildLabel: "Child",
         guestLeadLabel: "Lead guest",
         ageLabel: "Age",
-        billingTitle: "Billing details",
-        billingHint: "Used for invoices and payment verification.",
-        country: "Country",
         countryPlaceholder: "Select a country",
-        city: "City",
-        address: "Street address",
-        zip: "ZIP / Postal code",
         insuranceTitle: "Information required to obtain travel insurance",
         insuranceHint: "Provide passport and contact details for each traveler.",
         insuranceEmpty: "Insurance travelers will appear after you select insurance.",
@@ -2719,6 +2877,19 @@ const translations: Record<Locale, Translation> = {
         couponTitle: "Coupon or gift card code",
         couponPlaceholder: "Enter code",
         applyCoupon: "Apply",
+        couponApplied: "Coupon applied successfully.",
+        couponInvalid: "Coupon code is invalid or unavailable.",
+        couponDisabled: "Coupon is disabled.",
+        couponNotStarted: "Coupon is not active yet.",
+        couponExpired: "Coupon has expired.",
+        couponLimitReached: "Coupon usage limit has been reached.",
+        couponTemporarilyDisabled: "Coupon is temporarily disabled.",
+        couponRateLimited: "Too many attempts. Please try again shortly.",
+        couponUnavailable: "Coupon validation is temporarily unavailable. Please try again.",
+        couponDiscountLabel: "Discount",
+        couponTotalAfterDiscount: "Total after discount",
+        couponEnterCode: "Enter a coupon code.",
+        couponApplying: "Applying...",
         insuranceTerms: {
           prefix: "I have received, read and I agree with ",
           link: "Terms of the travel insurance contract",
@@ -2729,6 +2900,7 @@ const translations: Record<Locale, Translation> = {
         devInsuranceSuccess: "Insurance submitted successfully.",
         paymentTitle: "Payment method",
         paymentHint: "Choose how you want to pay.",
+        paymentMethodsUnavailable: "Payment methods are temporarily unavailable right now.",
         methodIdram: "Idram",
         methodCard: "ID Bank payment terminal",
         methodCardAmeria: "Ameriabank payment terminal",
@@ -3180,6 +3352,7 @@ const translations: Record<Locale, Translation> = {
       open: "Open",
       cards: {
         bookings: "Review and manage every booking.",
+        b2bBookings: "Follow and manage API partner bookings.",
         featured: "Curate the featured hotels carousel.",
         users: "See user profiles and recent activity.",
         searches: "Monitor recent searches across the site.",
@@ -3331,6 +3504,79 @@ const translations: Record<Locale, Translation> = {
       subtitle: "Filter by hotel, user, status, or source.",
       emptyTitle: "No bookings found",
       emptyBody: "Try adjusting your filters or search terms.",
+    },
+    b2bBookings: {
+      title: "B2B API bookings",
+      subtitle: "Track and manage partner bookings and service outcomes.",
+      emptyTitle: "No B2B bookings found",
+      emptyBody: "Try changing filters or check again later.",
+      stats: {
+        total: "Total records",
+        partners: "Active partners",
+        open: "Open reviews",
+        resolved: "Resolved",
+        serviceFailed: "Service failed",
+      },
+      filters: {
+        searchPlaceholder: "Search request ID, partner, booking ref...",
+        partnerLabel: "Partner",
+        reviewLabel: "Review status",
+        serviceLabel: "Service status",
+        sortLabel: "Sort by",
+        reset: "Reset",
+        all: "All",
+        reviewOptions: {
+          new: "New",
+          inProgress: "In progress",
+          needsFollowup: "Needs follow-up",
+          resolved: "Resolved",
+        },
+        serviceOptions: {
+          anyFailed: "Any service failed",
+          transferFailed: "Transfer failed",
+          excursionsFailed: "Excursions failed",
+          insuranceFailed: "Insurance failed",
+        },
+        sortOptions: {
+          newest: "Newest first",
+          oldest: "Oldest first",
+        },
+      },
+      columns: {
+        requestId: "Request ID",
+        partner: "Partner",
+        bookingRef: "Booking ref",
+        hotel: "Hotel",
+        services: "Services",
+        review: "Review",
+        createdAt: "Created",
+        actions: "Details",
+      },
+      labels: {
+        transfer: "Transfer",
+        excursions: "Excursions",
+        insurance: "Insurance",
+        bookingRef: "Booking reference",
+        dates: "Travel dates",
+        updatedBy: "Updated by",
+        updatedAt: "Updated at",
+        servicePayload: "Service payload",
+        serviceResult: "Service result",
+        bookingResult: "Hotel booking result",
+        reviewStatus: "Review status",
+        note: "Internal note",
+      },
+      serviceStatus: {
+        booked: "Booked",
+        failed: "Failed",
+        skipped: "Skipped",
+      },
+      actions: {
+        save: "Save review",
+        saving: "Saving...",
+        saveSuccess: "Review updated.",
+        saveFailed: "Failed to update review.",
+      },
     },
     filters: {
       searchPlaceholder: "Search hotel, booking ID, email...",
@@ -4024,13 +4270,7 @@ const translations: Record<Locale, Translation> = {
         guestChildLabel: "Ребенок",
         guestLeadLabel: "Главный гость",
         ageLabel: "Возраст",
-        billingTitle: "Платежные данные",
-        billingHint: "Используется для счетов и проверки платежа.",
-        country: "Страна",
         countryPlaceholder: "Выберите страну",
-        city: "Город",
-        address: "Адрес",
-        zip: "Индекс",
         insuranceTitle: "Информация, необходимая для оформления туристической страховки.",
         insuranceHint: "Укажите паспортные и контактные данные каждого путешественника.",
         insuranceEmpty: "Путешественники для страховки появятся после выбора страховки.",
@@ -4063,6 +4303,19 @@ const translations: Record<Locale, Translation> = {
         couponTitle: "Код купона или подарочной карты",
         couponPlaceholder: "Введите код",
         applyCoupon: "Применить",
+        couponApplied: "Купон успешно применён.",
+        couponInvalid: "Код купона недействителен или больше не доступен.",
+        couponDisabled: "Купон не доступен.",
+        couponNotStarted: "Купон ещё не активен.",
+        couponExpired: "Срок действия купона истёк.",
+        couponLimitReached: "Лимит использования купона исчерпан.",
+        couponTemporarilyDisabled: "Купон временно не доступен.",
+        couponRateLimited: "Слишком много попыток. Попробуйте снова чуть позже.",
+        couponUnavailable: "Проверка купона временно недоступна. Пожалуйста, попробуйте снова.",
+        couponDiscountLabel: "Скидка",
+        couponTotalAfterDiscount: "Итого со скидкой",
+        couponEnterCode: "Введите код купона.",
+        couponApplying: "Применение...",
         insuranceTerms: {
           prefix: "Я получил(а), ознакомился(лась) и согласен(на) с ",
           link: "условиями договора туристического страхования",
@@ -4073,6 +4326,7 @@ const translations: Record<Locale, Translation> = {
         devInsuranceSuccess: "Страховка отправлена.",
         paymentTitle: "Способ оплаты",
         paymentHint: "Выберите удобный способ оплаты.",
+        paymentMethodsUnavailable: "В данный момент способы оплаты временно недоступны.",
         methodIdram: "Idram",
         methodCard: "Платежный терминал ID Bank.",
         methodCardAmeria: "Платежный терминал Ameriabank.",
@@ -4524,6 +4778,7 @@ const translations: Record<Locale, Translation> = {
       open: "Открыть",
       cards: {
         bookings: "Просматривайте и управляйте бронированиями.",
+        b2bBookings: "Отслеживайте и управляйте бронированиями API-партнеров.",
         featured: "Настраивайте подборку отелей на главной.",
         users: "Профили пользователей и их активность.",
         searches: "Отслеживайте последние поиски.",
@@ -4675,6 +4930,79 @@ const translations: Record<Locale, Translation> = {
       subtitle: "Фильтруйте по отелю, пользователю, статусу или источнику.",
       emptyTitle: "Бронирования не найдены",
       emptyBody: "Попробуйте изменить фильтры или поисковый запрос.",
+    },
+    b2bBookings: {
+      title: "B2B API бронирования",
+      subtitle: "Контролируйте бронирования партнеров и результаты по услугам.",
+      emptyTitle: "B2B бронирования не найдены",
+      emptyBody: "Попробуйте изменить фильтры или проверьте позже.",
+      stats: {
+        total: "Всего записей",
+        partners: "Активные партнеры",
+        open: "Открытые проверки",
+        resolved: "Закрыто",
+        serviceFailed: "Сбой услуги",
+      },
+      filters: {
+        searchPlaceholder: "Поиск request ID, партнера, booking ref...",
+        partnerLabel: "Партнер",
+        reviewLabel: "Статус проверки",
+        serviceLabel: "Статус услуги",
+        sortLabel: "Сортировка",
+        reset: "Сбросить",
+        all: "Все",
+        reviewOptions: {
+          new: "Новая",
+          inProgress: "В работе",
+          needsFollowup: "Нужен фоллоу-ап",
+          resolved: "Закрыта",
+        },
+        serviceOptions: {
+          anyFailed: "Любой сбой услуги",
+          transferFailed: "Сбой трансфера",
+          excursionsFailed: "Сбой экскурсии",
+          insuranceFailed: "Сбой страховки",
+        },
+        sortOptions: {
+          newest: "Сначала новые",
+          oldest: "Сначала старые",
+        },
+      },
+      columns: {
+        requestId: "Request ID",
+        partner: "Партнер",
+        bookingRef: "Booking ref",
+        hotel: "Отель",
+        services: "Услуги",
+        review: "Проверка",
+        createdAt: "Создано",
+        actions: "Детали",
+      },
+      labels: {
+        transfer: "Трансфер",
+        excursions: "Экскурсии",
+        insurance: "Страхование",
+        bookingRef: "Референс брони",
+        dates: "Даты поездки",
+        updatedBy: "Обновил",
+        updatedAt: "Обновлено",
+        servicePayload: "Payload услуги",
+        serviceResult: "Результат услуги",
+        bookingResult: "Результат бронирования отеля",
+        reviewStatus: "Статус проверки",
+        note: "Внутренняя заметка",
+      },
+      serviceStatus: {
+        booked: "Забронировано",
+        failed: "Сбой",
+        skipped: "Пропущено",
+      },
+      actions: {
+        save: "Сохранить проверку",
+        saving: "Сохранение...",
+        saveSuccess: "Проверка обновлена.",
+        saveFailed: "Не удалось обновить проверку.",
+      },
     },
     filters: {
       searchPlaceholder: "Поиск отеля, ID бронирования, e-mail...",

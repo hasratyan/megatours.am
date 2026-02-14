@@ -9,6 +9,13 @@ import { parseBookingPayload, validatePrebookState } from "@/lib/aoryx-booking";
 import { calculateBookingTotal } from "@/lib/booking-total";
 import { applyMarkup } from "@/lib/pricing-utils";
 import { getAmdRateForCurrency, getAmdRates, getAoryxHotelPlatformFee } from "@/lib/pricing";
+import {
+  applyCouponPercentDiscount,
+  normalizeCouponCode,
+  validateCouponForCheckout,
+  type CouponValidationFailureReason,
+} from "@/lib/coupons";
+import { getPaymentMethodFlags } from "@/lib/payment-method-flags";
 import type { AoryxBookingPayload } from "@/types/aoryx";
 
 export const runtime = "nodejs";
@@ -381,6 +388,33 @@ const duplicateAttemptMessage = (attempt: BlockingVposAttempt): string => {
   return "A payment attempt for this prebook session is already active. Please complete it or wait a few minutes before retrying.";
 };
 
+const couponValidationFailureToResponse = (reason: CouponValidationFailureReason) => {
+  if (reason === "invalid_format" || reason === "not_found") {
+    return { status: 400, error: "Coupon is invalid.", code: "invalid_coupon" };
+  }
+  if (reason === "disabled") {
+    return { status: 400, error: "Coupon is disabled.", code: "coupon_disabled" };
+  }
+  if (reason === "scheduled") {
+    return { status: 400, error: "Coupon is not active yet.", code: "coupon_not_started" };
+  }
+  if (reason === "expired") {
+    return { status: 400, error: "Coupon has expired.", code: "coupon_expired" };
+  }
+  if (reason === "limit_reached") {
+    return {
+      status: 400,
+      error: "Coupon usage limit has been reached.",
+      code: "coupon_limit_reached",
+    };
+  }
+  return {
+    status: 400,
+    error: "Coupon is temporarily disabled.",
+    code: "coupon_temporarily_disabled",
+  };
+};
+
 const initializeIdbankPayment = async (params: {
   amountMinor: number;
   currencyCode: string;
@@ -554,6 +588,19 @@ export async function POST(request: NextRequest) {
         ? (body as { locale?: string }).locale?.trim() ?? null
         : null;
     const provider = parsePaymentProvider((body as { paymentProvider?: unknown }).paymentProvider);
+    const paymentMethodFlags = await getPaymentMethodFlags();
+    const isMethodEnabled =
+      provider === "ameriabank" ? paymentMethodFlags.ameria_card : paymentMethodFlags.idbank_card;
+    if (isMethodEnabled === false) {
+      const providerLabel = provider === "ameriabank" ? "Ameriabank" : "IDBank";
+      return NextResponse.json(
+        {
+          error: `${providerLabel} card payments are currently disabled.`,
+          code: "payment_method_disabled",
+        },
+        { status: 403 }
+      );
+    }
 
     const sessionId =
       parseSessionId((body as { sessionId?: unknown }).sessionId) ??
@@ -576,6 +623,23 @@ export async function POST(request: NextRequest) {
           ? validationError.message
           : "Rate selection changed. Please prebook again.";
       return NextResponse.json({ error: message }, { status: 409 });
+    }
+
+    const couponCode = normalizeCouponCode((body as { couponCode?: unknown }).couponCode);
+    let couponDetails: { code: string; discountPercent: number } | null = null;
+    if (couponCode) {
+      const validation = await validateCouponForCheckout(couponCode);
+      if (!validation.ok) {
+        const response = couponValidationFailureToResponse(validation.reason);
+        return NextResponse.json(
+          { error: response.error, code: response.code },
+          { status: response.status }
+        );
+      }
+      couponDetails = {
+        code: validation.coupon.code,
+        discountPercent: validation.coupon.discountPercent,
+      };
     }
 
     const db = await getDb();
@@ -697,6 +761,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const couponAmountBreakdownAmd =
+      couponDetails && totalAmd > 0
+        ? (() => {
+            const amounts = applyCouponPercentDiscount(totalAmd, couponDetails.discountPercent);
+            return {
+              code: couponDetails.code,
+              discountPercent: couponDetails.discountPercent,
+              discountAmount: amounts.discountAmount,
+              discountedAmount: amounts.discountedAmount,
+            };
+          })()
+        : null;
+
+    if (couponAmountBreakdownAmd) {
+      totalAmd = couponAmountBreakdownAmd.discountedAmount;
+    }
+
     const { code: currencyCode, decimals: currencyDecimals } = resolveCurrencyConfig(provider);
     if (currencyCode !== "051") {
       return NextResponse.json(
@@ -787,10 +868,12 @@ export async function POST(request: NextRequest) {
         baseCurrency: payload.currency,
         convertedValue: totalAmd,
         breakdownAmd: amountBreakdownAmd,
+        discount: couponAmountBreakdownAmd,
       },
       description,
       payload,
       prebookState,
+      coupon: couponAmountBreakdownAmd,
       userId,
       userEmail,
       userName: userNameValue,
