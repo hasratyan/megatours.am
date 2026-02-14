@@ -4,6 +4,7 @@ import { book } from "@/lib/aoryx-client";
 import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
 import { recordUserBooking } from "@/lib/user-data";
 import { sendBookingConfirmationEmail } from "@/lib/email";
+import { incrementCouponSuccessfulOrders } from "@/lib/coupons";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
@@ -23,6 +24,13 @@ type VposPaymentRecord = {
     decimals?: number;
   };
   payload?: AoryxBookingPayload;
+  coupon?: {
+    code?: string | null;
+    discountPercent?: number | null;
+    discountAmount?: number | null;
+    discountedAmount?: number | null;
+  } | null;
+  couponOrderCounted?: boolean;
   userId?: string | null;
   userEmail?: string | null;
   userName?: string | null;
@@ -128,6 +136,13 @@ const toDate = (value: unknown): Date | null => {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const hasBookingResult = (record: VposPaymentRecord | null) => record?.bookingResult != null;
+
+const resolveCouponCode = (
+  record: Pick<VposPaymentRecord, "coupon">
+): string | null => {
+  const code = typeof record.coupon?.code === "string" ? record.coupon.code.trim().toUpperCase() : "";
+  return code.length > 0 ? code : null;
+};
 
 const isStaleInProgressRecord = (record: VposPaymentRecord | null) => {
   if (record?.status !== "booking_in_progress") return false;
@@ -345,6 +360,43 @@ export async function GET(request: NextRequest) {
   }
 
   if (record.status === "booking_complete") {
+    const couponCode = resolveCouponCode(record);
+    if (couponCode && record.couponOrderCounted !== true) {
+      try {
+        const markResult = await collection.updateOne(
+          { orderId, couponOrderCounted: { $ne: true } },
+          {
+            $set: {
+              couponOrderCounted: true,
+              couponOrderCountedAt: new Date(),
+              updatedAt: new Date(),
+            },
+          }
+        );
+        if (markResult.modifiedCount > 0) {
+          try {
+            await incrementCouponSuccessfulOrders(couponCode);
+          } catch (error) {
+            await collection.updateOne(
+              { orderId },
+              {
+                $set: {
+                  couponOrderCounted: false,
+                  couponOrderCountError:
+                    error instanceof Error
+                      ? error.message
+                      : "Failed to update coupon order stats",
+                  updatedAt: new Date(),
+                },
+              }
+            );
+            throw error;
+          }
+        }
+      } catch (error) {
+        console.error("[Vpos][result] Failed to update coupon order stats", error);
+      }
+    }
     return buildRedirect(request, locale, "/payment/success", { orderId, orderNumber });
   }
   if (record.status === "booking_failed") {
@@ -590,6 +642,44 @@ export async function GET(request: NextRequest) {
         },
       }
     );
+
+    const couponCode = resolveCouponCode(lockedRecord);
+    if (couponCode) {
+      try {
+        const markResult = await collection.updateOne(
+          { orderId, couponOrderCounted: { $ne: true } },
+          {
+            $set: {
+              couponOrderCounted: true,
+              couponOrderCountedAt: new Date(),
+              updatedAt: new Date(),
+            },
+          }
+        );
+        if (markResult.modifiedCount > 0) {
+          try {
+            await incrementCouponSuccessfulOrders(couponCode);
+          } catch (error) {
+            await collection.updateOne(
+              { orderId },
+              {
+                $set: {
+                  couponOrderCounted: false,
+                  couponOrderCountError:
+                    error instanceof Error
+                      ? error.message
+                      : "Failed to update coupon order stats",
+                  updatedAt: new Date(),
+                },
+              }
+            );
+            throw error;
+          }
+        }
+      } catch (error) {
+        console.error("[Vpos][result] Failed to update coupon order stats", error);
+      }
+    }
 
     try {
       const policies = await createEfesPoliciesFromBooking(payload);

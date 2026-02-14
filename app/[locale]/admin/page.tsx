@@ -79,6 +79,12 @@ export default async function AdminHomePage({ params }: PageProps) {
       body: t.admin.dashboard.cards.bookings,
     },
     {
+      href: "/admin/b2b-bookings",
+      icon: "hub",
+      title: t.admin.b2bBookings.title,
+      body: t.admin.dashboard.cards.b2bBookings,
+    },
+    {
       href: "/admin/featured-hotels",
       icon: "hotel",
       title: t.admin.featured.title,
@@ -113,6 +119,12 @@ export default async function AdminHomePage({ params }: PageProps) {
       icon: "campaign",
       title: t.admin.promoPopup.title,
       body: t.admin.dashboard.cards.promoPopup,
+    },
+    {
+      href: "/admin/coupons",
+      icon: "sell",
+      title: "Coupons",
+      body: "Manage checkout coupon discounts and deadlines.",
     },
   ];
 

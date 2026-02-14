@@ -5,10 +5,12 @@ import { postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { useTranslations } from "@/components/language-provider";
 import type { PackageBuilderService, ServiceFlags } from "@/lib/package-builder-state";
+import type { CheckoutPaymentMethod, PaymentMethodFlags } from "@/lib/payment-method-flags";
 
 type AdminServicesClientProps = {
   adminUser: { name?: string | null; email?: string | null };
   initialFlags: ServiceFlags;
+  initialPaymentMethodFlags: PaymentMethodFlags;
 };
 
 const serviceOrder: PackageBuilderService[] = [
@@ -19,12 +21,18 @@ const serviceOrder: PackageBuilderService[] = [
   "insurance",
 ];
 
+const paymentMethodOrder: CheckoutPaymentMethod[] = ["idram", "idbank_card", "ameria_card"];
+
 export default function AdminServicesClient({
   adminUser,
   initialFlags,
+  initialPaymentMethodFlags,
 }: AdminServicesClientProps) {
   const t = useTranslations();
   const [flags, setFlags] = useState<ServiceFlags>(initialFlags);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodFlags>(
+    initialPaymentMethodFlags
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -35,15 +43,26 @@ export default function AdminServicesClient({
     setError(null);
   };
 
+  const togglePaymentMethod = (method: CheckoutPaymentMethod) => {
+    setPaymentMethods((prev) => ({ ...prev, [method]: !prev[method] }));
+    setSaved(false);
+    setError(null);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     setSaved(false);
     try {
-      const response = await postJson<{ flags: ServiceFlags }>("/api/admin/services", {
+      const response = await postJson<{
+        flags: ServiceFlags;
+        paymentMethods: PaymentMethodFlags;
+      }>("/api/admin/services", {
         flags,
+        paymentMethods,
       });
       setFlags(response.flags);
+      setPaymentMethods(response.paymentMethods);
       setSaved(true);
     } catch (err) {
       const message = resolveSafeErrorFromUnknown(err, t.admin.services.errors.saveFailed);
@@ -51,6 +70,12 @@ export default function AdminServicesClient({
     } finally {
       setSaving(false);
     }
+  };
+
+  const paymentMethodLabels: Record<CheckoutPaymentMethod, string> = {
+    idram: t.packageBuilder.checkout.methodIdram,
+    idbank_card: t.packageBuilder.checkout.methodCard,
+    ameria_card: t.packageBuilder.checkout.methodCardAmeria,
   };
 
   return (
@@ -95,6 +120,38 @@ export default function AdminServicesClient({
                   type="checkbox"
                   checked={enabled}
                   onChange={() => toggleFlag(service)}
+                  aria-checked={enabled}
+                />
+              </label>
+            );
+          })}
+        </div>
+
+        <div className="admin-panel-header">
+          <div>
+            <h2>{t.packageBuilder.checkout.paymentTitle}</h2>
+            <p>{t.packageBuilder.checkout.paymentHint}</p>
+          </div>
+        </div>
+
+        <div className="admin-service-grid">
+          {paymentMethodOrder.map((method) => {
+            const enabled = paymentMethods[method];
+            return (
+              <label
+                key={method}
+                className={`admin-service-card${enabled ? "" : " is-disabled"}`}
+              >
+                <div>
+                  <strong>{paymentMethodLabels[method]}</strong>
+                  <small>
+                    {enabled ? t.admin.services.status.enabled : t.admin.services.status.disabled}
+                  </small>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={enabled}
+                  onChange={() => togglePaymentMethod(method)}
                   aria-checked={enabled}
                 />
               </label>

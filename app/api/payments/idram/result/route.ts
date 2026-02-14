@@ -5,6 +5,7 @@ import { book } from "@/lib/aoryx-client";
 import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
 import { recordUserBooking } from "@/lib/user-data";
 import { sendBookingConfirmationEmail } from "@/lib/email";
+import { incrementCouponSuccessfulOrders } from "@/lib/coupons";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
 export const runtime = "nodejs";
@@ -19,6 +20,13 @@ type IdramPaymentRecord = {
     currency?: string;
   };
   payload?: AoryxBookingPayload;
+  coupon?: {
+    code?: string | null;
+    discountPercent?: number | null;
+    discountAmount?: number | null;
+    discountedAmount?: number | null;
+  } | null;
+  couponOrderCounted?: boolean;
   userId?: string | null;
   userEmail?: string | null;
   userName?: string | null;
@@ -47,6 +55,13 @@ const formatAmount = (value: number) => value.toFixed(2);
 
 const checksumFor = (parts: string[]) =>
   createHash("md5").update(parts.join(":"), "utf8").digest("hex");
+
+const resolveCouponCode = (
+  record: Pick<IdramPaymentRecord, "coupon">
+): string | null => {
+  const code = typeof record.coupon?.code === "string" ? record.coupon.code.trim().toUpperCase() : "";
+  return code.length > 0 ? code : null;
+};
 
 const unwrapFindOneAndUpdateResult = <T,>(
   result: unknown
@@ -152,7 +167,48 @@ export async function POST(request: NextRequest) {
     return textResponse("Checksum mismatch", 400);
   }
 
-  if (record.status === "booking_complete" || record.status === "booking_failed") {
+  if (record.status === "booking_complete") {
+    const couponCode = resolveCouponCode(record);
+    if (couponCode && record.couponOrderCounted !== true) {
+      try {
+        const markResult = await collection.updateOne(
+          { billNo, couponOrderCounted: { $ne: true } },
+          {
+            $set: {
+              couponOrderCounted: true,
+              couponOrderCountedAt: new Date(),
+              updatedAt: new Date(),
+            },
+          }
+        );
+        if (markResult.modifiedCount > 0) {
+          try {
+            await incrementCouponSuccessfulOrders(couponCode);
+          } catch (error) {
+            await collection.updateOne(
+              { billNo },
+              {
+                $set: {
+                  couponOrderCounted: false,
+                  couponOrderCountError:
+                    error instanceof Error
+                      ? error.message
+                      : "Failed to update coupon order stats",
+                  updatedAt: new Date(),
+                },
+              }
+            );
+            throw error;
+          }
+        }
+      } catch (error) {
+        console.error("[Idram][result] Failed to update coupon order stats", error);
+      }
+    }
+    return textResponse("OK", 200);
+  }
+
+  if (record.status === "booking_failed") {
     return textResponse("OK", 200);
   }
 
@@ -208,6 +264,44 @@ export async function POST(request: NextRequest) {
         },
       }
     );
+
+    const couponCode = resolveCouponCode(lockedRecord);
+    if (couponCode) {
+      try {
+        const markResult = await collection.updateOne(
+          { billNo, couponOrderCounted: { $ne: true } },
+          {
+            $set: {
+              couponOrderCounted: true,
+              couponOrderCountedAt: new Date(),
+              updatedAt: new Date(),
+            },
+          }
+        );
+        if (markResult.modifiedCount > 0) {
+          try {
+            await incrementCouponSuccessfulOrders(couponCode);
+          } catch (error) {
+            await collection.updateOne(
+              { billNo },
+              {
+                $set: {
+                  couponOrderCounted: false,
+                  couponOrderCountError:
+                    error instanceof Error
+                      ? error.message
+                      : "Failed to update coupon order stats",
+                  updatedAt: new Date(),
+                },
+              }
+            );
+            throw error;
+          }
+        }
+      } catch (error) {
+        console.error("[Idram][result] Failed to update coupon order stats", error);
+      }
+    }
 
     try {
       const policies = await createEfesPoliciesFromBooking(payload);
