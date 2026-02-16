@@ -12,6 +12,7 @@ import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { resolveBookingStatusKey } from "@/lib/booking-status";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
+import type { AppliedBookingCoupon } from "@/lib/user-data";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +96,29 @@ const getNights = (start?: string | null, end?: string | null) => {
 const countGuestsFromRooms = (rooms: AoryxBookingPayload["rooms"]) =>
   rooms.reduce((sum, room) => sum + room.adults + room.childrenAges.length, 0);
 
+const normalizeAppliedCoupon = (value: unknown): AppliedBookingCoupon | null => {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const code = typeof record.code === "string" ? record.code.trim().toUpperCase() : "";
+  const discountPercent =
+    typeof record.discountPercent === "number" && Number.isFinite(record.discountPercent)
+      ? Math.min(100, Math.max(0, record.discountPercent))
+      : null;
+  if (!code || discountPercent === null || discountPercent <= 0) return null;
+  return {
+    code,
+    discountPercent,
+    discountAmount:
+      typeof record.discountAmount === "number" && Number.isFinite(record.discountAmount)
+        ? record.discountAmount
+        : null,
+    discountedAmount:
+      typeof record.discountedAmount === "number" && Number.isFinite(record.discountedAmount)
+        ? record.discountedAmount
+        : null,
+  };
+};
+
 export default async function VoucherPage({ params }: PageProps) {
   const { locale, bookingId } = await params;
   const resolvedLocale = resolveLocale(locale);
@@ -122,6 +146,7 @@ export default async function VoucherPage({ params }: PageProps) {
 
   const payload = bookingRecord.payload as AoryxBookingPayload;
   const booking = (bookingRecord.booking ?? null) as AoryxBookingResult | null;
+  const appliedCoupon = normalizeAppliedCoupon((bookingRecord as { coupon?: unknown }).coupon ?? null);
   const createdAt = bookingRecord.createdAt ? new Date(bookingRecord.createdAt) : null;
   const [hotelMarkup, rates] = await Promise.all([
     getAoryxHotelPlatformFee(),
@@ -456,6 +481,14 @@ export default async function VoucherPage({ params }: PageProps) {
                 <span>{t.packageBuilder.checkout.paymentTitle}:</span>
                 <span>{paymentMethodLabel}</span>
               </div>
+              {appliedCoupon ? (
+                <div>
+                  <span>{t.packageBuilder.checkout.couponTitle}:</span>
+                  <span>
+                    {appliedCoupon.code} ({appliedCoupon.discountPercent}%)
+                  </span>
+                </div>
+              ) : null}
               <p>{t.profile.voucher.paymentNote}</p>
             </div>
           </div>

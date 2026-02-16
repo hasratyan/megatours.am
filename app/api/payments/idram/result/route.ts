@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import { getDb } from "@/lib/db";
 import { book } from "@/lib/aoryx-client";
 import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
-import { recordUserBooking } from "@/lib/user-data";
+import { recordUserBooking, type AppliedBookingCoupon } from "@/lib/user-data";
 import { sendBookingConfirmationEmail } from "@/lib/email";
 import { incrementCouponSuccessfulOrders } from "@/lib/coupons";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
@@ -61,6 +61,30 @@ const resolveCouponCode = (
 ): string | null => {
   const code = typeof record.coupon?.code === "string" ? record.coupon.code.trim().toUpperCase() : "";
   return code.length > 0 ? code : null;
+};
+
+const resolveAppliedCoupon = (
+  record: Pick<IdramPaymentRecord, "coupon">
+): AppliedBookingCoupon | null => {
+  const code = resolveCouponCode(record);
+  const discountPercent =
+    typeof record.coupon?.discountPercent === "number" && Number.isFinite(record.coupon.discountPercent)
+      ? Math.min(100, Math.max(0, record.coupon.discountPercent))
+      : null;
+  if (!code || discountPercent === null || discountPercent <= 0) return null;
+  return {
+    code,
+    discountPercent,
+    discountAmount:
+      typeof record.coupon?.discountAmount === "number" && Number.isFinite(record.coupon.discountAmount)
+        ? record.coupon.discountAmount
+        : null,
+    discountedAmount:
+      typeof record.coupon?.discountedAmount === "number" &&
+      Number.isFinite(record.coupon.discountedAmount)
+        ? record.coupon.discountedAmount
+        : null,
+  };
 };
 
 const unwrapFindOneAndUpdateResult = <T,>(
@@ -332,11 +356,13 @@ export async function POST(request: NextRequest) {
 
     if (lockedRecord.userId) {
       try {
+        const appliedCoupon = resolveAppliedCoupon(lockedRecord);
         await recordUserBooking({
           userId: lockedRecord.userId,
           payload,
           result,
           source: "aoryx-idram",
+          coupon: appliedCoupon,
         });
       } catch (error) {
         console.error("[Idram][result] Failed to record user booking", error);
@@ -344,12 +370,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (lockedRecord.userEmail) {
+      const appliedCoupon = resolveAppliedCoupon(lockedRecord);
       await sendBookingConfirmationEmail({
         to: lockedRecord.userEmail,
         name: lockedRecord.userName ?? null,
         payload,
         result,
         locale: lockedRecord.locale ?? null,
+        paidAmount: lockedRecord.amount?.value ?? null,
+        paidCurrency: lockedRecord.amount?.currency ?? null,
+        coupon: appliedCoupon,
       });
     }
   } catch (error) {

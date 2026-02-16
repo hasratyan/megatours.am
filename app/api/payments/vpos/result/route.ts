@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { book } from "@/lib/aoryx-client";
 import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
-import { recordUserBooking } from "@/lib/user-data";
+import { recordUserBooking, type AppliedBookingCoupon } from "@/lib/user-data";
 import { sendBookingConfirmationEmail } from "@/lib/email";
 import { incrementCouponSuccessfulOrders } from "@/lib/coupons";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
@@ -20,6 +20,7 @@ type VposPaymentRecord = {
   amount?: {
     value?: number;
     minor?: number;
+    currency?: string;
     currencyCode?: string;
     decimals?: number;
   };
@@ -79,6 +80,7 @@ const DEFAULT_LANGUAGE = "en";
 const BOOKING_STATUS_POLL_ATTEMPTS = 20;
 const BOOKING_STATUS_POLL_INTERVAL_MS = 1000;
 const STALE_BOOKING_IN_PROGRESS_MS = 90 * 1000;
+const VPOS_PUBLIC_ORIGIN = "https://megatours.am";
 
 const normalizeBaseUrl = (value: string) => value.trim().replace(/\/+$/, "");
 
@@ -144,6 +146,30 @@ const resolveCouponCode = (
   return code.length > 0 ? code : null;
 };
 
+const resolveAppliedCoupon = (
+  record: Pick<VposPaymentRecord, "coupon">
+): AppliedBookingCoupon | null => {
+  const code = resolveCouponCode(record);
+  const discountPercent =
+    typeof record.coupon?.discountPercent === "number" && Number.isFinite(record.coupon.discountPercent)
+      ? Math.min(100, Math.max(0, record.coupon.discountPercent))
+      : null;
+  if (!code || discountPercent === null || discountPercent <= 0) return null;
+  return {
+    code,
+    discountPercent,
+    discountAmount:
+      typeof record.coupon?.discountAmount === "number" && Number.isFinite(record.coupon.discountAmount)
+        ? record.coupon.discountAmount
+        : null,
+    discountedAmount:
+      typeof record.coupon?.discountedAmount === "number" &&
+      Number.isFinite(record.coupon.discountedAmount)
+        ? record.coupon.discountedAmount
+        : null,
+  };
+};
+
 const isStaleInProgressRecord = (record: VposPaymentRecord | null) => {
   if (record?.status !== "booking_in_progress") return false;
   const lastUpdatedAt = toDate(record.updatedAt) ?? toDate(record.paidAt);
@@ -162,12 +188,11 @@ const unwrapFindOneAndUpdateResult = <T,>(
 };
 
 const buildRedirect = (
-  request: NextRequest,
   locale: Locale,
   path: "/payment/success" | "/payment/fail",
   params: Record<string, string | undefined>
 ) => {
-  const url = new URL(`/${locale}${path}`, request.url);
+  const url = new URL(`/${locale}${path}`, VPOS_PUBLIC_ORIGIN);
   Object.entries(params).forEach(([key, value]) => {
     if (value) url.searchParams.set(key, value);
   });
@@ -324,7 +349,7 @@ export async function GET(request: NextRequest) {
   const orderNumberParam = searchParams.get("orderNumber") || searchParams.get("orderID");
 
   if (!orderIdParam && !orderNumberParam) {
-    return buildRedirect(request, defaultLocale, "/payment/fail", {});
+    return buildRedirect(defaultLocale, "/payment/fail", {});
   }
 
   let db: Awaited<ReturnType<typeof getDb>>;
@@ -332,7 +357,7 @@ export async function GET(request: NextRequest) {
     db = await getDb();
   } catch (error) {
     console.error("[Vpos][result] Failed to connect to database", error);
-    return buildRedirect(request, defaultLocale, "/payment/fail", {});
+    return buildRedirect(defaultLocale, "/payment/fail", {});
   }
 
   const collection = db.collection("vpos_payments");
@@ -347,7 +372,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (!record) {
-    return buildRedirect(request, defaultLocale, "/payment/fail", {});
+    return buildRedirect(defaultLocale, "/payment/fail", {});
   }
 
   const locale = resolveLocale(record.locale);
@@ -356,7 +381,7 @@ export async function GET(request: NextRequest) {
   const orderNumber = record.orderNumber || orderNumberParam || "";
 
   if (!orderId) {
-    return buildRedirect(request, locale, "/payment/fail", { orderNumber });
+    return buildRedirect(locale, "/payment/fail", { orderNumber });
   }
 
   if (record.status === "booking_complete") {
@@ -397,10 +422,10 @@ export async function GET(request: NextRequest) {
         console.error("[Vpos][result] Failed to update coupon order stats", error);
       }
     }
-    return buildRedirect(request, locale, "/payment/success", { orderId, orderNumber });
+    return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
   }
   if (record.status === "booking_failed") {
-    return buildRedirect(request, locale, "/payment/fail", { orderId, orderNumber });
+    return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
   }
 
   let statusResponse: GatewayStatus;
@@ -417,7 +442,7 @@ export async function GET(request: NextRequest) {
     statusResponse = await getGatewayStatus(provider, orderId, language, decimals);
   } catch (error) {
     console.error("[Vpos][result] Failed to query gateway status", error);
-    return buildRedirect(request, locale, "/payment/fail", { orderId, orderNumber });
+    return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
   }
 
   const expectedAmountMinor =
@@ -479,7 +504,7 @@ export async function GET(request: NextRequest) {
   );
 
   if (!paymentSuccess) {
-    return buildRedirect(request, locale, "/payment/fail", { orderId, orderNumber });
+    return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
   }
 
   const lock = await collection.findOneAndUpdate(
@@ -509,7 +534,7 @@ export async function GET(request: NextRequest) {
           }
         );
       }
-      return buildRedirect(request, locale, "/payment/success", { orderId, orderNumber });
+      return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
     }
     if (latest?.status === "booking_in_progress") {
       for (let attempt = 0; attempt < BOOKING_STATUS_POLL_ATTEMPTS; attempt += 1) {
@@ -527,10 +552,10 @@ export async function GET(request: NextRequest) {
               }
             );
           }
-          return buildRedirect(request, locale, "/payment/success", { orderId, orderNumber });
+          return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
         }
         if (polled?.status === "booking_failed") {
-          return buildRedirect(request, locale, "/payment/fail", { orderId, orderNumber });
+          return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
         }
       }
 
@@ -567,12 +592,12 @@ export async function GET(request: NextRequest) {
           orderId,
           provider,
         });
-        return buildRedirect(request, locale, "/payment/success", { orderId, orderNumber });
+        return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
       }
     }
 
     if (!lockedRecord && latest?.status === "booking_failed") {
-      return buildRedirect(request, locale, "/payment/fail", { orderId, orderNumber });
+      return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
     }
 
     if (!lockedRecord) {
@@ -592,17 +617,17 @@ export async function GET(request: NextRequest) {
             }
           );
         }
-        return buildRedirect(request, locale, "/payment/success", { orderId, orderNumber });
+        return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
       }
       if (latestAfterRecovery?.status === "booking_failed") {
-        return buildRedirect(request, locale, "/payment/fail", { orderId, orderNumber });
+        return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
       }
       if (latestAfterRecovery?.status === "booking_in_progress" && !isStaleInProgressRecord(latestAfterRecovery)) {
         console.info("[Vpos][result] Booking still in progress after recovery check", {
           orderId,
           provider,
         });
-        return buildRedirect(request, locale, "/payment/success", { orderId, orderNumber });
+        return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
       }
     }
 
@@ -611,7 +636,7 @@ export async function GET(request: NextRequest) {
         orderId,
         provider,
       });
-      return buildRedirect(request, locale, "/payment/fail", { orderId, orderNumber });
+      return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
     }
   }
 
@@ -627,7 +652,7 @@ export async function GET(request: NextRequest) {
         },
       }
     );
-    return buildRedirect(request, locale, "/payment/fail", { orderId, orderNumber });
+    return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
   }
 
   try {
@@ -710,11 +735,13 @@ export async function GET(request: NextRequest) {
 
     if (lockedRecord.userId) {
       try {
+        const appliedCoupon = resolveAppliedCoupon(lockedRecord);
         await recordUserBooking({
           userId: lockedRecord.userId,
           payload,
           result,
           source: provider === "ameriabank" ? "vpos-ameriabank" : "vpos-idbank",
+          coupon: appliedCoupon,
         });
       } catch (error) {
         console.error("[Vpos][result] Failed to record user booking", error);
@@ -722,16 +749,20 @@ export async function GET(request: NextRequest) {
     }
 
     if (lockedRecord.userEmail) {
+      const appliedCoupon = resolveAppliedCoupon(lockedRecord);
       await sendBookingConfirmationEmail({
         to: lockedRecord.userEmail,
         name: lockedRecord.userName ?? null,
         payload,
         result,
         locale: lockedRecord.locale ?? null,
+        paidAmount: lockedRecord.amount?.value ?? null,
+        paidCurrency: lockedRecord.amount?.currency ?? lockedRecord.amount?.currencyCode ?? null,
+        coupon: appliedCoupon,
       });
     }
 
-    return buildRedirect(request, locale, "/payment/success", { orderId, orderNumber });
+    return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to complete booking";
     await collection.updateOne(
@@ -745,6 +776,6 @@ export async function GET(request: NextRequest) {
       }
     );
     console.error("[Vpos][result] Booking failed", error);
-    return buildRedirect(request, locale, "/payment/fail", { orderId, orderNumber });
+    return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
   }
 }

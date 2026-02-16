@@ -53,6 +53,7 @@ const AMERIA_TEST_ORDER_ID_MIN = 4191001;
 const AMERIA_TEST_ORDER_ID_MAX = 4192000;
 const AMERIA_DEFAULT_TEST_AMOUNT_AMD = 10;
 const AMERIA_MAX_INIT_RETRIES = 6;
+const VPOS_PUBLIC_ORIGIN = "https://megatours.am";
 const DUPLICATE_ATTEMPT_STATUSES = [
   "booking_complete",
   "booking_in_progress",
@@ -135,14 +136,7 @@ const sanitizeDescription = (value: string) =>
 const resolvePageView = (userAgent: string | null) =>
   /Mobi|Android|iPhone|iPad|iPod/i.test(userAgent ?? "") ? "MOBILE" : "DESKTOP";
 
-const buildReturnUrl = (request: NextRequest) => {
-  const origin =
-    request.headers.get("origin") ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXTAUTH_URL ||
-    "http://localhost:3000";
-  return new URL("/api/payments/vpos/result", origin).toString();
-};
+const buildReturnUrl = () => new URL("/api/payments/vpos/result", VPOS_PUBLIC_ORIGIN).toString();
 
 const resolveCurrencyConfig = (provider: PaymentProvider) => {
   if (provider === "ameriabank") {
@@ -805,7 +799,7 @@ export async function POST(request: NextRequest) {
         ? process.env.AMERIA_VPOS_LANGUAGE ?? locale ?? undefined
         : process.env.VPOS_LANGUAGE ?? locale ?? undefined
     );
-    const returnUrl = buildReturnUrl(request);
+    const returnUrl = buildReturnUrl();
     const pageView = resolvePageView(request.headers.get("user-agent"));
 
     let initResult: VposInitResult;

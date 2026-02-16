@@ -2,6 +2,13 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/db";
 import type { AoryxSearchParams, AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
+export type AppliedBookingCoupon = {
+  code: string;
+  discountPercent: number;
+  discountAmount: number | null;
+  discountedAmount: number | null;
+};
+
 type UserIdInfo = {
   userId: ObjectId | string;
   userIdString: string;
@@ -15,6 +22,28 @@ const normalizeUserId = (userId: string): UserIdInfo => {
   return {
     userId: objectId ?? normalized,
     userIdString: normalized,
+  };
+};
+
+const toFiniteNumberOrNull = (value: unknown) =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
+
+const normalizeAppliedBookingCoupon = (value: unknown): AppliedBookingCoupon | null => {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const code = typeof record.code === "string" ? record.code.trim().toUpperCase() : "";
+  const discountPercentRaw = toFiniteNumberOrNull(record.discountPercent);
+  const discountPercent =
+    discountPercentRaw !== null && discountPercentRaw > 0
+      ? Math.min(100, Math.max(0, discountPercentRaw))
+      : null;
+  if (!code || discountPercent === null) return null;
+
+  return {
+    code,
+    discountPercent,
+    discountAmount: toFiniteNumberOrNull(record.discountAmount),
+    discountedAmount: toFiniteNumberOrNull(record.discountedAmount),
   };
 };
 
@@ -98,11 +127,13 @@ export async function recordUserBooking(input: {
   payload: AoryxBookingPayload;
   result: AoryxBookingResult;
   source?: string;
+  coupon?: AppliedBookingCoupon | null;
 }) {
-  const { userId, payload, result, source } = input;
+  const { userId, payload, result, source, coupon } = input;
   const db = await getDb();
   const now = new Date();
   const ids = normalizeUserId(userId);
+  const normalizedCoupon = normalizeAppliedBookingCoupon(coupon);
 
   await db.collection("user_bookings").insertOne({
     ...ids,
@@ -110,6 +141,7 @@ export async function recordUserBooking(input: {
     createdAt: now,
     booking: result,
     payload,
+    coupon: normalizedCoupon,
   });
 
   await db.collection("user_profiles").updateOne(

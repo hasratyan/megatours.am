@@ -4,6 +4,7 @@ import { calculateBookingTotal } from "@/lib/booking-total";
 import { formatCurrencyAmount } from "@/lib/currency";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
+import type { AppliedBookingCoupon } from "@/lib/user-data";
 
 type BookingEmailInput = {
   to: string;
@@ -11,6 +12,9 @@ type BookingEmailInput = {
   payload: AoryxBookingPayload;
   result?: AoryxBookingResult | null;
   locale?: string | null;
+  paidAmount?: number | null;
+  paidCurrency?: string | null;
+  coupon?: AppliedBookingCoupon | null;
 };
 
 const escapeHtml = (value: string) =>
@@ -29,6 +33,30 @@ const resolveLocale = (value?: string | null): Locale => {
 const formatDateRange = (start?: string | null, end?: string | null) => {
   if (!start || !end) return null;
   return `${start} — ${end}`;
+};
+
+const normalizeDisplayCurrency = (value: string | null | undefined): string | null => {
+  const normalized = (value ?? "").trim().toUpperCase();
+  if (!normalized) return null;
+  if (normalized === "051") return "AMD";
+  if (normalized === "840") return "USD";
+  if (normalized === "978") return "EUR";
+  if (normalized === "643") return "RUB";
+  return normalized;
+};
+
+const normalizeCoupon = (value: AppliedBookingCoupon | null | undefined) => {
+  if (!value) return null;
+  const code = typeof value.code === "string" ? value.code.trim().toUpperCase() : "";
+  const discountPercent =
+    typeof value.discountPercent === "number" && Number.isFinite(value.discountPercent)
+      ? Math.min(100, Math.max(0, value.discountPercent))
+      : null;
+  if (!code || discountPercent === null || discountPercent <= 0) return null;
+  return {
+    code,
+    discountPercent,
+  };
 };
 
 const buildTransport = () => {
@@ -52,6 +80,9 @@ export async function sendBookingConfirmationEmail({
   payload,
   result,
   locale,
+  paidAmount,
+  paidCurrency,
+  coupon,
 }: BookingEmailInput) {
   if (!to) return false;
   const transport = buildTransport();
@@ -77,12 +108,21 @@ export async function sendBookingConfirmationEmail({
   const dateRange = formatDateRange(payload.checkInDate, payload.checkOutDate);
   const hotelMarkup = await getAoryxHotelPlatformFee();
   const total = calculateBookingTotal(payload, { hotelMarkup });
-  const totalLabel = formatCurrencyAmount(total, payload.currency, "en-GB") ?? `${total} ${payload.currency}`;
+  const normalizedPaidAmount =
+    typeof paidAmount === "number" && Number.isFinite(paidAmount) ? paidAmount : null;
+  const totalAmount = normalizedPaidAmount ?? total;
+  const totalCurrency =
+    normalizeDisplayCurrency(normalizedPaidAmount !== null ? paidCurrency : null) ??
+    normalizeDisplayCurrency(payload.currency) ??
+    "USD";
+  const totalLabel =
+    formatCurrencyAmount(totalAmount, totalCurrency, "en-GB") ?? `${totalAmount} ${totalCurrency}`;
   const confirmation =
     result?.hotelConfirmationNumber ??
     result?.supplierConfirmationNumber ??
     result?.adsConfirmationNumber ??
     "—";
+  const normalizedCoupon = normalizeCoupon(coupon);
   const voucherUrl = `${baseUrl}/${safeLocale}/profile/voucher/${bookingId}?download=1`;
   const profileUrl = `${baseUrl}/${safeLocale}/profile`;
 
@@ -107,28 +147,67 @@ export async function sendBookingConfirmationEmail({
 
   const safeName = name?.trim() || "Traveler";
   const subject = `Booking confirmed: ${hotelName} (${bookingId})`;
+  const escapedVoucherUrl = escapeHtml(voucherUrl);
+  const escapedProfileUrl = escapeHtml(profileUrl);
   const html = `
-    <div style="font-family: Arial, sans-serif; color: #0f172a; background: #f8fafc; padding: 24px;">
-      <div style="max-width: 640px; margin: 0 auto; background: #ffffff; border-radius: 16px; padding: 24px; border: 1px solid #e2e8f0;">
-        <p style="text-transform: uppercase; letter-spacing: 0.2em; font-size: 12px; color: #64748b; margin: 0 0 12px;">MegaTours</p>
-        <h1 style="margin: 0 0 12px; font-size: 24px;">Booking confirmed</h1>
-        <p style="margin: 0 0 16px; color: #475569;">Hi ${escapeHtml(safeName)}, your booking is confirmed. Keep the details below for your trip.</p>
-        <div style="background: #f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
-          <p style="margin: 0 0 6px;"><strong>Booking ID:</strong> ${escapeHtml(bookingId)}</p>
-          <p style="margin: 0 0 6px;"><strong>Hotel:</strong> ${escapeHtml(hotelName)}</p>
-          ${dateRange ? `<p style="margin: 0 0 6px;"><strong>Dates:</strong> ${escapeHtml(dateRange)}</p>` : ""}
-          <p style="margin: 0 0 6px;"><strong>Confirmation:</strong> ${escapeHtml(confirmation)}</p>
-          <p style="margin: 0;"><strong>Total:</strong> ${escapeHtml(totalLabel)}</p>
+    <div style="margin: 0; padding: 24px; background: linear-gradient(160deg, #ecfeff 0%, #f8fafc 50%, #fefce8 100%); font-family: 'Segoe UI', Arial, sans-serif; color: #0f172a;">
+      <div style="max-width: 680px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #0f766e 0%, #0ea5a6 100%); border-radius: 20px 20px 0 0; padding: 28px 28px 24px; color: #f8fafc;">
+          <p style="text-transform: uppercase; letter-spacing: 0.18em; font-size: 11px; margin: 0 0 10px; opacity: 0.92;">MegaTours</p>
+          <h1 style="margin: 0; font-size: 28px; line-height: 1.2;">Your booking is confirmed</h1>
+          <p style="margin: 12px 0 0; font-size: 15px; line-height: 1.55;">Hi ${escapeHtml(safeName)}, your trip details are ready. Keep this email for easy access while traveling.</p>
         </div>
-        <div style="margin-bottom: 16px;">
-          <p style="margin: 0 0 8px; font-weight: 600;">Included services</p>
-          <ul style="margin: 0; padding-left: 18px; color: #475569;">
-            ${services.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
-          </ul>
-        </div>
-        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-          <a href="${voucherUrl}" style="background: #0ea5a6; color: #ffffff; text-decoration: none; padding: 10px 16px; border-radius: 999px; font-weight: 600;">Download voucher</a>
-          <a href="${profileUrl}" style="background: #e2e8f0; color: #0f172a; text-decoration: none; padding: 10px 16px; border-radius: 999px; font-weight: 600;">View profile</a>
+        <div style="background: #ffffff; border: 1px solid #dbeafe; border-top: none; border-radius: 0 0 20px 20px; padding: 24px 28px 28px;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px 18px;">
+            <table role="presentation" cellspacing="0" cellpadding="0" style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 0 0 10px; color: #64748b; font-size: 13px;">Booking ID</td>
+                <td style="padding: 0 0 10px; text-align: right; font-weight: 700; font-size: 14px;">${escapeHtml(bookingId)}</td>
+              </tr>
+              <tr>
+                <td style="padding: 0 0 10px; color: #64748b; font-size: 13px;">Hotel</td>
+                <td style="padding: 0 0 10px; text-align: right; font-weight: 600; font-size: 14px;">${escapeHtml(hotelName)}</td>
+              </tr>
+              ${
+                dateRange
+                  ? `<tr>
+                <td style="padding: 0 0 10px; color: #64748b; font-size: 13px;">Dates</td>
+                <td style="padding: 0 0 10px; text-align: right; font-weight: 600; font-size: 14px;">${escapeHtml(dateRange)}</td>
+              </tr>`
+                  : ""
+              }
+              <tr>
+                <td style="padding: 0 0 10px; color: #64748b; font-size: 13px;">Confirmation</td>
+                <td style="padding: 0 0 10px; text-align: right; font-weight: 700; font-size: 14px;">${escapeHtml(confirmation)}</td>
+              </tr>
+              ${
+                normalizedCoupon
+                  ? `<tr>
+                <td style="padding: 0 0 10px; color: #64748b; font-size: 13px;">Coupon</td>
+                <td style="padding: 0 0 10px; text-align: right; font-weight: 600; font-size: 14px;">${escapeHtml(normalizedCoupon.code)} (${normalizedCoupon.discountPercent}%)</td>
+              </tr>`
+                  : ""
+              }
+              <tr>
+                <td style="padding: 10px 0 0; color: #0f766e; font-size: 13px; font-weight: 700; border-top: 1px solid #cbd5e1;">Total Paid</td>
+                <td style="padding: 10px 0 0; text-align: right; color: #0f766e; font-size: 18px; font-weight: 800; border-top: 1px solid #cbd5e1;">${escapeHtml(totalLabel)}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="margin-top: 18px;">
+            <p style="margin: 0 0 10px; font-size: 14px; font-weight: 700; color: #0f172a;">Included services</p>
+            <ul style="margin: 0; padding: 0 0 0 18px; color: #334155; font-size: 14px; line-height: 1.55;">
+              ${services.map((item) => `<li style="margin: 0 0 6px;">${escapeHtml(item)}</li>`).join("")}
+            </ul>
+          </div>
+
+          <div style="margin-top: 22px;">
+            <a href="${escapedVoucherUrl}" style="display: inline-block; margin: 0 10px 10px 0; background: #0f766e; color: #ffffff; text-decoration: none; padding: 12px 18px; border-radius: 999px; font-weight: 700; font-size: 14px;">Download voucher</a>
+            <a href="${escapedProfileUrl}" style="display: inline-block; margin: 0 10px 10px 0; background: #e2e8f0; color: #0f172a; text-decoration: none; padding: 12px 18px; border-radius: 999px; font-weight: 700; font-size: 14px;">Open profile</a>
+          </div>
+
+          <p style="margin: 12px 0 0; font-size: 12px; color: #64748b; line-height: 1.5;">Need help? Reply to this email and our team will assist you.</p>
         </div>
       </div>
     </div>
@@ -140,6 +219,7 @@ export async function sendBookingConfirmationEmail({
     `Hotel: ${hotelName}`,
     dateRange ? `Dates: ${dateRange}` : null,
     `Confirmation: ${confirmation}`,
+    normalizedCoupon ? `Coupon: ${normalizedCoupon.code} (${normalizedCoupon.discountPercent}%)` : null,
     `Total: ${totalLabel}`,
     `Voucher: ${voucherUrl}`,
     `Profile: ${profileUrl}`,
