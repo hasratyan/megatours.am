@@ -458,9 +458,28 @@ export type Translation = {
       sections: {
         stay: string;
         payment: string;
+        updates: string;
         services: string;
         guests: string;
         notes: string;
+      };
+      updates: {
+        bookingStatus: string;
+        canceled: string;
+        canceledOn: string;
+        refundStatus: string;
+        refundedAmount: string;
+        refundedServices: string;
+        refundStates: {
+          refunded: string;
+          already_refunded: string;
+          in_progress: string;
+          failed: string;
+          unknown: string;
+        };
+        serviceCanceled: string;
+        serviceCancelPending: string;
+        serviceCancelFailed: string;
       };
       notes: string;
     };
@@ -1862,9 +1881,28 @@ const translations: Record<Locale, Translation> = {
         sections: {
           stay: "Հյուրանոցային տվյալներ",
           payment: "Վճարման ամփոփում",
+          updates: "Թարմացումներ",
           services: "Ներառումներ",
           guests: "Հյուրերի ցուցակ",
           notes: "Կարևոր նշումներ",
+        },
+        updates: {
+          bookingStatus: "Ամրագրման կարգավիճակ",
+          canceled: "Չեղարկված",
+          canceledOn: "Չեղարկման ամսաթիվ",
+          refundStatus: "Վերադարձի կարգավիճակ",
+          refundedAmount: "Վերադարձված գումար",
+          refundedServices: "Չեղարկված ծառայություններ",
+          refundStates: {
+            refunded: "Վերադարձված",
+            already_refunded: "Արդեն վերադարձված",
+            in_progress: "Վերադարձը ընթացքի մեջ է",
+            failed: "Վերադարձը ձախողվել է",
+            unknown: "Վերադարձ",
+          },
+          serviceCanceled: "Ծառայությունը չեղարկվել է ադմինի կողմից",
+          serviceCancelPending: "Ծառայության չեղարկումը/վերադարձը ընթացքի մեջ է",
+          serviceCancelFailed: "Ծառայության չեղարկումը/վերադարձը ձախողվել է",
         },
         notes: "Խնդրում ենք պահել վաուչերը և ներկայացնել անհրաժեշտության դեպքում։",
       },
@@ -3301,9 +3339,28 @@ const translations: Record<Locale, Translation> = {
         sections: {
           stay: "Hotel stay",
           payment: "Payment summary",
+          updates: "Booking updates",
           services: "Inclusions",
           guests: "Guest list",
           notes: "Important notes",
+        },
+        updates: {
+          bookingStatus: "Booking status",
+          canceled: "Canceled",
+          canceledOn: "Canceled on",
+          refundStatus: "Refund status",
+          refundedAmount: "Refunded amount",
+          refundedServices: "Canceled services",
+          refundStates: {
+            refunded: "Refunded",
+            already_refunded: "Already refunded",
+            in_progress: "Refund in progress",
+            failed: "Refund failed",
+            unknown: "Refund",
+          },
+          serviceCanceled: "Service canceled by admin",
+          serviceCancelPending: "Service cancellation/refund is in progress",
+          serviceCancelFailed: "Service cancellation/refund failed",
         },
         notes: "Present this voucher at check-in and during service pickup. Contact support if any details change.",
       },
@@ -4743,9 +4800,28 @@ const translations: Record<Locale, Translation> = {
         sections: {
           stay: "Данные проживания",
           payment: "Сводка оплаты",
+          updates: "Обновления бронирования",
           services: "Включения",
           guests: "Список гостей",
           notes: "Важно",
+        },
+        updates: {
+          bookingStatus: "Статус бронирования",
+          canceled: "Отменено",
+          canceledOn: "Дата отмены",
+          refundStatus: "Статус возврата",
+          refundedAmount: "Сумма возврата",
+          refundedServices: "Отмененные услуги",
+          refundStates: {
+            refunded: "Возвращено",
+            already_refunded: "Уже возвращено",
+            in_progress: "Возврат в процессе",
+            failed: "Возврат не выполнен",
+            unknown: "Возврат",
+          },
+          serviceCanceled: "Услуга отменена администратором",
+          serviceCancelPending: "Отмена/возврат услуги в процессе",
+          serviceCancelFailed: "Отмена/возврат услуги не выполнены",
         },
         notes: "Покажите ваучер при заселении и для услуг. При изменениях свяжитесь с поддержкой.",
       },

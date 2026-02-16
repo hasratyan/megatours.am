@@ -20,6 +20,28 @@ type PageProps = {
   params: Promise<{ locale: string; bookingId: string }>;
 };
 
+type RefundServiceKey = "transfer" | "excursion" | "flight";
+type VoucherServiceKey = RefundServiceKey | "hotel" | "insurance";
+type VoucherRefundStateKey = "refunded" | "already_refunded" | "in_progress" | "failed" | "unknown";
+
+type BookingCancellationRecord = {
+  at?: Date | string | null;
+  cancelStatus?: string | null;
+  refund?: {
+    status?: string | null;
+    amountValue?: number | null;
+    currencyCode?: string | null;
+    services?: unknown;
+  } | null;
+} | null;
+
+type ServiceCard = {
+  id: VoucherServiceKey;
+  title: string;
+  price: string;
+  details: string[];
+};
+
 const resolveLocale = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
 
@@ -96,6 +118,42 @@ const getNights = (start?: string | null, end?: string | null) => {
 const countGuestsFromRooms = (rooms: AoryxBookingPayload["rooms"]) =>
   rooms.reduce((sum, room) => sum + room.adults + room.childrenAges.length, 0);
 
+const resolveRefundStateKey = (value?: string | null): VoucherRefundStateKey | null => {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "already_refunded") return "already_refunded";
+  if (normalized.includes("refunded")) return "refunded";
+  if (
+    normalized.includes("in_progress") ||
+    normalized.includes("requested") ||
+    normalized.includes("processing")
+  ) {
+    return "in_progress";
+  }
+  if (normalized.includes("fail") || normalized.includes("error")) return "failed";
+  return "unknown";
+};
+
+const normalizeCurrencyCode = (value: unknown) => {
+  const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (!raw) return "AMD";
+  if (raw === "051" || raw === "AMD") return "AMD";
+  if (raw === "840" || raw === "USD") return "USD";
+  if (raw === "978" || raw === "EUR") return "EUR";
+  if (raw === "643" || raw === "RUB") return "RUB";
+  return raw;
+};
+
+const parseRefundServiceKeys = (value: unknown): RefundServiceKey[] => {
+  if (!Array.isArray(value)) return [];
+  const parsed = value
+    .map((item) => (typeof item === "string" ? item.trim().toLowerCase() : ""))
+    .filter((item): item is RefundServiceKey =>
+      item === "transfer" || item === "excursion" || item === "flight"
+    );
+  return Array.from(new Set(parsed));
+};
+
 const normalizeAppliedCoupon = (value: unknown): AppliedBookingCoupon | null => {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
@@ -147,6 +205,17 @@ export default async function VoucherPage({ params }: PageProps) {
   const payload = bookingRecord.payload as AoryxBookingPayload;
   const booking = (bookingRecord.booking ?? null) as AoryxBookingResult | null;
   const appliedCoupon = normalizeAppliedCoupon((bookingRecord as { coupon?: unknown }).coupon ?? null);
+  const cancellation =
+    ((bookingRecord as { cancellation?: BookingCancellationRecord }).cancellation ?? null) as BookingCancellationRecord;
+  const refundRecord = cancellation?.refund ?? null;
+  const refundStateKey = resolveRefundStateKey(refundRecord?.status ?? null);
+  const refundedServices = parseRefundServiceKeys(refundRecord?.services ?? null);
+  const refundedServicesSet = new Set<RefundServiceKey>(refundedServices);
+  const refundedAmountValue =
+    typeof refundRecord?.amountValue === "number" && Number.isFinite(refundRecord.amountValue)
+      ? refundRecord.amountValue
+      : null;
+  const refundCurrency = normalizeCurrencyCode(refundRecord?.currencyCode ?? payload.currency);
   const createdAt = bookingRecord.createdAt ? new Date(bookingRecord.createdAt) : null;
   const [hotelMarkup, rates] = await Promise.all([
     getAoryxHotelPlatformFee(),
@@ -181,6 +250,8 @@ export default async function VoucherPage({ params }: PageProps) {
 
   const statusKey = resolveBookingStatusKey(booking?.status ?? null);
   const statusLabel = t.profile.bookings.status[statusKey];
+  const cancellationStatusKey = resolveBookingStatusKey(cancellation?.cancelStatus ?? null);
+  const bookingCanceledByAdmin = cancellationStatusKey === "failed";
   const bookingSourceRaw = (bookingRecord as { source?: unknown }).source;
   const bookingSource = typeof bookingSourceRaw === "string" ? bookingSourceRaw.trim().toLowerCase() : "";
   const paymentMethodLabel = (() => {
@@ -220,10 +291,33 @@ export default async function VoucherPage({ params }: PageProps) {
     if (!normalized) return "—";
     return formatCurrencyAmount(normalized.amount, normalized.currency, "en-GB") ?? "—";
   };
+  const resolveServiceLabel = (service: RefundServiceKey) => {
+    if (service === "transfer") return t.packageBuilder.services.transfer;
+    if (service === "excursion") return t.packageBuilder.services.excursion;
+    return t.packageBuilder.services.flight;
+  };
+  const resolveServiceUpdateNote = (service: RefundServiceKey) => {
+    if (!refundedServicesSet.has(service)) return null;
+    if (refundStateKey === "in_progress") return t.profile.voucher.updates.serviceCancelPending;
+    if (refundStateKey === "failed") return t.profile.voucher.updates.serviceCancelFailed;
+    return t.profile.voucher.updates.serviceCanceled;
+  };
   const displayTotal = resolveBookingDisplayTotal(payload, rates, { hotelMarkup });
   const totalLabel = formatCurrencyAmount(displayTotal.amount, displayTotal.currency, "en-GB") ?? "—";
+  const refundedAmountLabel =
+    refundedAmountValue !== null ? formatDisplayPrice(refundedAmountValue, refundCurrency) : null;
+  const refundStatusLabel = refundStateKey ? t.profile.voucher.updates.refundStates[refundStateKey] : null;
+  const refundedServicesLabel =
+    refundedServices.length > 0 ? refundedServices.map((service) => resolveServiceLabel(service)).join(", ") : null;
+  const canceledOnLabel =
+    cancellation?.at != null ? formatDate(cancellation.at, resolvedLocale) : null;
+  const showBookingUpdates =
+    bookingCanceledByAdmin ||
+    refundStateKey !== null ||
+    refundedAmountLabel !== null ||
+    refundedServices.length > 0;
 
-  const serviceCards = [
+  const serviceCards: ServiceCard[] = [
     {
       id: "hotel",
       title: t.packageBuilder.services.hotel,
@@ -263,6 +357,7 @@ export default async function VoucherPage({ params }: PageProps) {
         payload.transferSelection.pricing?.currency ?? payload.currency
       ),
       details: [
+        resolveServiceUpdateNote("transfer"),
         route ? `${t.packageBuilder.checkout.labels.route}: ${route}` : null,
         arrivalFlightNumber
           ? `${t.hotel.addons.transfers.flightNumber}: ${arrivalFlightNumber}`
@@ -331,7 +426,10 @@ export default async function VoucherPage({ params }: PageProps) {
       id: "excursion",
       title: t.packageBuilder.services.excursion,
       price: formatDisplayPrice(payload.excursions.totalAmount ?? null, selections[0]?.currency ?? payload.currency),
-      details: excursionDetails.length > 0 ? excursionDetails : [t.packageBuilder.checkout.pendingDetails],
+      details: [
+        resolveServiceUpdateNote("excursion"),
+        ...(excursionDetails.length > 0 ? excursionDetails : [t.packageBuilder.checkout.pendingDetails]),
+      ].filter(Boolean) as string[],
     });
   }
 
@@ -355,6 +453,7 @@ export default async function VoucherPage({ params }: PageProps) {
       title: t.packageBuilder.services.flight,
       price: formatDisplayPrice(payload.airTickets.price ?? null, payload.airTickets.currency ?? payload.currency),
       details: [
+        resolveServiceUpdateNote("flight"),
         route ? `${t.packageBuilder.checkout.labels.route}: ${route}` : null,
         dates ? `${t.profile.searches.labels.dates}: ${dates}` : null,
         payload.airTickets.cabinClass ? payload.airTickets.cabinClass : null,
@@ -493,6 +592,45 @@ export default async function VoucherPage({ params }: PageProps) {
             </div>
           </div>
         </section>
+        {showBookingUpdates && (
+          <>
+            <h2>{t.profile.voucher.sections.updates}</h2>
+            <section className="voucher-card">
+              <div className="voucher-definition">
+                {bookingCanceledByAdmin ? (
+                  <div>
+                    <span>{t.profile.voucher.updates.bookingStatus}</span>
+                    <strong>{t.profile.voucher.updates.canceled}</strong>
+                  </div>
+                ) : null}
+                {canceledOnLabel ? (
+                  <div>
+                    <span>{t.profile.voucher.updates.canceledOn}</span>
+                    <strong>{canceledOnLabel}</strong>
+                  </div>
+                ) : null}
+                {refundStatusLabel ? (
+                  <div>
+                    <span>{t.profile.voucher.updates.refundStatus}</span>
+                    <strong>{refundStatusLabel}</strong>
+                  </div>
+                ) : null}
+                {refundedAmountLabel ? (
+                  <div>
+                    <span>{t.profile.voucher.updates.refundedAmount}</span>
+                    <strong>{refundedAmountLabel}</strong>
+                  </div>
+                ) : null}
+                {refundedServicesLabel ? (
+                  <div>
+                    <span>{t.profile.voucher.updates.refundedServices}</span>
+                    <strong>{refundedServicesLabel}</strong>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          </>
+        )}
         <h2>{t.profile.voucher.sections.services}</h2>
         <section className="voucher-card voucher-card--services">
           <div className="voucher-services">
