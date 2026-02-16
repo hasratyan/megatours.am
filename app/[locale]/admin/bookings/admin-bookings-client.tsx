@@ -169,6 +169,7 @@ export default function AdminBookingsClient({
   } | null>(null);
   const [actionFeedback, setActionFeedback] = useState<Record<string, { ok: boolean; message: string }>>({});
   const [refundAmountByBookingId, setRefundAmountByBookingId] = useState<Record<string, string>>({});
+  const [refundAmountManualByBookingId, setRefundAmountManualByBookingId] = useState<Record<string, boolean>>({});
   const [refundServicesByBookingId, setRefundServicesByBookingId] = useState<
     Record<string, RefundServiceKey[]>
   >({});
@@ -324,6 +325,11 @@ export default function AdminBookingsClient({
         delete next[bookingId];
         return next;
       });
+      setRefundAmountManualByBookingId((prev) => {
+        const next = { ...prev };
+        delete next[bookingId];
+        return next;
+      });
       return;
     }
 
@@ -338,6 +344,10 @@ export default function AdminBookingsClient({
     setRefundAmountByBookingId((prev) => ({
       ...prev,
       [bookingId]: rounded > 0 ? String(rounded) : "",
+    }));
+    setRefundAmountManualByBookingId((prev) => ({
+      ...prev,
+      [bookingId]: false,
     }));
   };
 
@@ -440,7 +450,9 @@ export default function AdminBookingsClient({
     const normalizedAmount = rawAmount.replace(",", ".");
     const hasCustomAmount = normalizedAmount.length > 0;
     const parsedAmount = hasCustomAmount ? Number(normalizedAmount) : 0;
-    if (hasCustomAmount && (!Number.isFinite(parsedAmount) || parsedAmount <= 0)) {
+    const isManualAmount = refundAmountManualByBookingId[bookingId] === true;
+    const shouldSendAmount = hasCustomAmount && (selectedServices.length === 0 || isManualAmount);
+    if (shouldSendAmount && (!Number.isFinite(parsedAmount) || parsedAmount <= 0)) {
       setActionFeedback((prev) => ({
         ...prev,
         [bookingId]: { ok: false, message: t.admin.actions.refundAmountInvalid },
@@ -462,7 +474,7 @@ export default function AdminBookingsClient({
         refundAmount?: number;
         services?: RefundServiceKey[];
       } = { action: "refund" };
-      if (hasCustomAmount) payload.refundAmount = parsedAmount;
+      if (shouldSendAmount) payload.refundAmount = parsedAmount;
       if (selectedServices.length > 0) payload.services = selectedServices;
       const response = await postJson<BookingActionResponse>(
         `/api/admin/bookings/${encodeURIComponent(bookingId)}/cancel`,
@@ -830,10 +842,16 @@ export default function AdminBookingsClient({
                                           placeholder={t.admin.actions.refundAmountPlaceholder}
                                           value={refundAmountValue}
                                           onChange={(event) =>
-                                            setRefundAmountByBookingId((prev) => ({
-                                              ...prev,
-                                              [item.entry.id]: event.target.value,
-                                            }))
+                                            {
+                                              setRefundAmountByBookingId((prev) => ({
+                                                ...prev,
+                                                [item.entry.id]: event.target.value,
+                                              }));
+                                              setRefundAmountManualByBookingId((prev) => ({
+                                                ...prev,
+                                                [item.entry.id]: true,
+                                              }));
+                                            }
                                           }
                                           disabled={isCanceling || isRefunding || !canRequestRefund}
                                         />
