@@ -7,6 +7,7 @@ import { getDb } from "@/lib/db";
 import { AORYX_API_KEY, AORYX_BASE_URL, AORYX_CUSTOMER_CODE, AORYX_DEFAULT_CURRENCY, AORYX_TIMEOUT_MS } from "@/lib/env";
 import { getAmdRates } from "@/lib/pricing";
 import { convertToAmd } from "@/lib/currency";
+import { cancelVposPayment } from "@/lib/vpos-cancel";
 import { refundVposPayment, type PaymentProvider } from "@/lib/vpos-refund";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
@@ -15,6 +16,8 @@ export const runtime = "nodejs";
 type CancelRouteParams = {
   bookingId: string;
 };
+
+type RefundServiceKey = "transfer" | "excursion" | "flight";
 
 type UserBookingRecord = {
   _id: ObjectId;
@@ -448,17 +451,69 @@ const calculateInsuranceExclusionMinor = async (
   return Math.round(insuranceInAmd * Math.pow(10, decimals));
 };
 
+const getRefundableServiceAmountAmd = (
+  payload: AoryxBookingPayload | null | undefined,
+  service: RefundServiceKey,
+  rates: Awaited<ReturnType<typeof getAmdRates>>
+) => {
+  if (!payload) return null;
+
+  if (service === "transfer") {
+    const amount = toNumber(payload.transferSelection?.totalPrice);
+    if (amount === null || amount <= 0) return null;
+    const currency = resolveString(payload.transferSelection?.pricing?.currency) || resolveString(payload.currency);
+    return convertToAmd(amount, currency, rates);
+  }
+
+  if (service === "excursion") {
+    const amount = toNumber(payload.excursions?.totalAmount);
+    if (amount === null || amount <= 0) return null;
+    const currency =
+      resolveString(payload.excursions?.selections?.[0]?.currency) || resolveString(payload.currency);
+    return convertToAmd(amount, currency, rates);
+  }
+
+  const amount = toNumber(payload.airTickets?.price);
+  if (amount === null || amount <= 0) return null;
+  const currency = resolveString(payload.airTickets?.currency) || resolveString(payload.currency);
+  return convertToAmd(amount, currency, rates);
+};
+
+const calculateSelectedServicesRefundMinor = async (
+  payload: AoryxBookingPayload | null | undefined,
+  services: RefundServiceKey[],
+  decimals: number
+) => {
+  if (!payload || services.length === 0) return null;
+  const rates = await getAmdRates();
+  let totalAmd = 0;
+
+  for (const service of services) {
+    const amountAmd = getRefundableServiceAmountAmd(payload, service, rates);
+    if (amountAmd === null || amountAmd <= 0) return null;
+    totalAmd += amountAmd;
+  }
+
+  return Math.round(totalAmd * Math.pow(10, decimals));
+};
+
 const toMinor = (value: number | null | undefined, decimals: number): number | null => {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   return Math.round(value * Math.pow(10, decimals));
+};
+
+const ALLOWED_REFUND_SERVICES = new Set<RefundServiceKey>(["transfer", "excursion", "flight"]);
+
+const isCanceledBookingStatus = (value: string | null | undefined) => {
+  const normalized = resolveString(value).toLowerCase();
+  if (!normalized) return false;
+  return normalized === "4" || normalized.includes("cancel");
 };
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<CancelRouteParams> }
 ) {
-  void request;
-
   try {
     const session = await getServerSession(authOptions);
     const adminUser = {
@@ -468,6 +523,44 @@ export async function POST(
     const isAdmin = isAdminUser(adminUser);
     if (!isAdmin) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const requestBody = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    const actionRaw = resolveString(isRecord(requestBody) ? requestBody.action : "").toLowerCase();
+    const action: "cancel" | "refund" | "cancel_and_refund" =
+      actionRaw === "cancel" ? "cancel" : actionRaw === "refund" ? "refund" : "cancel_and_refund";
+    const shouldCancelBooking = action === "cancel" || action === "cancel_and_refund";
+    const shouldCancelPayment = action === "cancel";
+    const shouldRefundPayment = action === "refund" || action === "cancel_and_refund";
+
+    const refundServicesRaw = isRecord(requestBody) && Array.isArray(requestBody.services) ? requestBody.services : [];
+    const normalizedRefundServices = refundServicesRaw
+      .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
+      .filter((value): value is RefundServiceKey => ALLOWED_REFUND_SERVICES.has(value as RefundServiceKey));
+    if (refundServicesRaw.length > 0 && normalizedRefundServices.length !== refundServicesRaw.length) {
+      return NextResponse.json(
+        {
+          error: "Invalid service selection for partial refund.",
+          code: "invalid_refund_services",
+        },
+        { status: 422 }
+      );
+    }
+    const refundServices = Array.from(new Set(normalizedRefundServices));
+
+    const refundAmountInput = isRecord(requestBody) ? requestBody.refundAmount : undefined;
+    const hasRefundAmountInput =
+      refundAmountInput != null &&
+      !(typeof refundAmountInput === "string" && refundAmountInput.trim().length === 0);
+    const requestedRefundAmount = hasRefundAmountInput ? toNumber(refundAmountInput) : null;
+    if (shouldRefundPayment && hasRefundAmountInput && (requestedRefundAmount === null || requestedRefundAmount <= 0)) {
+      return NextResponse.json(
+        {
+          error: "Invalid refund amount. Enter a positive number.",
+          code: "invalid_refund_amount",
+        },
+        { status: 422 }
+      );
     }
 
     const { bookingId } = await params;
@@ -492,15 +585,26 @@ export async function POST(
     }
 
     const bookingResult = userBooking.booking ?? null;
-    const bookingStatus = resolveString(bookingResult?.status).toLowerCase();
-    if (bookingStatus === "4" || bookingStatus.includes("cancel")) {
+    const bookingStatus = resolveString(bookingResult?.status);
+    const bookingAlreadyCanceled = isCanceledBookingStatus(bookingStatus);
+    if (action === "cancel_and_refund" && bookingAlreadyCanceled) {
       return NextResponse.json({ error: "Booking is already canceled.", code: "already_canceled" }, { status: 409 });
     }
+    if (action === "refund" && !bookingAlreadyCanceled && refundServices.length === 0) {
+      return NextResponse.json(
+        {
+          error: "Cancel booking first, or select additional services for partial refund.",
+          code: "booking_not_canceled",
+        },
+        { status: 409 }
+      );
+    }
+
     const source = resolveString(userBooking.source).toLowerCase();
     if (!source.includes("vpos")) {
       return NextResponse.json(
         {
-          error: "Cancellation refund is available only for VPOS bookings.",
+          error: "This action is available only for VPOS bookings.",
           code: "unsupported_booking_source",
         },
         { status: 409 }
@@ -518,7 +622,7 @@ export async function POST(
     const provider = resolveString(paymentRecord.provider).toLowerCase() as PaymentProvider;
     if (provider !== "idbank" && provider !== "ameriabank") {
       return NextResponse.json(
-        { error: "Only IDBank and Ameriabank VPOS refunds are supported.", code: "unsupported_provider" },
+        { error: "Only IDBank and Ameriabank VPOS payments are supported.", code: "unsupported_provider" },
         { status: 409 }
       );
     }
@@ -526,81 +630,232 @@ export async function POST(
       return NextResponse.json({ error: "Payment record id is missing." }, { status: 422 });
     }
 
-    const refundabilityChecks: RefundabilityResult[] = [];
     let refundability: RefundabilityResult | null = null;
-    try {
-      refundability = await getRefundabilityFromCancellationPolicy(payload);
-      refundabilityChecks.push(refundability);
-    } catch (error) {
-      console.warn("[Admin][booking-cancel] CancellationPolicy refundable check failed", error);
+    let roomIdentifiers: number[] = [];
+    let cancelResponse: Record<string, unknown> | null = null;
+    let cancelStatusString = bookingStatus || "4";
+    let canceledNow = false;
+
+    if (shouldCancelBooking && !bookingAlreadyCanceled) {
+      try {
+        refundability = await getRefundabilityFromCancellationPolicy(payload);
+      } catch (error) {
+        console.warn("[Admin][booking-cancel] CancellationPolicy room lookup failed", error);
+      }
+
+      if (!refundability || !refundability.isRefundable) {
+        try {
+          const detailsCheck = await getRefundabilityFromBookingDetails(payload);
+          if (!refundability || detailsCheck.isRefundable) {
+            refundability = detailsCheck;
+          }
+        } catch (error) {
+          console.warn("[Admin][booking-cancel] BookingDetails room lookup failed", error);
+        }
+      }
+
+      roomIdentifiers = buildRoomIdentifiers(userBooking, refundability?.rooms ?? []);
+      if (roomIdentifiers.length === 0) {
+        return NextResponse.json(
+          { error: "Unable to resolve room identifiers for cancellation.", code: "missing_room_identifiers" },
+          { status: 422 }
+        );
+      }
+
+      const adsConfirmationNumber = resolveString(bookingResult?.adsConfirmationNumber);
+      if (!adsConfirmationNumber) {
+        return NextResponse.json(
+          { error: "Missing ADS confirmation number required for cancellation.", code: "missing_ads_confirmation" },
+          { status: 422 }
+        );
+      }
+
+      const cancelRequestPayload = {
+        SessionId: payload.sessionId,
+        Currency: resolveString(payload.currency) || AORYX_DEFAULT_CURRENCY || "USD",
+        ADSConfirmationNumber: adsConfirmationNumber,
+        CancelRooms: {
+          CancelRoom: roomIdentifiers.map((roomIdentifier) => ({
+            RoomIdentifier: roomIdentifier,
+          })),
+        },
+      };
+      cancelResponse = await requestAoryx("Cancel", cancelRequestPayload);
+      const cancelStatusRaw = readField(cancelResponse, ["Status", "status"]);
+      cancelStatusString = resolveString(cancelStatusRaw);
+      const cancelStatusCode = toNumber(cancelStatusRaw);
+      const isCancelSuccess =
+        cancelStatusCode === 4 ||
+        cancelStatusString === "4" ||
+        cancelStatusString.toLowerCase().includes("cancel");
+
+      if (!isCancelSuccess) {
+        return NextResponse.json(
+          {
+            error: "Aoryx cancellation failed.",
+            code: "aoryx_cancel_failed",
+            cancelStatus: cancelStatusRaw ?? null,
+          },
+          { status: 502 }
+        );
+      }
+      canceledNow = true;
     }
 
-    if (!refundability || !refundability.isRefundable) {
+    const now = new Date();
+    const orderId = resolveString(paymentRecord.orderId);
+    if (!orderId) {
+      return NextResponse.json({ error: "Missing payment order id." }, { status: 422 });
+    }
+
+    const cancellationSetBase: Record<string, unknown> = {};
+    if (shouldCancelBooking || bookingAlreadyCanceled) {
+      cancellationSetBase["cancellation.at"] = now;
+      cancellationSetBase["cancellation.by"] = {
+        id: adminUser.id,
+        email: adminUser.email,
+      };
+      cancellationSetBase["cancellation.cancelStatus"] = cancelStatusString || "4";
+    }
+    if (roomIdentifiers.length > 0) {
+      cancellationSetBase["cancellation.roomIdentifiers"] = roomIdentifiers;
+    }
+    if (cancelResponse) {
+      cancellationSetBase["cancellation.aoryxResponse"] = cancelResponse;
+    }
+    if (refundability) {
+      cancellationSetBase["cancellation.refundableCheck"] = refundability;
+    }
+
+    if (shouldCancelPayment) {
+      if (isAlreadyRefunded(paymentRecord)) {
+        return NextResponse.json(
+          {
+            error: "Payment is already refunded. Cancel action is no longer available.",
+            code: "already_refunded",
+            bookingStatus: cancelStatusString || "4",
+          },
+          { status: 409 }
+        );
+      }
+
       try {
-        const detailsCheck = await getRefundabilityFromBookingDetails(payload);
-        refundabilityChecks.push(detailsCheck);
-        if (!refundability || detailsCheck.isRefundable) {
-          refundability = detailsCheck;
-        }
+        const cancelResult = await cancelVposPayment({
+          provider,
+          orderId,
+          language: paymentRecord.locale ?? null,
+        });
+
+        await vposPayments.updateOne(
+          { _id: paymentRecord._id },
+          {
+            $set: {
+              ...cancellationSetBase,
+              "cancellation.payment": {
+                action: "cancel",
+                status: "canceled",
+                responseCode: cancelResult.responseCode,
+                responseMessage: cancelResult.responseMessage,
+              },
+              paymentCancelStatus: "canceled",
+              paymentCancel: {
+                provider,
+                requestedAt: now,
+                requestedBy: {
+                  id: adminUser.id,
+                  email: adminUser.email,
+                },
+                responseCode: cancelResult.responseCode,
+                responseMessage: cancelResult.responseMessage,
+                raw: cancelResult.raw,
+              },
+              updatedAt: now,
+            },
+          }
+        );
+        await userBookings.updateOne(
+          { _id: bookingObjectId },
+          {
+            $set: {
+              "booking.status": cancelStatusString || "4",
+              ...cancellationSetBase,
+              "cancellation.payment": {
+                action: "cancel",
+                status: "canceled",
+                responseCode: cancelResult.responseCode,
+                responseMessage: cancelResult.responseMessage,
+              },
+              updatedAt: now,
+            },
+          }
+        );
+
+        return NextResponse.json({
+          action: "cancel",
+          message: canceledNow
+            ? "Booking canceled and payment cancel requested successfully."
+            : "Payment cancel requested successfully.",
+          bookingStatus: cancelStatusString || "4",
+          payment: {
+            action: "cancel",
+            status: "canceled",
+            responseCode: cancelResult.responseCode,
+            responseMessage: cancelResult.responseMessage,
+          },
+        });
       } catch (error) {
-        console.warn("[Admin][booking-cancel] BookingDetails refundable check failed", error);
+        const message = error instanceof Error ? error.message : "Payment cancel request failed.";
+
+        await vposPayments.updateOne(
+          { _id: paymentRecord._id },
+          {
+            $set: {
+              ...cancellationSetBase,
+              "cancellation.payment": {
+                action: "cancel",
+                status: "failed",
+                error: message,
+              },
+              paymentCancelStatus: "failed",
+              paymentCancelError: message,
+              updatedAt: now,
+            },
+          }
+        );
+        await userBookings.updateOne(
+          { _id: bookingObjectId },
+          {
+            $set: {
+              "booking.status": cancelStatusString || "4",
+              ...cancellationSetBase,
+              "cancellation.payment": {
+                action: "cancel",
+                status: "failed",
+                error: message,
+              },
+              updatedAt: now,
+            },
+          }
+        );
+
+        return NextResponse.json(
+          {
+            error: canceledNow ? `Booking canceled, but payment cancel failed: ${message}` : message,
+            code: "cancel_failed",
+            bookingStatus: cancelStatusString || "4",
+          },
+          { status: 502 }
+        );
       }
     }
 
-    if (!refundability || !refundability.isRefundable) {
+    if (!shouldRefundPayment) {
       return NextResponse.json(
         {
-          error: "This booking is not refundable according to Aoryx cancellation policy.",
-          code: "not_refundable",
-          refundableChecks: refundabilityChecks,
+          error: "Unsupported action.",
+          code: "unsupported_action",
         },
-        { status: 409 }
-      );
-    }
-
-    const roomIdentifiers = buildRoomIdentifiers(userBooking, refundability.rooms);
-    if (roomIdentifiers.length === 0) {
-      return NextResponse.json(
-        { error: "Unable to resolve room identifiers for cancellation.", code: "missing_room_identifiers" },
-        { status: 422 }
-      );
-    }
-
-    const adsConfirmationNumber = resolveString(bookingResult?.adsConfirmationNumber);
-    if (!adsConfirmationNumber) {
-      return NextResponse.json(
-        { error: "Missing ADS confirmation number required for cancellation.", code: "missing_ads_confirmation" },
-        { status: 422 }
-      );
-    }
-
-    const cancelRequestPayload = {
-      SessionId: payload.sessionId,
-      Currency: resolveString(payload.currency) || AORYX_DEFAULT_CURRENCY || "USD",
-      ADSConfirmationNumber: adsConfirmationNumber,
-      CancelRooms: {
-        CancelRoom: roomIdentifiers.map((roomIdentifier) => ({
-          RoomIdentifier: roomIdentifier,
-        })),
-      },
-    };
-    const cancelResponse = await requestAoryx("Cancel", cancelRequestPayload);
-    const cancelStatusRaw = readField(cancelResponse, ["Status", "status"]);
-    const cancelStatusString = resolveString(cancelStatusRaw);
-    const cancelStatusCode = toNumber(cancelStatusRaw);
-    const isCancelSuccess =
-      cancelStatusCode === 4 ||
-      cancelStatusString === "4" ||
-      cancelStatusString.toLowerCase().includes("cancel");
-
-    if (!isCancelSuccess) {
-      return NextResponse.json(
-        {
-          error: "Aoryx cancellation failed.",
-          code: "aoryx_cancel_failed",
-          cancelStatus: cancelStatusRaw ?? null,
-        },
-        { status: 502 }
+        { status: 400 }
       );
     }
 
@@ -618,8 +873,8 @@ export async function POST(
     }
 
     const insuranceExclusionMinor = await calculateInsuranceExclusionMinor(paymentRecord, payload, decimals);
-    const refundAmountMinor = Math.max(0, paidMinor - insuranceExclusionMinor);
-    if (refundAmountMinor <= 0) {
+    const maxRefundMinor = Math.max(0, paidMinor - insuranceExclusionMinor);
+    if (maxRefundMinor <= 0) {
       return NextResponse.json(
         {
           error: "Refund amount is zero after excluding insurance.",
@@ -629,19 +884,72 @@ export async function POST(
       );
     }
 
-    const now = new Date();
-    const alreadyRefunded = isAlreadyRefunded(paymentRecord);
-    const orderId = resolveString(paymentRecord.orderId);
-    if (!orderId) {
-      return NextResponse.json({ error: "Missing payment order id." }, { status: 422 });
+    const selectedServicesAmountMinor =
+      refundServices.length > 0
+        ? await calculateSelectedServicesRefundMinor(payload, refundServices, decimals)
+        : null;
+    if (refundServices.length > 0 && (selectedServicesAmountMinor === null || selectedServicesAmountMinor <= 0)) {
+      return NextResponse.json(
+        {
+          error: "Unable to resolve refund amount from selected services.",
+          code: "invalid_selected_services_amount",
+        },
+        { status: 422 }
+      );
     }
 
+    const selectedServicesCapMinor =
+      selectedServicesAmountMinor !== null
+        ? Math.min(maxRefundMinor, selectedServicesAmountMinor)
+        : maxRefundMinor;
+    let refundAmountMinor = selectedServicesCapMinor;
+    if (hasRefundAmountInput) {
+      const requestedMinor = toMinor(requestedRefundAmount, decimals);
+      if (requestedMinor === null || requestedMinor <= 0) {
+        return NextResponse.json(
+          {
+            error: "Invalid refund amount. Enter a positive number.",
+            code: "invalid_refund_amount",
+          },
+          { status: 422 }
+        );
+      }
+      if (requestedMinor > selectedServicesCapMinor) {
+        const maxRefundAmount = Number(
+          (selectedServicesCapMinor / Math.pow(10, decimals)).toFixed(decimals)
+        );
+        return NextResponse.json(
+          {
+            error:
+              refundServices.length > 0
+                ? "Refund amount exceeds selected services total."
+                : "Refund amount exceeds the allowed maximum (insurance is excluded).",
+            code:
+              refundServices.length > 0
+                ? "refund_amount_exceeds_selected_services"
+                : "refund_amount_exceeds_max",
+            maxRefundAmount,
+          },
+          { status: 409 }
+        );
+      }
+      refundAmountMinor = requestedMinor;
+    }
+
+    const alreadyRefunded = isAlreadyRefunded(paymentRecord);
     const refundSummaryBase = {
       provider,
       amountMinor: refundAmountMinor,
       amountValue: Number((refundAmountMinor / Math.pow(10, decimals)).toFixed(decimals)),
+      maxAmountMinor: maxRefundMinor,
+      maxAmountValue: Number((maxRefundMinor / Math.pow(10, decimals)).toFixed(decimals)),
+      selectedServicesCapMinor,
+      selectedServicesCapValue: Number(
+        (selectedServicesCapMinor / Math.pow(10, decimals)).toFixed(decimals)
+      ),
       currencyCode: normalizeCurrencyCode(paymentRecord.amount?.currencyCode ?? "051"),
       insuranceExcludedMinor: insuranceExclusionMinor,
+      services: refundServices,
       requestedAt: now,
       requestedBy: {
         id: adminUser.id,
@@ -721,20 +1029,15 @@ export async function POST(
             { _id: paymentRecord._id },
             {
               $set: {
-                cancellation: {
-                  at: now,
-                  by: {
-                    id: adminUser.id,
-                    email: adminUser.email,
-                  },
-                  cancelStatus: cancelStatusString || "4",
-                  roomIdentifiers,
-                  aoryxResponse: cancelResponse,
-                  refundableCheck: refundability,
-                },
+                ...cancellationSetBase,
                 refundStatus: "failed",
                 refundError: message,
                 refundAttempt: refundSummaryBase,
+                "cancellation.refund": {
+                  ...refundSummaryBase,
+                  status: "failed",
+                  error: message,
+                },
                 updatedAt: now,
               },
             }
@@ -744,18 +1047,11 @@ export async function POST(
             {
               $set: {
                 "booking.status": cancelStatusString || "4",
-                cancellation: {
-                  at: now,
-                  by: {
-                    id: adminUser.id,
-                    email: adminUser.email,
-                  },
-                  refundableCheck: refundability,
-                  refund: {
-                    ...refundSummaryBase,
-                    status: "failed",
-                    error: message,
-                  },
+                ...cancellationSetBase,
+                "cancellation.refund": {
+                  ...refundSummaryBase,
+                  status: "failed",
+                  error: message,
                 },
                 updatedAt: now,
               },
@@ -763,7 +1059,7 @@ export async function POST(
           );
           return NextResponse.json(
             {
-              error: `Booking canceled, but refund failed: ${message}`,
+              error: canceledNow ? `Booking canceled, but refund failed: ${message}` : message,
               code: "refund_failed",
               bookingStatus: cancelStatusString || "4",
             },
@@ -777,16 +1073,12 @@ export async function POST(
       { _id: paymentRecord._id },
       {
         $set: {
-          cancellation: {
-            at: now,
-            by: {
-              id: adminUser.id,
-              email: adminUser.email,
-            },
-            cancelStatus: cancelStatusString || "4",
-            roomIdentifiers,
-            aoryxResponse: cancelResponse,
-            refundableCheck: refundability,
+          ...cancellationSetBase,
+          "cancellation.refund": {
+            ...refundSummaryBase,
+            status: refundResponse.skipped ? "already_refunded" : "refunded",
+            responseCode: refundResponse.responseCode,
+            responseMessage: refundResponse.responseMessage,
           },
           refundStatus: refundResponse.skipped ? "already_refunded" : "refunded",
           refund: {
@@ -804,19 +1096,12 @@ export async function POST(
       {
         $set: {
           "booking.status": cancelStatusString || "4",
-          cancellation: {
-            at: now,
-            by: {
-              id: adminUser.id,
-              email: adminUser.email,
-            },
-            refundableCheck: refundability,
-            refund: {
-              ...refundSummaryBase,
-              status: refundResponse.skipped ? "already_refunded" : "refunded",
-              responseCode: refundResponse.responseCode,
-              responseMessage: refundResponse.responseMessage,
-            },
+          ...cancellationSetBase,
+          "cancellation.refund": {
+            ...refundSummaryBase,
+            status: refundResponse.skipped ? "already_refunded" : "refunded",
+            responseCode: refundResponse.responseCode,
+            responseMessage: refundResponse.responseMessage,
           },
           updatedAt: now,
         },
@@ -824,9 +1109,14 @@ export async function POST(
     );
 
     return NextResponse.json({
+      action: shouldCancelBooking ? "cancel_and_refund" : "refund",
       message: refundResponse.skipped
-        ? "Booking canceled. Payment was already refunded."
-        : "Booking canceled and refund requested successfully.",
+        ? "Payment was already refunded."
+        : canceledNow
+          ? "Booking canceled and refund requested successfully."
+          : refundServices.length > 0
+            ? "Partial refund requested successfully."
+            : "Refund requested successfully.",
       bookingStatus: cancelStatusString || "4",
       refund: {
         ...refundSummaryBase,
@@ -836,7 +1126,7 @@ export async function POST(
       },
     });
   } catch (error) {
-    console.error("[Admin][booking-cancel] Failed to cancel and refund booking", error);
+    console.error("[Admin][booking-cancel] Failed to process booking action", error);
     const message = error instanceof Error ? error.message : "Failed to cancel booking.";
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -8,6 +8,7 @@ import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { resolveBookingDisplayTotal } from "@/lib/booking-total";
 import { getAmdRates, getAoryxHotelPlatformFee } from "@/lib/pricing";
+import { convertToAmd } from "@/lib/currency";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 import type { AppliedBookingCoupon } from "@/lib/user-data";
 
@@ -32,6 +33,14 @@ type BookingRecord = {
   } | null;
 };
 
+type RefundServiceKey = "transfer" | "excursion" | "flight";
+
+type RefundServiceOption = {
+  key: RefundServiceKey;
+  amount: number;
+  currency: string;
+};
+
 type AdminBookingRecord = {
   id: string;
   createdAt: string | null;
@@ -49,6 +58,7 @@ type AdminBookingRecord = {
   displayNetCurrency?: string | null;
   displayProfit?: number | null;
   displayProfitCurrency?: string | null;
+  refundServices?: RefundServiceOption[];
 };
 
 const resolveLocale = (value: string | undefined) =>
@@ -106,6 +116,75 @@ const sanitizeAppliedCoupon = (coupon?: AppliedBookingCoupon | null): AppliedBoo
         ? coupon.discountedAmount
         : null,
   };
+};
+
+const normalizeCurrency = (value: string | null | undefined) => (value ?? "").trim().toUpperCase();
+
+const toRoundedAmount = (value: number) => Number(value.toFixed(2));
+
+const resolveServiceAmountAmd = (
+  amount: number,
+  currency: string | null | undefined,
+  rates: Awaited<ReturnType<typeof getAmdRates>> | null
+) => {
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const normalizedCurrency = normalizeCurrency(currency);
+  if (normalizedCurrency === "AMD") return amount;
+  if (!rates) return null;
+  return convertToAmd(amount, normalizedCurrency, rates);
+};
+
+const buildRefundServiceOptions = (
+  payload: AoryxBookingPayload | null | undefined,
+  rates: Awaited<ReturnType<typeof getAmdRates>> | null
+): RefundServiceOption[] => {
+  if (!payload) return [];
+
+  const options: RefundServiceOption[] = [];
+
+  const transferAmount =
+    typeof payload.transferSelection?.totalPrice === "number" && Number.isFinite(payload.transferSelection.totalPrice)
+      ? payload.transferSelection.totalPrice
+      : 0;
+  const transferCurrency = payload.transferSelection?.pricing?.currency ?? payload.currency;
+  const transferAmd = resolveServiceAmountAmd(transferAmount, transferCurrency, rates);
+  if (transferAmd !== null && transferAmd > 0) {
+    options.push({
+      key: "transfer",
+      amount: toRoundedAmount(transferAmd),
+      currency: "AMD",
+    });
+  }
+
+  const excursionsAmount =
+    typeof payload.excursions?.totalAmount === "number" && Number.isFinite(payload.excursions.totalAmount)
+      ? payload.excursions.totalAmount
+      : 0;
+  const excursionsCurrency = payload.excursions?.selections?.[0]?.currency ?? payload.currency;
+  const excursionsAmd = resolveServiceAmountAmd(excursionsAmount, excursionsCurrency, rates);
+  if (excursionsAmd !== null && excursionsAmd > 0) {
+    options.push({
+      key: "excursion",
+      amount: toRoundedAmount(excursionsAmd),
+      currency: "AMD",
+    });
+  }
+
+  const flightsAmount =
+    typeof payload.airTickets?.price === "number" && Number.isFinite(payload.airTickets.price)
+      ? payload.airTickets.price
+      : 0;
+  const flightsCurrency = payload.airTickets?.currency ?? payload.currency;
+  const flightsAmd = resolveServiceAmountAmd(flightsAmount, flightsCurrency, rates);
+  if (flightsAmd !== null && flightsAmd > 0) {
+    options.push({
+      key: "flight",
+      amount: toRoundedAmount(flightsAmd),
+      currency: "AMD",
+    });
+  }
+
+  return options;
 };
 
 export async function generateMetadata({ params }: PageProps) {
@@ -246,6 +325,7 @@ export default async function AdminBookingsPage({ params }: PageProps) {
       displayNetCurrency: displayNet?.currency ?? null,
       displayProfit: displayProfit?.amount ?? null,
       displayProfitCurrency: displayProfit?.currency ?? null,
+      refundServices: buildRefundServiceOptions(payload, rates),
     };
   });
 

@@ -10,6 +10,14 @@ import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 import type { AppliedBookingCoupon } from "@/lib/user-data";
 
+type RefundServiceKey = "transfer" | "excursion" | "flight";
+
+type RefundServiceOption = {
+  key: RefundServiceKey;
+  amount: number;
+  currency: string;
+};
+
 type AdminBookingRecord = {
   id: string;
   createdAt: string | null;
@@ -27,6 +35,7 @@ type AdminBookingRecord = {
   displayNetCurrency?: string | null;
   displayProfit?: number | null;
   displayProfitCurrency?: string | null;
+  refundServices?: RefundServiceOption[];
 };
 
 type AdminBookingsClientProps = {
@@ -34,9 +43,15 @@ type AdminBookingsClientProps = {
   initialBookings: AdminBookingRecord[];
 };
 
-type CancelBookingResponse = {
+type BookingPaymentAction = "cancel" | "refund";
+
+type BookingActionResponse = {
+  action?: string;
   message?: string;
   bookingStatus?: string | null;
+  payment?: {
+    status?: string | null;
+  } | null;
   refund?: {
     status?: string | null;
   } | null;
@@ -148,8 +163,15 @@ export default function AdminBookingsClient({
   const [statusFilter, setStatusFilter] = useState<BookingStatusKey | "all">("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
-  const [cancelingBookingId, setCancelingBookingId] = useState<string | null>(null);
-  const [cancelFeedback, setCancelFeedback] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [processingAction, setProcessingAction] = useState<{
+    bookingId: string;
+    action: BookingPaymentAction;
+  } | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [refundAmountByBookingId, setRefundAmountByBookingId] = useState<Record<string, string>>({});
+  const [refundServicesByBookingId, setRefundServicesByBookingId] = useState<
+    Record<string, RefundServiceKey[]>
+  >({});
   const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -277,65 +299,192 @@ export default function AdminBookingsClient({
     setExpandedBookingId(null);
   };
 
-  const handleCancelAndRefund = async (bookingId: string) => {
-    if (!bookingId || cancelingBookingId) return;
-    if (typeof window !== "undefined") {
-      const confirmed = window.confirm(t.admin.actions.confirmCancelAndRefund);
-      if (!confirmed) return;
-    }
-
-    setCancelingBookingId(bookingId);
-    setCancelFeedback((prev) => {
+  const clearActionFeedback = (bookingId: string) => {
+    setActionFeedback((prev) => {
       const next = { ...prev };
       delete next[bookingId];
       return next;
     });
+  };
 
-    try {
-      const response = await postJson<CancelBookingResponse>(
-        `/api/admin/bookings/${encodeURIComponent(bookingId)}/cancel`,
-        {}
-      );
-      const message =
-        typeof response.message === "string" && response.message.trim().length > 0
-          ? response.message
-          : t.admin.actions.cancelAndRefundSuccess;
-      const bookingStatus =
-        typeof response.bookingStatus === "string" && response.bookingStatus.trim().length > 0
-          ? response.bookingStatus
-          : "4";
+  const resolveServiceLabel = (key: RefundServiceKey) => {
+    if (key === "flight") return t.packageBuilder.services.flight;
+    if (key === "transfer") return t.packageBuilder.services.transfer;
+    return t.packageBuilder.services.excursion;
+  };
 
-      setBookings((prev) =>
-        prev.map((entry) =>
-          entry.id === bookingId
-            ? {
-                ...entry,
-                booking: entry.booking
+  const syncRefundAmountFromServices = (
+    bookingId: string,
+    selectedServices: RefundServiceKey[],
+    serviceOptions: RefundServiceOption[]
+  ) => {
+    if (selectedServices.length === 0) {
+      setRefundAmountByBookingId((prev) => {
+        const next = { ...prev };
+        delete next[bookingId];
+        return next;
+      });
+      return;
+    }
+
+    const selected = new Set(selectedServices);
+    const autoAmount = serviceOptions.reduce((sum, option) => {
+      if (!selected.has(option.key)) return sum;
+      if (typeof option.amount !== "number" || !Number.isFinite(option.amount) || option.amount <= 0) return sum;
+      return sum + option.amount;
+    }, 0);
+
+    const rounded = Number(autoAmount.toFixed(2));
+    setRefundAmountByBookingId((prev) => ({
+      ...prev,
+      [bookingId]: rounded > 0 ? String(rounded) : "",
+    }));
+  };
+
+  const handleToggleRefundService = (
+    bookingId: string,
+    serviceKey: RefundServiceKey,
+    serviceOptions: RefundServiceOption[]
+  ) => {
+    setRefundServicesByBookingId((prev) => {
+      const current = prev[bookingId] ?? [];
+      const nextSelected = current.includes(serviceKey)
+        ? current.filter((item) => item !== serviceKey)
+        : [...current, serviceKey];
+      syncRefundAmountFromServices(bookingId, nextSelected, serviceOptions);
+      return {
+        ...prev,
+        [bookingId]: nextSelected,
+      };
+    });
+  };
+
+  const applyActionResponse = (bookingId: string, response: BookingActionResponse) => {
+    const bookingStatus =
+      typeof response.bookingStatus === "string" && response.bookingStatus.trim().length > 0
+        ? response.bookingStatus
+        : null;
+    const refundState =
+      typeof response.refund?.status === "string" && response.refund.status.trim().length > 0
+        ? response.refund.status
+        : null;
+
+    if (!bookingStatus && !refundState) return;
+
+    setBookings((prev) =>
+      prev.map((entry) =>
+        entry.id === bookingId
+          ? {
+              ...entry,
+              booking:
+                bookingStatus && entry.booking
                   ? {
                       ...entry.booking,
                       status: bookingStatus,
                     }
                   : entry.booking,
-                refundState:
-                  typeof response.refund?.status === "string" && response.refund.status.trim().length > 0
-                    ? response.refund.status
-                    : entry.refundState ?? "refunded",
-              }
-            : entry
-        )
+              refundState: refundState ?? entry.refundState ?? null,
+            }
+          : entry
+      )
+    );
+  };
+
+  const handleCancel = async (bookingId: string) => {
+    if (!bookingId || processingAction) return;
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(t.admin.actions.confirmCancel);
+      if (!confirmed) return;
+    }
+
+    setProcessingAction({ bookingId, action: "cancel" });
+    clearActionFeedback(bookingId);
+
+    try {
+      const response = await postJson<BookingActionResponse>(
+        `/api/admin/bookings/${encodeURIComponent(bookingId)}/cancel`,
+        { action: "cancel" }
       );
-      setCancelFeedback((prev) => ({
+      applyActionResponse(bookingId, response);
+      const message =
+        typeof response.message === "string" && response.message.trim().length > 0
+          ? response.message
+          : t.admin.actions.cancelSuccess;
+      setActionFeedback((prev) => ({
         ...prev,
         [bookingId]: { ok: true, message },
       }));
     } catch (error) {
-      const message = resolveSafeErrorFromUnknown(error, t.admin.actions.cancelAndRefundFailed);
-      setCancelFeedback((prev) => ({
+      const message = resolveSafeErrorFromUnknown(error, t.admin.actions.cancelFailed);
+      setActionFeedback((prev) => ({
         ...prev,
         [bookingId]: { ok: false, message },
       }));
     } finally {
-      setCancelingBookingId(null);
+      setProcessingAction(null);
+    }
+  };
+
+  const handleRefund = async (bookingId: string, statusKey: BookingStatusKey) => {
+    if (!bookingId || processingAction) return;
+    const selectedServices = refundServicesByBookingId[bookingId] ?? [];
+    if (statusKey === "confirmed" && selectedServices.length === 0) {
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: { ok: false, message: t.admin.actions.partialRefundRequiresServices },
+      }));
+      return;
+    }
+
+    const rawAmount = (refundAmountByBookingId[bookingId] ?? "").trim();
+    const normalizedAmount = rawAmount.replace(",", ".");
+    const hasCustomAmount = normalizedAmount.length > 0;
+    const parsedAmount = hasCustomAmount ? Number(normalizedAmount) : 0;
+    if (hasCustomAmount && (!Number.isFinite(parsedAmount) || parsedAmount <= 0)) {
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: { ok: false, message: t.admin.actions.refundAmountInvalid },
+      }));
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(t.admin.actions.confirmRefund);
+      if (!confirmed) return;
+    }
+
+    setProcessingAction({ bookingId, action: "refund" });
+    clearActionFeedback(bookingId);
+
+    try {
+      const payload: {
+        action: "refund";
+        refundAmount?: number;
+        services?: RefundServiceKey[];
+      } = { action: "refund" };
+      if (hasCustomAmount) payload.refundAmount = parsedAmount;
+      if (selectedServices.length > 0) payload.services = selectedServices;
+      const response = await postJson<BookingActionResponse>(
+        `/api/admin/bookings/${encodeURIComponent(bookingId)}/cancel`,
+        payload
+      );
+      applyActionResponse(bookingId, response);
+      const message =
+        typeof response.message === "string" && response.message.trim().length > 0
+          ? response.message
+          : t.admin.actions.refundSuccess;
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: { ok: true, message },
+      }));
+    } catch (error) {
+      const message = resolveSafeErrorFromUnknown(error, t.admin.actions.refundFailed);
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: { ok: false, message },
+      }));
+    } finally {
+      setProcessingAction(null);
     }
   };
 
@@ -461,13 +610,31 @@ export default function AdminBookingsClient({
                   const payload = item.payload;
                   const booking = item.booking;
                   const statusLabel = t.profile.bookings.status[item.statusKey];
-                  const isCanceling = cancelingBookingId === item.entry.id;
+                  const isCanceling =
+                    processingAction?.bookingId === item.entry.id && processingAction.action === "cancel";
+                  const isRefunding =
+                    processingAction?.bookingId === item.entry.id && processingAction.action === "refund";
                   const isExpanded = expandedBookingId === item.entry.id;
                   const isVposSource = (item.entry.source ?? "").toLowerCase().includes("vpos");
-                  const canCancelAndRefund = item.statusKey === "confirmed" && isVposSource;
-                  const actionFeedback = cancelFeedback[item.entry.id] ?? null;
+                  const canCancel = item.statusKey === "confirmed" && isVposSource;
+                  const refundServiceOptions = item.entry.refundServices ?? [];
+                  const canRefundConfirmed = item.statusKey === "confirmed" && isVposSource && refundServiceOptions.length > 0;
+                  const canRefundFailed = item.statusKey === "failed" && isVposSource;
+                  const canRefund = canRefundConfirmed || canRefundFailed;
+                  const actionFeedbackEntry = actionFeedback[item.entry.id] ?? null;
                   const refundStateKey = resolveRefundStateKey(item.entry.refundState);
+                  const refundBlocked =
+                    refundStateKey === "refunded" ||
+                    refundStateKey === "already_refunded" ||
+                    refundStateKey === "in_progress";
+                  const selectedRefundServices = refundServicesByBookingId[item.entry.id] ?? [];
+                  const requiresServicesForRefund = item.statusKey === "confirmed";
+                  const canRequestRefund =
+                    canRefund &&
+                    !refundBlocked &&
+                    (!requiresServicesForRefund || selectedRefundServices.length > 0);
                   const refundLabel = refundStateKey ? REFUND_LABELS[refundStateKey] : null;
+                  const refundAmountValue = refundAmountByBookingId[item.entry.id] ?? "";
                   const totalLabel =
                     payload && item.total !== null
                       ? formatPrice(item.total, item.totalCurrency, intlLocale)
@@ -606,21 +773,88 @@ export default function AdminBookingsClient({
                                   {t.profile.bookings.viewHotel}
                                 </Link>
                               )}
-                              {canCancelAndRefund && (
+                              {(canCancel || canRefund) && (
                                 <div className="admin-action-row">
-                                  <button
-                                    type="button"
-                                    className="admin-danger"
-                                    onClick={() => handleCancelAndRefund(item.entry.id)}
-                                    disabled={isCanceling}
-                                  >
-                                    {isCanceling
-                                      ? t.admin.actions.cancelAndRefundLoading
-                                      : t.admin.actions.cancelAndRefund}
-                                  </button>
-                                  {actionFeedback && (
-                                    <p className={actionFeedback.ok ? "admin-inline-success" : "admin-inline-error"}>
-                                      {actionFeedback.message}
+                                  {canCancel && (
+                                    <button
+                                      type="button"
+                                      className="admin-danger"
+                                      onClick={() => handleCancel(item.entry.id)}
+                                      disabled={isCanceling || isRefunding}
+                                    >
+                                      {isCanceling ? t.admin.actions.cancelLoading : t.admin.actions.cancel}
+                                    </button>
+                                  )}
+                                  {canRefund && (
+                                    <div className="admin-refund-action">
+                                      {refundServiceOptions.length > 0 && (
+                                        <div className="admin-refund-services">
+                                          <span>{t.admin.actions.refundServicesLabel}</span>
+                                          <div className="admin-refund-service-list">
+                                            {refundServiceOptions.map((service) => {
+                                              const checked = selectedRefundServices.includes(service.key);
+                                              return (
+                                                <label key={service.key} className="admin-refund-service-item">
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={checked}
+                                                    onChange={() =>
+                                                      handleToggleRefundService(
+                                                        item.entry.id,
+                                                        service.key,
+                                                        refundServiceOptions
+                                                      )
+                                                    }
+                                                    disabled={isCanceling || isRefunding || refundBlocked}
+                                                  />
+                                                  <span>
+                                                    {resolveServiceLabel(service.key)} ({formatPrice(
+                                                      service.amount,
+                                                      service.currency,
+                                                      intlLocale
+                                                    )})
+                                                  </span>
+                                                </label>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+                                      <label className="admin-refund-input">
+                                        <span>{t.admin.actions.refundAmountLabel}</span>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          inputMode="decimal"
+                                          placeholder={t.admin.actions.refundAmountPlaceholder}
+                                          value={refundAmountValue}
+                                          onChange={(event) =>
+                                            setRefundAmountByBookingId((prev) => ({
+                                              ...prev,
+                                              [item.entry.id]: event.target.value,
+                                            }))
+                                          }
+                                          disabled={isCanceling || isRefunding || !canRequestRefund}
+                                        />
+                                      </label>
+                                      <button
+                                        type="button"
+                                        className="admin-secondary"
+                                        onClick={() => handleRefund(item.entry.id, item.statusKey)}
+                                        disabled={isCanceling || isRefunding || !canRequestRefund}
+                                      >
+                                        {isRefunding ? t.admin.actions.refundLoading : t.admin.actions.refund}
+                                      </button>
+                                      <p className="admin-hint">{t.admin.actions.refundAmountHint}</p>
+                                      {requiresServicesForRefund && selectedRefundServices.length === 0 && !refundBlocked && (
+                                        <p className="admin-hint">{t.admin.actions.partialRefundRequiresServices}</p>
+                                      )}
+                                    </div>
+                                  )}
+                                  {actionFeedbackEntry && (
+                                    <p className={actionFeedbackEntry.ok ? "admin-inline-success" : "admin-inline-error"}>
+                                      {actionFeedbackEntry.message}
                                     </p>
                                   )}
                                 </div>

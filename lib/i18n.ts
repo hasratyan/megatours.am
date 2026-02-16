@@ -802,6 +802,22 @@ export type Translation = {
     };
     actions: {
       details: string;
+      cancel: string;
+      cancelLoading: string;
+      cancelSuccess: string;
+      cancelFailed: string;
+      confirmCancel: string;
+      refund: string;
+      refundLoading: string;
+      refundSuccess: string;
+      refundFailed: string;
+      confirmRefund: string;
+      refundAmountLabel: string;
+      refundAmountPlaceholder: string;
+      refundAmountHint: string;
+      refundAmountInvalid: string;
+      refundServicesLabel: string;
+      partialRefundRequiresServices: string;
       cancelAndRefund: string;
       cancelAndRefundLoading: string;
       cancelAndRefundSuccess: string;
@@ -2202,6 +2218,22 @@ const translations: Record<Locale, Translation> = {
     },
     actions: {
       details: "Մանրամասներ",
+      cancel: "Չեղարկել",
+      cancelLoading: "Չեղարկվում է...",
+      cancelSuccess: "Ամրագրումը չեղարկվեց, վճարման չեղարկման հարցումը ուղարկվեց։",
+      cancelFailed: "Չհաջողվեց կատարել չեղարկման գործողությունը։",
+      confirmCancel: "Չեղարկե՞լ ամրագրումը և փորձել վճարումը չեղարկել քարտային համակարգում։",
+      refund: "Վերադարձ",
+      refundLoading: "Վերադարձը մշակվում է...",
+      refundSuccess: "Վերադարձի հարցումը հաջողությամբ ուղարկվեց։",
+      refundFailed: "Չհաջողվեց կատարել վերադարձը։",
+      confirmRefund: "Ուղարկե՞լ վերադարձի հարցումը նշված գումարով (դատարկ թողնելու դեպքում՝ ավտոմատ հաշվարկված գումարը)։",
+      refundAmountLabel: "Վերադարձի գումար",
+      refundAmountPlaceholder: "Օր. 12000",
+      refundAmountHint: "Դատարկ թողնելու դեպքում կկիրառվի ավտոմատ հաշվարկված գումարը (ընտրված ծառայությունները կամ ամբողջ թույլատրելի գումարը՝ առանց ապահովագրության)։",
+      refundAmountInvalid: "Մուտքագրեք վերադարձի ճիշտ գումար։",
+      refundServicesLabel: "Լրացուցիչ ծառայություններ (մասնակի վերադարձ)",
+      partialRefundRequiresServices: "Մասնակի վերադարձի համար ընտրեք առնվազն մեկ ծառայություն։",
       cancelAndRefund: "Չեղարկել և վերադարձնել",
       cancelAndRefundLoading: "Ընթացքի մեջ է...",
       cancelAndRefundSuccess: "Ամրագրումը չեղարկվեց և վերադարձը ուղարկվեց։",
@@ -3625,6 +3657,22 @@ const translations: Record<Locale, Translation> = {
     },
     actions: {
       details: "Details",
+      cancel: "Cancel",
+      cancelLoading: "Canceling...",
+      cancelSuccess: "Booking canceled and payment cancel request sent successfully.",
+      cancelFailed: "Failed to cancel this booking/payment.",
+      confirmCancel: "Cancel this booking and try payment cancel in VPOS?",
+      refund: "Refund",
+      refundLoading: "Refunding...",
+      refundSuccess: "Refund requested successfully.",
+      refundFailed: "Failed to request refund.",
+      confirmRefund: "Request refund with the entered amount? (Leave amount empty to use the auto-calculated amount.)",
+      refundAmountLabel: "Refund amount",
+      refundAmountPlaceholder: "e.g. 12000",
+      refundAmountHint: "Leave empty to use auto-calculated amount (selected services or full allowed amount excluding insurance).",
+      refundAmountInvalid: "Enter a valid positive refund amount.",
+      refundServicesLabel: "Additional services (partial refund)",
+      partialRefundRequiresServices: "Select at least one service for partial refund.",
       cancelAndRefund: "Cancel & Refund",
       cancelAndRefundLoading: "Processing...",
       cancelAndRefundSuccess: "Booking canceled and refund requested successfully.",
@@ -5051,6 +5099,22 @@ const translations: Record<Locale, Translation> = {
     },
     actions: {
       details: "Детали",
+      cancel: "Отменить",
+      cancelLoading: "Отмена...",
+      cancelSuccess: "Бронирование отменено, запрос на отмену платежа отправлен.",
+      cancelFailed: "Не удалось выполнить отмену бронирования/платежа.",
+      confirmCancel: "Отменить бронирование и попробовать отмену платежа в VPOS?",
+      refund: "Возврат",
+      refundLoading: "Возврат...",
+      refundSuccess: "Запрос на возврат успешно отправлен.",
+      refundFailed: "Не удалось отправить запрос на возврат.",
+      confirmRefund: "Отправить запрос на возврат с указанной суммой? (Если поле пустое, будет использована автоматически рассчитанная сумма.)",
+      refundAmountLabel: "Сумма возврата",
+      refundAmountPlaceholder: "напр. 12000",
+      refundAmountHint: "Если поле пустое, будет использована автоматически рассчитанная сумма (выбранные услуги или весь допустимый возврат без страховки).",
+      refundAmountInvalid: "Введите корректную положительную сумму возврата.",
+      refundServicesLabel: "Дополнительные услуги (частичный возврат)",
+      partialRefundRequiresServices: "Для частичного возврата выберите хотя бы одну услугу.",
       cancelAndRefund: "Отменить и вернуть",
       cancelAndRefundLoading: "Обработка...",
       cancelAndRefundSuccess: "Бронирование отменено, запрос на возврат отправлен.",
