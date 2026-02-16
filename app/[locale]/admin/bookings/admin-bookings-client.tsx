@@ -8,6 +8,7 @@ import { resolveBookingStatusKey, type BookingStatusKey } from "@/lib/booking-st
 import { postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
+import type { AppliedBookingCoupon } from "@/lib/user-data";
 
 type AdminBookingRecord = {
   id: string;
@@ -18,6 +19,7 @@ type AdminBookingRecord = {
   source: string | null;
   payload: AoryxBookingPayload | null;
   booking: AoryxBookingResult | null;
+  coupon: AppliedBookingCoupon | null;
   refundState?: string | null;
   displayTotal?: number | null;
   displayCurrency?: string | null;
@@ -184,6 +186,7 @@ export default function AdminBookingsClient({
         typeof entry.displayProfit === "number" ? entry.displayProfit : null;
       const profitCurrency = entry.displayProfitCurrency ?? totalCurrency;
       const guestsCount = payload ? countGuestsFromRooms(payload.rooms) : 0;
+      const coupon = entry.coupon ?? null;
       const statusKey = resolveBookingStatusKey(booking?.status ?? null);
       const createdTimestamp = entry.createdAt ? parseDate(entry.createdAt)?.getTime() ?? 0 : 0;
       const searchParts = [
@@ -195,6 +198,7 @@ export default function AdminBookingsClient({
         booking?.hotelConfirmationNumber,
         booking?.supplierConfirmationNumber,
         booking?.adsConfirmationNumber,
+        coupon?.code,
         entry.userEmail,
         entry.userName,
         entry.userIdString,
@@ -215,6 +219,7 @@ export default function AdminBookingsClient({
         profitCurrency,
         guestsCount,
         statusKey,
+        coupon,
         createdTimestamp,
         searchParts,
       };
@@ -484,6 +489,9 @@ export default function AdminBookingsClient({
                     booking?.supplierConfirmationNumber ??
                     booking?.adsConfirmationNumber ??
                     "—";
+                  const couponLabel = item.coupon
+                    ? `${item.coupon.code} (${item.coupon.discountPercent}%)`
+                    : null;
                   const dateRange = payload
                     ? formatDateRangeSafe(payload.checkInDate, payload.checkOutDate)
                     : null;
@@ -497,7 +505,12 @@ export default function AdminBookingsClient({
                   return (
                     <Fragment key={item.entry.id}>
                       <tr>
-                        <td>{bookingId}</td>
+                        <td>
+                          <div className="admin-cell-stack">
+                            <span>{bookingId}</span>
+                            {couponLabel ? <small>{couponLabel}</small> : null}
+                          </div>
+                        </td>
                         <td>
                           <div className="admin-cell-stack">
                             <span>{hotelLabel}</span>
@@ -572,6 +585,10 @@ export default function AdminBookingsClient({
                                 <div>
                                   <span>{t.admin.columns.profit}</span>
                                   <strong>{profitLabel}</strong>
+                                </div>
+                                <div>
+                                  <span>{t.packageBuilder.checkout.couponTitle}</span>
+                                  <strong>{couponLabel ?? "—"}</strong>
                                 </div>
                               </div>
                               <div className="admin-json-grid">

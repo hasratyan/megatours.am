@@ -9,6 +9,7 @@ import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { resolveBookingDisplayTotal } from "@/lib/booking-total";
 import { getAmdRates, getAoryxHotelPlatformFee } from "@/lib/pricing";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
+import type { AppliedBookingCoupon } from "@/lib/user-data";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ type BookingRecord = {
   source?: string | null;
   payload?: AoryxBookingPayload | null;
   booking?: AoryxBookingResult | null;
+  coupon?: AppliedBookingCoupon | null;
   cancellation?: {
     refund?: {
       status?: string | null;
@@ -39,6 +41,7 @@ type AdminBookingRecord = {
   source: string | null;
   payload: AoryxBookingPayload | null;
   booking: AoryxBookingResult | null;
+  coupon: AppliedBookingCoupon | null;
   refundState?: string | null;
   displayTotal?: number | null;
   displayCurrency?: string | null;
@@ -80,6 +83,28 @@ const sanitizeBookingResult = (booking?: AoryxBookingResult | null): AoryxBookin
       ...room,
       rateKey: null,
     })),
+  };
+};
+
+const sanitizeAppliedCoupon = (coupon?: AppliedBookingCoupon | null): AppliedBookingCoupon | null => {
+  if (!coupon) return null;
+  const code = typeof coupon.code === "string" ? coupon.code.trim().toUpperCase() : "";
+  const discountPercent =
+    typeof coupon.discountPercent === "number" && Number.isFinite(coupon.discountPercent)
+      ? Math.min(100, Math.max(0, coupon.discountPercent))
+      : null;
+  if (!code || discountPercent === null || discountPercent <= 0) return null;
+  return {
+    code,
+    discountPercent,
+    discountAmount:
+      typeof coupon.discountAmount === "number" && Number.isFinite(coupon.discountAmount)
+        ? coupon.discountAmount
+        : null,
+    discountedAmount:
+      typeof coupon.discountedAmount === "number" && Number.isFinite(coupon.discountedAmount)
+        ? coupon.discountedAmount
+        : null,
   };
 };
 
@@ -186,6 +211,7 @@ export default async function AdminBookingsPage({ params }: PageProps) {
       source: entry.source ?? null,
       payload: sanitizeBookingPayload(entry.payload ?? null),
       booking: sanitizeBookingResult(entry.booking ?? null),
+      coupon: sanitizeAppliedCoupon(entry.coupon ?? null),
       refundState: entry.cancellation?.refund?.status ?? null,
     };
   });
