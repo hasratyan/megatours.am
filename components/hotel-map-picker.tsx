@@ -27,20 +27,51 @@ export type HotelMapPickerProps = {
   hotels: MapLocationOption[];
   selectedHotel: MapLocationOption | null;
   onSelectHotel: (hotel: MapLocationOption) => void;
+  isOpen?: boolean;
 };
 
-// Marker colors
-const MARKER_COLOR_DEFAULT = "#1e40af";
-const MARKER_COLOR_HOVER = "#34d399";
-const MARKER_COLOR_SELECTED = "#10b981";
 const MARKER_SIZE_DEFAULT = 28;
 const MARKER_SIZE_ACTIVE = 36;
 
-// Custom marker icons - uses CSS classes for state to avoid recreating icons
-const createMarkerIcon = (isSelected: boolean) => {
-  const color = isSelected ? MARKER_COLOR_SELECTED : MARKER_COLOR_DEFAULT;
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const escapeAttribute = (value: string): string =>
+  escapeHtml(value).replace(/`/g, "&#96;");
+
+const normalizeImageUrl = (value?: string | null): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("/")) return trimmed;
+  return null;
+};
+
+const normalizePriceLabel = (value?: string | null): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+// Custom marker icons - use a price label when available, otherwise use pin
+const createMarkerIcon = (isSelected: boolean, priceLabel?: string | null) => {
+  if (priceLabel) {
+    return L.divIcon({
+      className: `hotel-price-marker-wrapper${isSelected ? " highlighted" : ""}`,
+      html: `<div class="hotel-price-marker">${escapeHtml(priceLabel)}</div>`,
+      iconSize: [92, 46],
+      iconAnchor: [46, 46],
+      popupAnchor: [0, -42],
+    });
+  }
+
   const size = isSelected ? MARKER_SIZE_ACTIVE : MARKER_SIZE_DEFAULT;
-  
+
   return L.divIcon({
     className: `hotel-marker ${isSelected ? "hotel-marker--selected" : ""}`,
     html: `
@@ -70,7 +101,12 @@ const generateStars = (rating: number) => {
   return starsHtml;
 };
 
-export default function HotelMapPicker({ hotels, selectedHotel, onSelectHotel }: HotelMapPickerProps) {
+export default function HotelMapPicker({
+  hotels,
+  selectedHotel,
+  onSelectHotel,
+  isOpen = true,
+}: HotelMapPickerProps) {
   const { locale, t } = useLanguage();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -85,17 +121,60 @@ export default function HotelMapPicker({ hotels, selectedHotel, onSelectHotel }:
     const template = forms[category] ?? forms.other;
     return template.replace("{count}", count.toString());
   }, [pluralRules]);
-  const defaultMarkerIcon = useMemo(() => createMarkerIcon(false), []);
-  const selectedMarkerIcon = useMemo(() => createMarkerIcon(true), []);
   const selectedHotelId = selectedHotel?.value ?? null;
   selectedHotelIdRef.current = selectedHotelId;
+  const mapUiCopy = useMemo(() => {
+    if (locale === "hy") {
+      return {
+        fromLabel: "Գինը",
+        selectHotelLabel: "Ընտրել հյուրանոցը",
+        selectHint: "Պահեք մկնիկը նշիչի վրա, ապա ընտրեք հյուրանոցը",
+      };
+    }
+    if (locale === "ru") {
+      return {
+        fromLabel: "Цена",
+        selectHotelLabel: "Выбрать отель",
+        selectHint: "Наведите на маркер, затем выберите отель",
+      };
+    }
+    return {
+      fromLabel: "From",
+      selectHotelLabel: "Select hotel",
+      selectHint: "Hover a marker, then select a hotel",
+    };
+  }, [locale]);
+  const getHotelPriceLabel = useCallback(
+    (hotel: MapLocationOption | null | undefined) => normalizePriceLabel(hotel?.price),
+    []
+  );
+  const scheduleMapResizeSync = useCallback(() => {
+    if (typeof window === "undefined") return () => {};
 
-  // Filter hotels with valid coordinates and a non-zero rating
+    const run = () => {
+      mapInstanceRef.current?.invalidateSize(false);
+    };
+
+    run();
+    const rafId = window.requestAnimationFrame(run);
+    const shortTimeoutId = window.setTimeout(run, 120);
+    const longTimeoutId = window.setTimeout(run, 420);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.clearTimeout(shortTimeoutId);
+      window.clearTimeout(longTimeoutId);
+    };
+  }, []);
+
+  // Filter hotels with valid coordinates and ignore explicit zero ratings
   const validHotels = useMemo(() => {
     return hotels.filter((hotel) => {
       const lat = hotel.lat;
       const lng = hotel.lng;
       const rating = hotel.rating;
+      const hasZeroRating =
+        typeof rating === "number" && Number.isFinite(rating) && rating <= 0;
       return (
         typeof lat === "number" &&
         typeof lng === "number" &&
@@ -103,8 +182,7 @@ export default function HotelMapPicker({ hotels, selectedHotel, onSelectHotel }:
         lng !== 0 &&
         !isNaN(lat) &&
         !isNaN(lng) &&
-        typeof rating === "number" &&
-        rating > 0
+        !hasZeroRating
       );
     });
   }, [hotels]);
@@ -177,8 +255,10 @@ export default function HotelMapPicker({ hotels, selectedHotel, onSelectHotel }:
     markerClusterRef.current = markerCluster;
 
     mapInstanceRef.current = map;
+    const cancelScheduledResize = scheduleMapResizeSync();
 
     return () => {
+      cancelScheduledResize();
       markerCluster.clearLayers();
       markerCluster.remove();
       markerClusterRef.current = null;
@@ -188,6 +268,26 @@ export default function HotelMapPicker({ hotels, selectedHotel, onSelectHotel }:
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [validHotels.length > 0]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    return scheduleMapResizeSync();
+  }, [isOpen, scheduleMapResizeSync, validHotels.length]);
+
+  useEffect(() => {
+    const container = mapRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      if (entry.contentRect.width === 0 || entry.contentRect.height === 0) return;
+      mapInstanceRef.current?.invalidateSize(false);
+    });
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   // Add markers (only when hotels change)
   useEffect(() => {
@@ -203,31 +303,43 @@ export default function HotelMapPicker({ hotels, selectedHotel, onSelectHotel }:
     const newMarkers: L.Marker[] = [];
     validHotels.forEach((hotel) => {
       const isSelected = selectedHotelIdRef.current === hotel.value;
-      
+      const priceLabel = getHotelPriceLabel(hotel);
+      const safeHotelLabel = escapeHtml(hotel.label);
+      const rating = typeof hotel.rating === "number" && Number.isFinite(hotel.rating) ? hotel.rating : 0;
+      const resolvedImageUrl = normalizeImageUrl(hotel.imageUrl);
+
       const marker = L.marker([hotel.lat!, hotel.lng!], {
-        icon: isSelected ? selectedMarkerIcon : defaultMarkerIcon,
+        icon: createMarkerIcon(isSelected, priceLabel),
         zIndexOffset: isSelected ? 1000 : 0,
       });
 
-      // Create lightweight tooltip for hover (no image, just text)
-      const rating = hotel.rating ?? 0;
-      const tooltipContent = `
-        <div class="hotel-tooltip">
-          <div class="hotel-tooltip__name">${hotel.label}</div>
-          ${rating > 0 ? `<div class="hotel-tooltip__rating">${generateStars(rating)}<span>${rating.toFixed(1)}</span></div>` : ""}
+      const popupContent = `
+        <div class="hotel-popup${resolvedImageUrl ? " hotel-popup--has-image" : ""}">
+          ${
+            resolvedImageUrl
+              ? `<div class="hotel-popup__image"><img src="${escapeAttribute(resolvedImageUrl)}" alt="${escapeAttribute(hotel.label)}" loading="lazy" referrerpolicy="no-referrer" /></div>`
+              : ""
+          }
+          <div class="hotel-popup__header">
+            <p class="hotel-popup__name">${safeHotelLabel}</p>
+            ${rating > 0 ? `<div class="hotel-popup__rating">${generateStars(rating)}<span class="hotel-popup__rating-text">${rating.toFixed(1)}</span></div>` : ""}
+          </div>
+          ${priceLabel ? `<div class="hotel-popup__price"><span>${escapeHtml(mapUiCopy.fromLabel)}</span><strong>${escapeHtml(priceLabel)}</strong></div>` : ""}
+          <button type="button" class="hotel-popup__select" data-hotel-id="${escapeAttribute(hotel.value)}">
+            ${escapeHtml(mapUiCopy.selectHotelLabel)}
+          </button>
         </div>
       `;
 
-      marker.bindTooltip(tooltipContent, {
-        className: "hotel-marker-tooltip",
-        direction: "top",
-        offset: [0, -20],
-        opacity: 1,
+      marker.bindPopup(popupContent, {
+        className: "hotel-marker-popup",
+        maxWidth: 260,
+        minWidth: 220,
+        closeButton: true,
+        autoPan: true,
       });
-
-      // Click handler - select the hotel
-      marker.on("click", () => {
-        handleHotelSelect(hotel.value);
+      marker.on("mouseover", () => {
+        marker.openPopup();
       });
 
       newMarkers.push(marker);
@@ -253,7 +365,7 @@ export default function HotelMapPicker({ hotels, selectedHotel, onSelectHotel }:
     return () => {
       map.getContainer().removeEventListener("click", handlePopupClick);
     };
-  }, [validHotels, handleHotelSelect, defaultMarkerIcon, selectedMarkerIcon]);
+  }, [validHotels, handleHotelSelect, getHotelPriceLabel, mapUiCopy.fromLabel, mapUiCopy.selectHotelLabel]);
 
   // Update only the changed markers when selection changes (lightweight update)
   useEffect(() => {
@@ -262,22 +374,24 @@ export default function HotelMapPicker({ hotels, selectedHotel, onSelectHotel }:
 
     if (previousSelected && previousSelected !== currentSelected) {
       const prevMarker = markersRef.current.get(previousSelected);
+      const previousHotel = hotelsRef.current.get(previousSelected);
       if (prevMarker) {
-        prevMarker.setIcon(defaultMarkerIcon);
+        prevMarker.setIcon(createMarkerIcon(false, getHotelPriceLabel(previousHotel)));
         prevMarker.setZIndexOffset(0);
       }
     }
 
     if (currentSelected) {
       const currentMarker = markersRef.current.get(currentSelected);
+      const currentHotel = hotelsRef.current.get(currentSelected);
       if (currentMarker) {
-        currentMarker.setIcon(selectedMarkerIcon);
+        currentMarker.setIcon(createMarkerIcon(true, getHotelPriceLabel(currentHotel)));
         currentMarker.setZIndexOffset(1000);
       }
     }
 
     previousSelectedRef.current = currentSelected;
-  }, [selectedHotelId, defaultMarkerIcon, selectedMarkerIcon]);
+  }, [selectedHotelId, getHotelPriceLabel]);
 
   if (validHotels.length === 0) {
     return (
@@ -293,7 +407,7 @@ export default function HotelMapPicker({ hotels, selectedHotel, onSelectHotel }:
       <div className="hotel-map-picker__info">
         <span className="material-symbols-rounded">touch_app</span>
         <span>
-          {formatPlural(validHotels.length, t.search.mapHotelsCount)} — {t.search.mapSelectHint}
+          {formatPlural(validHotels.length, t.search.mapHotelsCount)} — {mapUiCopy.selectHint}
         </span>
       </div>
       <div className="hotel-map-picker__map" ref={mapRef} />

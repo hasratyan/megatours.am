@@ -48,12 +48,21 @@ type LocationOption = {
   lng?: number;
   rating?: number;
   imageUrl?: string;
+  price?: string;
 };
 
 type RoomConfig = {
   adults: number;
   children: number;
   childAges: number[];
+};
+
+type MapHotelRateMeta = {
+  amount: number | null;
+  currency?: string | null;
+  imageUrl?: string | null;
+  rating?: number | null;
+  name?: string | null;
 };
 
 type ReferrerPreset = {
@@ -135,6 +144,45 @@ const formatDateDisplay = (date: Date, locale: string): string => {
   // Use consistent format: DD.MM.YYYY for all locales to avoid hydration mismatch
   return `${day}.${month}.${year}`;
 };
+
+const parseFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+
+const resolveCurrencyCode = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toUpperCase();
+  return normalized.length > 0 ? normalized : null;
+};
+
+const formatMapRate = (amount: number, currency: string, locale: string): string => {
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: amount < 100 ? 2 : 0,
+    }).format(amount);
+  } catch {
+    const rounded = amount >= 100 ? Math.round(amount) : Math.round(amount * 100) / 100;
+    return `${currency} ${rounded.toLocaleString()}`;
+  }
+};
+
+const normalizeHotelCode = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (!/^\d+$/.test(trimmed)) return trimmed;
+  const normalized = trimmed.replace(/^0+(?=\d)/, "");
+  return normalized.length > 0 ? normalized : "0";
+};
+
+const isZeroOrLessRating = (rating: number | null | undefined): boolean =>
+  typeof rating === "number" && Number.isFinite(rating) && rating <= 0;
 
 const clampNumber = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -326,6 +374,7 @@ type Props = {
   hideLocationFields?: boolean;
   presetDestination?: { id: string; label?: string; rawId?: string };
   presetHotel?: { id: string; label?: string };
+  mapHotelRates?: Record<string, MapHotelRateMeta>;
   initialDateRange?: { startDate: Date; endDate: Date };
   initialRooms?: RoomConfig[];
   showRoomCount?: boolean;
@@ -346,6 +395,7 @@ export default function SearchForm({
   hideLocationFields = false,
   presetDestination,
   presetHotel,
+  mapHotelRates,
   initialDateRange,
   initialRooms,
   showRoomCount = false,
@@ -389,9 +439,7 @@ export default function SearchForm({
   // Destinations state
   const [destinations, setDestinations] = useState<LocationOption[]>([]);
   const [destinationsLoading, setDestinationsLoading] = useState(!hideLocationFields);
-  const [destinationsInitialized, setDestinationsInitialized] = useState(
-    !!presetDestinationOption,
-  );
+  const [destinationsInitialized, setDestinationsInitialized] = useState(false);
 
   // State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -485,24 +533,76 @@ export default function SearchForm({
     }
   }, []);
 
-  const persistSelectedLocation = useCallback(() => {
+  const persistSelectedLocation = useCallback((location: LocationOption | null) => {
     if (typeof window === "undefined") return;
-    if (!selectedLocation) return;
-    const label = selectedLocation.label?.trim();
-    if (!label || label === selectedLocation.value) return;
+    if (!location) return;
+    const label = location.label?.trim();
+    if (!label || label === location.value) return;
     const payload = {
-      type: selectedLocation.type,
-      value: selectedLocation.value,
-      rawId: selectedLocation.rawId,
+      type: location.type,
+      value: location.value,
+      rawId: location.rawId,
       label,
-      parentDestinationId: selectedLocation.parentDestinationId,
+      parentDestinationId: location.parentDestinationId,
     };
     try {
       sessionStorage.setItem("megatours:lastSearchLocation", JSON.stringify(payload));
     } catch (error) {
       console.warn("[SearchForm] Failed to persist last location", error);
     }
-  }, [selectedLocation]);
+  }, []);
+
+  const mapHotelRatesByCode = useMemo(() => {
+    const index = new Map<string, MapHotelRateMeta>();
+    if (!mapHotelRates) return index;
+
+    Object.entries(mapHotelRates).forEach(([rawKey, meta]) => {
+      const normalized = normalizeHotelCode(rawKey);
+      if (!normalized) return;
+      if (!index.has(normalized)) {
+        index.set(normalized, meta);
+      }
+    });
+
+    return index;
+  }, [mapHotelRates]);
+
+  const mapHotelRatesByName = useMemo(() => {
+    const index = new Map<string, MapHotelRateMeta>();
+    if (!mapHotelRates) return index;
+
+    Object.values(mapHotelRates).forEach((meta) => {
+      if (typeof meta.name !== "string") return;
+      const normalizedName = normalizeSearchText(meta.name);
+      if (!normalizedName) return;
+      if (!index.has(normalizedName)) {
+        index.set(normalizedName, meta);
+      }
+    });
+
+    return index;
+  }, [mapHotelRates]);
+
+  const resolveMapRateMeta = useCallback(
+    (hotelCode: string, hotelName?: string | null): MapHotelRateMeta | null => {
+      const normalizedCode = normalizeHotelCode(hotelCode);
+      if (normalizedCode) {
+        const matchByCode = mapHotelRatesByCode.get(normalizedCode);
+        if (matchByCode) return matchByCode;
+      }
+
+      if (typeof hotelName === "string" && hotelName.trim().length > 0) {
+        const normalizedName = normalizeSearchText(hotelName);
+        if (normalizedName) {
+          const matchByName = mapHotelRatesByName.get(normalizedName);
+          if (matchByName) return matchByName;
+        }
+      }
+
+      return null;
+    },
+    [mapHotelRatesByCode, mapHotelRatesByName]
+  );
 
   const mapHotelsToOptions = useCallback(
     (hotelsData: HotelInfo[], fallbackParentDestinationId: string) =>
@@ -510,21 +610,95 @@ export default function SearchForm({
         .map<LocationOption | null>((hotel) => {
           const value = hotel.systemId ?? "";
           if (!value) return null;
+          const mapRate = resolveMapRateMeta(value, hotel.name);
+          const resolvedAmount =
+            parseFiniteNumber(mapRate?.amount) ??
+            parseFiniteNumber(hotel.minPrice);
+          const resolvedCurrency =
+            resolveCurrencyCode(mapRate?.currency) ??
+            resolveCurrencyCode(hotel.currency) ??
+            "USD";
+          const price =
+            resolvedAmount !== null
+              ? formatMapRate(resolvedAmount, resolvedCurrency, intlLocale)
+              : undefined;
+          const resolvedImageUrl =
+            (typeof mapRate?.imageUrl === "string" && mapRate.imageUrl.trim().length > 0
+              ? mapRate.imageUrl.trim()
+              : null) ??
+            (typeof hotel.imageUrl === "string" && hotel.imageUrl.trim().length > 0
+              ? hotel.imageUrl.trim()
+              : null);
+          const resolvedRating =
+            parseFiniteNumber(mapRate?.rating) ??
+            parseFiniteNumber(hotel.rating);
+          if (isZeroOrLessRating(resolvedRating)) return null;
           return {
             value,
             label: hotel.name ?? hotel.systemId ?? copy.unknownHotel,
             lat: typeof hotel.latitude === "number" ? hotel.latitude : undefined,
             lng: typeof hotel.longitude === "number" ? hotel.longitude : undefined,
-            rating: typeof hotel.rating === "number" ? hotel.rating : undefined,
-            imageUrl: hotel.imageUrl ?? undefined,
+            rating: resolvedRating ?? undefined,
+            imageUrl: resolvedImageUrl ?? undefined,
+            price,
             type: "hotel",
             parentDestinationId: hotel.destinationId ?? fallbackParentDestinationId,
           };
         })
         .filter((option): option is LocationOption => Boolean(option))
         .sort((a, b) => a.label.localeCompare(b.label)),
-    [copy.unknownHotel]
+    [copy.unknownHotel, intlLocale, resolveMapRateMeta]
   );
+
+  useEffect(() => {
+    if (!mapHotelRates) return;
+    setHotels((current) => {
+      let hasChanges = false;
+      const next: LocationOption[] = [];
+
+      current.forEach((hotel) => {
+        const mapRate = resolveMapRateMeta(hotel.value, hotel.label);
+        if (!mapRate) {
+          next.push(hotel);
+          return;
+        }
+
+        const resolvedAmount = parseFiniteNumber(mapRate.amount);
+        const resolvedCurrency = resolveCurrencyCode(mapRate.currency) ?? "USD";
+        const nextPrice =
+          resolvedAmount !== null
+            ? formatMapRate(resolvedAmount, resolvedCurrency, intlLocale)
+            : hotel.price;
+        const nextImage =
+          typeof mapRate.imageUrl === "string" && mapRate.imageUrl.trim().length > 0
+            ? mapRate.imageUrl.trim()
+            : hotel.imageUrl;
+        const nextRating = parseFiniteNumber(mapRate.rating) ?? hotel.rating;
+        if (isZeroOrLessRating(nextRating)) {
+          hasChanges = true;
+          return;
+        }
+
+        if (
+          nextPrice === hotel.price &&
+          nextImage === hotel.imageUrl &&
+          nextRating === hotel.rating
+        ) {
+          next.push(hotel);
+          return;
+        }
+        hasChanges = true;
+
+        next.push({
+          ...hotel,
+          price: nextPrice,
+          imageUrl: nextImage,
+          rating: nextRating,
+        });
+      });
+      return hasChanges ? next : current;
+    });
+  }, [intlLocale, mapHotelRates, resolveMapRateMeta]);
 
   const fetchHotelsForDestination = useCallback(
     async (destination: LocationOption) => {
@@ -570,6 +744,7 @@ export default function SearchForm({
               lng: existing.lng ?? hotel.lng,
               rating: existing.rating ?? hotel.rating,
               imageUrl: existing.imageUrl ?? hotel.imageUrl,
+              price: existing.price ?? hotel.price,
             });
           });
         });
@@ -795,13 +970,11 @@ export default function SearchForm({
     []
   );
 
-  // Submit handler
-  const handleSubmit = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
+  const executeSearchForLocation = useCallback(
+    async (location: LocationOption | null) => {
       if (isFormDisabled) return;
 
-      if (!selectedLocation) {
+      if (!location) {
         setSearchError(copy.errors.missingLocation);
         return;
       }
@@ -812,14 +985,14 @@ export default function SearchForm({
       }
 
       setSearchError(null);
-      persistSelectedLocation();
+      persistSelectedLocation(location);
 
       const searchPayload: AoryxSearchParams = {
         destinationCode:
-          selectedLocation.type === "destination"
-            ? selectedLocation.rawId ?? selectedLocation.value
-            : selectedLocation.parentDestinationId ?? undefined,
-        hotelCode: selectedLocation.type === "hotel" ? selectedLocation.value : undefined,
+          location.type === "destination"
+            ? location.rawId ?? location.value
+            : location.parentDestinationId ?? undefined,
+        hotelCode: location.type === "hotel" ? location.value : undefined,
         countryCode: "AE",
         nationality: "AM",
         currency: "USD",
@@ -861,18 +1034,27 @@ export default function SearchForm({
       }
     },
     [
-      selectedLocation,
-      dateRange.startDate,
-      dateRange.endDate,
-      rooms,
-      router,
-      onSubmitSearch,
-      appLocale,
       isFormDisabled,
-      copy.errors.submit,
       copy.errors.missingLocation,
       copy.errors.missingDates,
+      copy.errors.submit,
+      dateRange.startDate,
+      dateRange.endDate,
+      persistSelectedLocation,
+      rooms,
+      onSubmitSearch,
+      appLocale,
+      router,
     ]
+  );
+
+  // Submit handler
+  const handleSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      await executeSearchForLocation(selectedLocation);
+    },
+    [executeSearchForLocation, selectedLocation]
   );
 
   useEffect(() => {
@@ -929,7 +1111,9 @@ export default function SearchForm({
     setSelectedLocation(hotel);
     // Close the popover after selection
     mapPopoverRef.current?.hidePopover?.();
-  }, []);
+    setIsMapOpen(false);
+    void executeSearchForLocation(hotel);
+  }, [executeSearchForLocation]);
 
   useEffect(() => {
     onRoomCountChange?.(rooms.length);
@@ -1009,6 +1193,7 @@ export default function SearchForm({
                 return;
               }
               setSelectedLocation(option);
+              void executeSearchForLocation(option);
             }}
             placeholder={destinationsLoading ? copy.loadingDestinations : copy.wherePlaceholder}
             styles={selectStyles}
@@ -1096,6 +1281,7 @@ export default function SearchForm({
               hotels={hotels}
               selectedHotel={selectedLocation?.type === "hotel" ? selectedLocation : null}
               onSelectHotel={handleMapHotelSelect}
+              isOpen={isMapOpen}
             />
           ) : (
             <MapPickerLoading />

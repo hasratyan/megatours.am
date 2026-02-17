@@ -297,6 +297,8 @@ export interface HotelInfo {
   imageUrl: string | null;
   latitude: number | null;
   longitude: number | null;
+  minPrice?: number | null;
+  currency?: string | null;
 }
 
 export interface AoryxHotelInfoResult {

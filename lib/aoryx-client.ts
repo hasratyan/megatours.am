@@ -1137,6 +1137,14 @@ export async function hotelsInfoByDestinationId(destinationId: string): Promise<
       imageUrl: toStringValue(item.ImageUrl),
       latitude: toNumber(geoCode?.Lat),
       longitude: toNumber(geoCode?.Lon),
+      minPrice:
+        toNumber(item.MinPrice) ??
+        toNumber(item.SupplierMinPrice) ??
+        toNumber(item.Price),
+      currency:
+        toStringValue(item.CurrencyCode) ??
+        toStringValue(item.SupplierCurrency) ??
+        toStringValue(item.Currency),
     };
   });
 }

@@ -373,6 +373,34 @@ export default function ResultsClient({
       };
     });
   }, [amdRates, result?.currency, result?.hotels]);
+  const mapHotelRates = useMemo(() => {
+    const entries: Record<
+      string,
+      {
+        amount: number | null;
+        currency: string | null;
+        imageUrl?: string | null;
+        rating?: number | null;
+        name?: string | null;
+      }
+    > = {};
+
+    hotelsWithPricing.forEach((hotel) => {
+      if (!hotel.code) return;
+      entries[hotel.code] = {
+        amount:
+          typeof hotel.displayPrice === "number" && Number.isFinite(hotel.displayPrice)
+            ? hotel.displayPrice
+            : null,
+        currency: hotel.displayCurrency ?? hotel.currency ?? result?.currency ?? null,
+        imageUrl: hotel.imageUrl ?? null,
+        rating: hotel.rating ?? null,
+        name: hotel.name ?? null,
+      };
+    });
+
+    return entries;
+  }, [hotelsWithPricing, result?.currency]);
   const priceBounds = useMemo(() => {
     const prices = hotelsWithPricing
       .map((hotel) => hotel.displayPrice)
@@ -625,6 +653,7 @@ export default function ResultsClient({
               copy={t.search}
               presetDestination={presetDestination}
               presetHotel={presetHotel}
+              mapHotelRates={mapHotelRates}
               initialDateRange={initialDateRange}
               initialRooms={initialRooms}
               isSearchPending={isSearching}
