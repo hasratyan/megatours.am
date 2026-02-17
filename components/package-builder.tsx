@@ -237,6 +237,11 @@ export default function PackageBuilder() {
     { id: "excursion", icon: "tour", label: t.packageBuilder.services.excursion },
     { id: "insurance", icon: "shield_with_heart", label: t.packageBuilder.services.insurance },
   ];
+  const previewableServicesWithoutHotel = new Set<PackageBuilderService>([
+    "transfer",
+    "excursion",
+    "insurance",
+  ]);
   const isServiceSelected = (serviceId: PackageBuilderService) =>
     serviceId === "hotel"
       ? builderState.hotel?.selected === true
@@ -540,7 +545,8 @@ export default function PackageBuilder() {
       setDisabledServiceId(service.id);
       return;
     }
-    if (service.id !== "hotel" && !hasHotel) {
+    const canPreviewWithoutHotel = previewableServicesWithoutHotel.has(service.id);
+    if (service.id !== "hotel" && !hasHotel && !canPreviewWithoutHotel) {
       setShowHotelWarning(true);
       setDisabledServiceId(null);
       setIsOpen(true);
@@ -707,7 +713,8 @@ export default function PackageBuilder() {
                     : service.required
                       ? t.packageBuilder.requiredTag
                       : t.packageBuilder.addTag;
-                const isLocked = !hasHotel && service.id !== "hotel";
+                const canPreviewWithoutHotel = previewableServicesWithoutHotel.has(service.id);
+                const isLocked = !hasHotel && service.id !== "hotel" && !canPreviewWithoutHotel;
                 const selectionLabel =
                   service.id === "hotel"
                     ? selectedHotelLabel

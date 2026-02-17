@@ -308,6 +308,18 @@ const getAirportLabelHint = (airportCode: string | null) => {
   return null;
 };
 
+const resolveDestinationNameFromAirportCode = (airportCode: string | null) => {
+  if (airportCode === "AUH") return "Abu Dhabi";
+  if (airportCode === "SHJ") return "Sharjah";
+  if (airportCode === "DXB" || airportCode === "DWC") return "Dubai";
+  return null;
+};
+
+const normalizeDestinationCityName = (value: string | null | undefined) => {
+  if (!value) return "";
+  return value.replace(/\s+hotels?$/i, "").trim().toLowerCase();
+};
+
 const buildTransferAirportOption = (transfer: AoryxTransferRate): TransferAirportOption | null => {
   const origin = transfer.origin ?? null;
   if (!origin) return null;
@@ -396,6 +408,9 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   const [flightMocked, setFlightMocked] = useState(false);
   const [insuranceQuoteLoading, setInsuranceQuoteLoading] = useState(false);
   const [insuranceQuoteError, setInsuranceQuoteError] = useState<string | null>(null);
+  const [selectionWarning, setSelectionWarning] = useState<string | null>(null);
+  const [previewDestinationName, setPreviewDestinationName] = useState<string | null>(null);
+  const [previewDestinationCode, setPreviewDestinationCode] = useState<string | null>(null);
   const [showInsuranceDatePicker, setShowInsuranceDatePicker] = useState(false);
   const transferSyncRef = useRef<{
     selectionId: string;
@@ -404,6 +419,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
     currency: string | null;
     vehicleQuantity: number | null;
   } | null>(null);
+  const selectionWarningPopoverRef = useRef<HTMLDivElement | null>(null);
   const insuranceDatePickerRef = useRef<HTMLDivElement | null>(null);
   const insuranceQuoteKeyRef = useRef<string | null>(null);
   const insuranceQuoteRequestIdRef = useRef(0);
@@ -452,6 +468,8 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   const hotelCode = hotelSelection?.hotelCode ?? null;
   const destinationName = hotelSelection?.destinationName ?? null;
   const destinationCode = hotelSelection?.destinationCode ?? null;
+  const activeDestinationName = destinationName ?? (!hasHotel ? previewDestinationName : null);
+  const activeDestinationCode = destinationCode ?? (!hasHotel ? previewDestinationCode : null);
   const selectedHotelName = hotelSelection?.hotelName?.trim() ?? null;
   const selectedTransferId = builderState.transfer?.selectionId ?? null;
   const selectedFlightId = builderState.flight?.selectionId ?? null;
@@ -460,6 +478,85 @@ export default function PackageServiceClient({ serviceKey }: Props) {
     serviceKey === "hotel"
       ? undefined
       : builderState[serviceKey as Exclude<PackageBuilderService, "hotel">];
+  const hideSelectionWarningPopover = useCallback(() => {
+    const popover = selectionWarningPopoverRef.current;
+    if (!popover || !popover.hidePopover) return;
+    const isOpen = popover.matches?.(":popover-open");
+    if (isOpen) popover.hidePopover();
+  }, []);
+  const showSelectionWarningPopover = useCallback(() => {
+    const popover = selectionWarningPopoverRef.current;
+    if (!popover || !popover.showPopover) return;
+    const isOpen = popover.matches?.(":popover-open");
+    if (!isOpen) popover.showPopover();
+  }, []);
+  const dismissSelectionWarning = useCallback(() => {
+    setSelectionWarning(null);
+    hideSelectionWarningPopover();
+  }, [hideSelectionWarningPopover]);
+  const requestHotelSelection = useCallback(() => {
+    if (hasHotel) return;
+    setSelectionWarning(t.packageBuilder.warningSelectHotel);
+    showSelectionWarningPopover();
+    openPackageBuilder();
+  }, [hasHotel, showSelectionWarningPopover, t.packageBuilder.warningSelectHotel]);
+  useEffect(() => {
+    if (!hasHotel) return;
+    dismissSelectionWarning();
+  }, [dismissSelectionWarning, hasHotel]);
+  useEffect(() => {
+    dismissSelectionWarning();
+  }, [dismissSelectionWarning, serviceKey]);
+  useEffect(() => {
+    if (selectionWarning) return;
+    hideSelectionWarningPopover();
+  }, [hideSelectionWarningPopover, selectionWarning]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = sessionStorage.getItem("megatours:lastSearchLocation");
+      if (!raw) {
+        setPreviewDestinationName(null);
+        setPreviewDestinationCode(null);
+        return;
+      }
+      const parsed = JSON.parse(raw) as {
+        type?: unknown;
+        value?: unknown;
+        rawId?: unknown;
+        label?: unknown;
+        parentDestinationId?: unknown;
+      };
+      if (parsed.type === "destination") {
+        const label = typeof parsed.label === "string" ? parsed.label.trim() : "";
+        const codeSource =
+          typeof parsed.rawId === "string" && parsed.rawId.trim().length > 0
+            ? parsed.rawId
+            : typeof parsed.value === "string"
+              ? parsed.value
+              : "";
+        const code = codeSource.trim();
+        setPreviewDestinationName(label.length > 0 ? label : null);
+        setPreviewDestinationCode(code.length > 0 ? code : null);
+        return;
+      }
+      if (parsed.type === "hotel") {
+        const parentCode =
+          typeof parsed.parentDestinationId === "string"
+            ? parsed.parentDestinationId.trim()
+            : "";
+        setPreviewDestinationName(null);
+        setPreviewDestinationCode(parentCode.length > 0 ? parentCode : null);
+        return;
+      }
+      setPreviewDestinationName(null);
+      setPreviewDestinationCode(null);
+    } catch (error) {
+      console.warn("[PackageBuilder][transfer] Failed to read last search location", error);
+      setPreviewDestinationName(null);
+      setPreviewDestinationCode(null);
+    }
+  }, []);
   useEffect(() => {
     if (insuranceSelection?.selected) return;
     setShowInsuranceDatePicker(false);
@@ -467,7 +564,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   const transferMissingDestination =
     serviceKey === "transfer" && hasHotel && !destinationName && !destinationCode;
   const shouldFetchTransfers =
-    serviceKey === "transfer" && hasHotel && !transferMissingDestination;
+    serviceKey === "transfer" && (!hasHotel || !transferMissingDestination);
 
   useEffect(() => {
     if (serviceKey !== "transfer") return;
@@ -524,8 +621,8 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   }, [transferOptions]);
 
   const preferredAirportCode = useMemo(
-    () => resolvePreferredAirportCode(destinationName),
-    [destinationName]
+    () => resolvePreferredAirportCode(activeDestinationName),
+    [activeDestinationName]
   );
   const preferredAirportLabelHint = useMemo(
     () => getAirportLabelHint(preferredAirportCode),
@@ -552,7 +649,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
 
   useEffect(() => {
     setSelectedAirportKey(null);
-  }, [destinationCode, destinationName]);
+  }, [activeDestinationCode, activeDestinationName]);
 
   useEffect(() => {
     if (!preferredAirportKey) {
@@ -566,6 +663,40 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   }, [airportOptions, preferredAirportKey, selectedAirportKey]);
 
   const activeAirportKey = selectedAirportKey ?? preferredAirportKey;
+  const airportDerivedDestinationName = useMemo(
+    () => resolveDestinationNameFromAirportCode(normalizeAirportKey(activeAirportKey)),
+    [activeAirportKey]
+  );
+  const transferPreviewDestinationName = useMemo(() => {
+    if (hasHotel) {
+      const resolvedHotelDestination = destinationName?.trim() ?? "";
+      return resolvedHotelDestination.length > 0 ? resolvedHotelDestination : null;
+    }
+    const resolvedAirportDestination = airportDerivedDestinationName?.trim() ?? "";
+    if (resolvedAirportDestination.length > 0) return resolvedAirportDestination;
+    const resolvedSearchDestination = activeDestinationName?.trim() ?? "";
+    return resolvedSearchDestination.length > 0 ? resolvedSearchDestination : null;
+  }, [activeDestinationName, airportDerivedDestinationName, destinationName, hasHotel]);
+  const transferPreviewDestinationCode = useMemo(() => {
+    if (hasHotel) {
+      const resolvedHotelDestinationCode = destinationCode?.trim() ?? "";
+      return resolvedHotelDestinationCode.length > 0 ? resolvedHotelDestinationCode : null;
+    }
+    const resolvedPreviewCode = activeDestinationCode?.trim() ?? "";
+    if (!resolvedPreviewCode) return null;
+    const previewCity = normalizeDestinationCityName(activeDestinationName);
+    const transferCity = normalizeDestinationCityName(transferPreviewDestinationName);
+    if (previewCity && transferCity && previewCity !== transferCity) {
+      return null;
+    }
+    return resolvedPreviewCode;
+  }, [
+    activeDestinationCode,
+    activeDestinationName,
+    destinationCode,
+    hasHotel,
+    transferPreviewDestinationName,
+  ]);
 
   const filteredTransferOptions = useMemo(() => {
     if (!activeAirportKey || airportOptions.length === 0) return transferOptions;
@@ -1328,15 +1459,23 @@ export default function PackageServiceClient({ serviceKey }: Props) {
       setTransferLoading(true);
       setTransferError(null);
       try {
+        const resolvedPreviewDestinationCode = transferPreviewDestinationCode?.trim() ?? "";
+        const resolvedPreviewDestinationName = transferPreviewDestinationName?.trim() ?? "";
+        const primaryDestination = {
+          destinationLocationCode: resolvedPreviewDestinationCode,
+          destinationName: resolvedPreviewDestinationName || "Dubai",
+        };
         const data = await postJson<{ transfers?: AoryxTransferRate[] }>("/api/aoryx/transfers", {
-          destinationLocationCode: destinationCode ?? "",
-          destinationName: destinationName ?? "",
+          destinationLocationCode: primaryDestination.destinationLocationCode,
+          destinationName: primaryDestination.destinationName,
         });
         if (!active) return;
         let transfers = Array.isArray(data.transfers) ? data.transfers : [];
 
         // For destinations outside Dubai/Abu Dhabi/Sharjah, fallback to Dubai transfers.
-        if (transfers.length === 0 && !resolvePreferredAirportCode(destinationName)) {
+        const shouldFallbackToDubai =
+          !hasHotel && !resolvePreferredAirportCode(resolvedPreviewDestinationName);
+        if (transfers.length === 0 && shouldFallbackToDubai) {
           const fallback = await postJson<{ transfers?: AoryxTransferRate[] }>("/api/aoryx/transfers", {
             destinationLocationCode: "",
             destinationName: "Dubai",
@@ -1359,21 +1498,15 @@ export default function PackageServiceClient({ serviceKey }: Props) {
       active = false;
     };
   }, [
-    destinationCode,
-    destinationName,
+    hasHotel,
+    transferPreviewDestinationCode,
+    transferPreviewDestinationName,
     shouldFetchTransfers,
     t.hotel.addons.transfers.loadFailed,
   ]);
 
   useEffect(() => {
     if (serviceKey !== "excursion") return;
-    if (!hasHotel) {
-      setExcursionOptions((prev) => (prev.length > 0 ? [] : prev));
-      setExcursionFee((prev) => (prev !== null ? null : prev));
-      setExcursionError(null);
-      setExcursionLoading(false);
-      return;
-    }
     let active = true;
     const fetchExcursions = async () => {
       await Promise.resolve();
@@ -1960,7 +2093,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
 
   const destinationBadgeLabel = useMemo(() => {
     const normalizedDestinationName =
-      typeof destinationName === "string" ? destinationName.trim() : "";
+      typeof transferPreviewDestinationName === "string" ? transferPreviewDestinationName.trim() : "";
     if (normalizedDestinationName.length > 0) {
       return normalizedDestinationName;
     }
@@ -1972,7 +2105,13 @@ export default function PackageServiceClient({ serviceKey }: Props) {
     const preferred = selectedTransferDestination ?? firstTransferDestination;
     const trimmed = typeof preferred === "string" ? preferred.trim() : "";
     return trimmed.length > 0 ? trimmed : null;
-  }, [destinationName, filteredTransferOptions, selectedTransferId, transferById, transferOptions]);
+  }, [
+    transferPreviewDestinationName,
+    filteredTransferOptions,
+    selectedTransferId,
+    transferById,
+    transferOptions,
+  ]);
 
   const handleMarkService = () => {
     if (serviceKey === "hotel") return;
@@ -1988,6 +2127,11 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   };
 
   const handleSelectTransfer = (transfer: AoryxTransferRate, selectionId: string) => {
+    if (!hasHotel) {
+      requestHotelSelection();
+      return;
+    }
+    if (selectionWarning) setSelectionWarning(null);
     const originName = transfer.origin?.name ?? transfer.origin?.locationCode ?? null;
     const destinationLabel = transfer.destination?.name ?? transfer.destination?.locationCode ?? null;
     const vehicleName = transfer.vehicle?.name ?? transfer.vehicle?.category ?? null;
@@ -2082,6 +2226,11 @@ export default function PackageServiceClient({ serviceKey }: Props) {
 
   const handleSelectInsurancePlan = useCallback(
     (plan: InsurancePlan) => {
+      if (!hasHotel) {
+        requestHotelSelection();
+        return;
+      }
+      setSelectionWarning((prev) => (prev ? null : prev));
       if (
         insuranceSelection?.selected &&
         insuranceSelection.planId === plan.id &&
@@ -2131,6 +2280,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
     },
     [
       insuranceGuestIds,
+      hasHotel,
       insuranceSelection?.territoryCode,
       insuranceSelection?.territoryLabel,
       insuranceSelection?.territoryPolicyLabel,
@@ -2146,6 +2296,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
       hotelSelection?.checkInDate,
       hotelSelection?.checkOutDate,
       t.packageBuilder.insurance.defaultTravelCountry,
+      requestHotelSelection,
       updateInsuranceSelection,
     ]
   );
@@ -2403,6 +2554,11 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   );
 
   const toggleExcursionForActiveGuest = (excursionId: string) => {
+    if (!hasHotel) {
+      requestHotelSelection();
+      return;
+    }
+    if (selectionWarning) setSelectionWarning(null);
     if (!activeExcursionGuestId) return;
     const guest = excursionGuestMap.get(activeExcursionGuestId);
     if (!guest) return;
@@ -2527,7 +2683,6 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   );
 
   const renderTransferTypeGroup = () => {
-    if (!hasHotel) return null;
     if (transferMissingDestination) return null;
     if (transferLoading) return null;
     if (transferError) return null;
@@ -2547,7 +2702,10 @@ export default function PackageServiceClient({ serviceKey }: Props) {
         <button
           type="button"
           className={`${selectedTransferType === "INDIVIDUAL" ? "is-selected" : ""}`}
-          onClick={() => setSelectedTransferType("INDIVIDUAL")}
+          onClick={() => {
+            setSelectedTransferType("INDIVIDUAL");
+            document.getElementById("transfer-options")?.scrollIntoView({ behavior: "smooth" });
+          }}
           aria-pressed={selectedTransferType === "INDIVIDUAL"}
         >
           <span>
@@ -2572,7 +2730,11 @@ export default function PackageServiceClient({ serviceKey }: Props) {
         <button
           type="button"
           className={`${selectedTransferType === "GROUP" ? "is-selected" : ""}`}
-          onClick={() => setSelectedTransferType("GROUP")}
+          onClick={() => {
+            setSelectedTransferType("GROUP");
+            document.getElementById("transfer-options")?.scrollIntoView({ behavior: "smooth" });
+          }}
+
           aria-pressed={selectedTransferType === "GROUP"}
         >
           <span>
@@ -2600,7 +2762,6 @@ export default function PackageServiceClient({ serviceKey }: Props) {
 
   const renderExcursionControls = () => {
     if (serviceKey !== "excursion") return null;
-    if (!hasHotel) return null;
     if (excursionLoading) return null;
     if (excursionError) return null;
     if (excursionOptionsWithId.length === 0) return null;
@@ -2643,8 +2804,11 @@ export default function PackageServiceClient({ serviceKey }: Props) {
           <button
             type="button"
             className={`${excursionFilter === "YAS" ? " is-selected" : ""}`}
-            onClick={() => setExcursionFilter("YAS")}
             aria-pressed={excursionFilter === "YAS"}
+            onClick={() => {
+              setExcursionFilter("YAS");
+              document.getElementById("excursion-options")?.scrollIntoView({ behavior: "smooth" });
+            }}
           >
             <span>
               <h2>{t.packageBuilder.excursions.yasLabel}</h2>
@@ -2663,7 +2827,10 @@ export default function PackageServiceClient({ serviceKey }: Props) {
           <button
             type="button"
             className={`${excursionFilter === "SAFARI" ? " is-selected" : ""}`}
-            onClick={() => setExcursionFilter("SAFARI")}
+            onClick={() => {
+              setExcursionFilter("SAFARI");
+              document.getElementById("excursion-options")?.scrollIntoView({ behavior: "smooth" });
+            }}
             aria-pressed={excursionFilter === "SAFARI"}
           >
             <span>
@@ -2683,7 +2850,10 @@ export default function PackageServiceClient({ serviceKey }: Props) {
           <button
             type="button"
             className={`${excursionFilter === "CRUISE" ? " is-selected" : ""}`}
-            onClick={() => setExcursionFilter("CRUISE")}
+            onClick={() => {
+              setExcursionFilter("CRUISE");
+              document.getElementById("excursion-options")?.scrollIntoView({ behavior: "smooth" });
+            }}
             aria-pressed={excursionFilter === "CRUISE"}
           >
             <span>
@@ -2703,7 +2873,10 @@ export default function PackageServiceClient({ serviceKey }: Props) {
           <button
             type="button"
             className={`${excursionFilter === "BURJ" ? " is-selected" : ""}`}
-            onClick={() => setExcursionFilter("BURJ")}
+            onClick={() => {
+              setExcursionFilter("BURJ");
+              document.getElementById("excursion-options")?.scrollIntoView({ behavior: "smooth" });
+            }}
             aria-pressed={excursionFilter === "BURJ"}
           >
             <span>
@@ -2723,7 +2896,10 @@ export default function PackageServiceClient({ serviceKey }: Props) {
           <button
             type="button"
             className={`${excursionFilter === "HELICOPTER" ? " is-selected" : ""}`}
-            onClick={() => setExcursionFilter("HELICOPTER")}
+            onClick={() => {
+              setExcursionFilter("HELICOPTER");
+              document.getElementById("excursion-options")?.scrollIntoView({ behavior: "smooth" });
+            }}
             aria-pressed={excursionFilter === "HELICOPTER"}
           >
             <span>
@@ -2743,7 +2919,10 @@ export default function PackageServiceClient({ serviceKey }: Props) {
           <button
             type="button"
             className={`${excursionFilter === "ALL" ? " is-selected" : ""}`}
-            onClick={() => setExcursionFilter("ALL")}
+            onClick={() => {
+              setExcursionFilter("ALL");
+              document.getElementById("excursion-options")?.scrollIntoView({ behavior: "smooth" });
+            }}
             aria-pressed={excursionFilter === "ALL"}
           >
             <span>
@@ -2799,7 +2978,6 @@ export default function PackageServiceClient({ serviceKey }: Props) {
 
   const renderInsurancePlans = () => {
     if (serviceKey !== "insurance") return null;
-    if (!hasHotel) return null;
     const selectedPlanId = insuranceSelection?.planId ?? null;
     return (
       <>
@@ -2831,7 +3009,6 @@ export default function PackageServiceClient({ serviceKey }: Props) {
 
   const renderInsuranceControls = () => {
     if (serviceKey !== "insurance") return null;
-    if (!hasHotel) return null;
     const selectedTerritory =
       insuranceSelection?.territoryCode ?? insuranceTerritories[0]?.code ?? "";
     const travelCountries = t.packageBuilder.insurance.defaultTravelCountry ?? "";
@@ -2966,7 +3143,6 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   };
 
   const renderTransferReturnToggle = () => {
-    if (!hasHotel) return null;
     if (transferMissingDestination) return null;
     if (transferLoading) return null;
     if (transferError) return null;
@@ -2985,7 +3161,6 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   };
 
   const renderTransferAirportSelect = () => {
-    if (!hasHotel) return null;
     if (transferMissingDestination) return null;
     if (transferLoading) return null;
     if (transferError) return null;
@@ -3011,16 +3186,6 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   };
 
   const renderTransferList = () => {
-    if (!hasHotel) {
-      return (
-        <div className="empty">
-          <p>{t.packageBuilder.warningSelectHotel}</p>
-          <Link href={`/${locale}/services/hotel`} className="service-builder__cta">
-            {t.packageBuilder.services.hotel}
-          </Link>
-        </div>
-      );
-    }
     if (transferMissingDestination) {
       return <p className="state error">{t.hotel.addons.transfers.missingDestination}</p>;
     }
@@ -3050,14 +3215,20 @@ export default function PackageServiceClient({ serviceKey }: Props) {
     }
 
     return (
-      <div className="transfers options" role="list">
+      <div className="transfers options" id="transfer-options" role="list">
         {activeTransfers.map((transfer, index) => {
           const id = transferIdMap.get(transfer) ?? buildTransferId(transfer, index);
           const isSelected = selectedTransferId === id;
           const origin = transfer.origin?.name ?? transfer.origin?.locationCode ?? "—";
           const destination = transfer.destination?.name ?? transfer.destination?.locationCode ?? "—";
+          const previewDestinationLabelRaw = transferPreviewDestinationName ?? null;
+          const previewDestinationLabel = previewDestinationLabelRaw
+            ? `${previewDestinationLabelRaw.replace(/\s+hotels?$/i, "").trim()} Hotels`
+            : null;
           const destinationLabel = selectedHotelName
             ? selectedHotelName
+            : !hasHotel && previewDestinationLabel
+              ? previewDestinationLabel
             : destination;
           const transferType = normalizeTransferType(transfer.transferType);
           const vehicleName = transfer.vehicle?.name ?? transfer.vehicle?.category ?? null;
@@ -3364,16 +3535,6 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   };
 
   const renderExcursionList = () => {
-    if (!hasHotel) {
-      return (
-        <div className="empty">
-          <p>{t.packageBuilder.warningSelectHotel}</p>
-          <Link href={`/${locale}/services/hotel`} className="service-builder__cta">
-            {t.packageBuilder.services.hotel}
-          </Link>
-        </div>
-      );
-    }
     if (excursionLoading) {
       return <p className="state">{t.hotel.addons.excursions.loading}</p>;
     }
@@ -3394,69 +3555,71 @@ export default function PackageServiceClient({ serviceKey }: Props) {
           <p className="state">{t.packageBuilder.excursions.noMatch}</p>
         ) : (
           <>
-        {hasHotel && excursionGuests.length === 0 && (
-          <p className="state">{t.hotel.errors.unableBuildGuests}</p>
-        )}
-        <div className="excursions options">
-          {visibleExcursions.map((excursion) => {
-            const id = excursion.id;
-            const isSelected = activeExcursionSelection.includes(id);
-            const isEligible = activeGuest ? isExcursionEligibleForGuest(excursion, activeGuest) : true;
-            const isDisabled = !canSelectExcursions || !activeExcursionGuestId || !isEligible;
-            const logo = getExcursionLogo(excursion);
-            const logoStyle = logo
-              ? ({ "--excursion-logo": `url(${logo})` } as CSSProperties)
-              : undefined;
-            const currency = excursion.pricing?.currency ?? null;
-            const adultPrice = excursion.pricing?.adult ?? null;
-            const childPrice = excursion.pricing?.child ?? adultPrice;
-            const feeAlreadyApplied =
-              (excursion.pricing as { feeApplied?: unknown })?.feeApplied === true;
-            const feeToApply = feeAlreadyApplied ? 0 : excursionFee ?? 0;
-            const adultDisplay =
-              typeof adultPrice === "number" ? adultPrice + feeToApply : null;
-            const childDisplay =
-              typeof childPrice === "number" ? childPrice + feeToApply : null;
-            const formattedAdult = formatServicePrice(adultDisplay, currency);
-            const formattedChild = formatServicePrice(childDisplay, currency);
-            return (
-              <label
-                key={id}
-                className={`option selectable${isSelected ? " is-selected" : ""}${isDisabled ? " is-disabled" : ""}`}
-                style={logoStyle}
-              >
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => toggleExcursionForActiveGuest(id)}
-                  disabled={isDisabled}
-                  aria-disabled={isDisabled}
-                />
-                <div className="content">
-                  <div className="info">
-                    <div>
-                      <h5>{excursion.name ?? t.hotel.addons.excursions.unnamed}</h5>
-                      {excursion.description && <p>{excursion.description}</p>}
+            {hasHotel && excursionGuests.length === 0 && (
+              <p className="state">{t.hotel.errors.unableBuildGuests}</p>
+            )}
+            <div className="excursions options" id="excursion-options" role="list">
+              {visibleExcursions.map((excursion) => {
+                const id = excursion.id;
+                const isSelected = activeExcursionSelection.includes(id);
+                const isEligible = activeGuest ? isExcursionEligibleForGuest(excursion, activeGuest) : true;
+                const isDisabled =
+                  !isEligible ||
+                  (hasHotel && (!canSelectExcursions || !activeExcursionGuestId));
+                const logo = getExcursionLogo(excursion);
+                const logoStyle = logo
+                  ? ({ "--excursion-logo": `url(${logo})` } as CSSProperties)
+                  : undefined;
+                const currency = excursion.pricing?.currency ?? null;
+                const adultPrice = excursion.pricing?.adult ?? null;
+                const childPrice = excursion.pricing?.child ?? adultPrice;
+                const feeAlreadyApplied =
+                  (excursion.pricing as { feeApplied?: unknown })?.feeApplied === true;
+                const feeToApply = feeAlreadyApplied ? 0 : excursionFee ?? 0;
+                const adultDisplay =
+                  typeof adultPrice === "number" ? adultPrice + feeToApply : null;
+                const childDisplay =
+                  typeof childPrice === "number" ? childPrice + feeToApply : null;
+                const formattedAdult = formatServicePrice(adultDisplay, currency);
+                const formattedChild = formatServicePrice(childDisplay, currency);
+                return (
+                  <label
+                    key={id}
+                    className={`option selectable${isSelected ? " is-selected" : ""}${isDisabled ? " is-disabled" : ""}`}
+                    style={logoStyle}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleExcursionForActiveGuest(id)}
+                      disabled={isDisabled}
+                      aria-disabled={isDisabled}
+                    />
+                    <div className="content">
+                      <div className="info">
+                        <div>
+                          <h5>{excursion.name ?? t.hotel.addons.excursions.unnamed}</h5>
+                          {excursion.description && <p>{excursion.description}</p>}
+                        </div>
+                        {excursion.childPolicy && (
+                          <span className="policy">{excursion.childPolicy}</span>
+                        )}
+                      </div>
+                      <div className="pricing">
+                        <span>
+                          {t.hotel.addons.excursions.adultPrice}:{" "}
+                          {formattedAdult ?? t.common.contact}
+                        </span>
+                        <span>
+                          {t.hotel.addons.excursions.childPrice}:{" "}
+                          {formattedChild ?? t.common.contact}
+                        </span>
+                      </div>
                     </div>
-                    {excursion.childPolicy && (
-                      <span className="policy">{excursion.childPolicy}</span>
-                    )}
-                  </div>
-                  <div className="pricing">
-                    <span>
-                      {t.hotel.addons.excursions.adultPrice}:{" "}
-                      {formattedAdult ?? t.common.contact}
-                    </span>
-                    <span>
-                      {t.hotel.addons.excursions.childPrice}:{" "}
-                      {formattedChild ?? t.common.contact}
-                    </span>
-                  </div>
-                </div>
-              </label>
-            );
-          })}
-        </div>
+                  </label>
+                );
+              })}
+            </div>
           </>
         )}
       </>
@@ -3464,17 +3627,6 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   };
 
   const renderInsurancePanel = () => {
-    if (!hasHotel) {
-      return (
-        <div className="empty">
-          <p>{t.packageBuilder.warningSelectHotel}</p>
-          <Link href={`/${locale}/services/hotel`} className="service-builder__cta">
-            {t.packageBuilder.services.hotel}
-          </Link>
-        </div>
-      );
-    }
-
     const selectedPlanId = insuranceSelection?.planId ?? null;
     const selectedTerritory =
       insuranceSelection?.territoryCode ?? insuranceTerritories[0]?.code ?? "";
@@ -3779,6 +3931,35 @@ export default function PackageServiceClient({ serviceKey }: Props) {
         {renderInsurancePlans()}
         {renderInsuranceControls()}
         {renderExcursionControls()}
+        <div
+          popover="auto"
+          className="popover service-builder__warning-popover"
+          ref={selectionWarningPopoverRef}
+          role="alertdialog"
+          aria-live="assertive"
+        >
+          <button
+            type="button"
+            className="close material-symbols-rounded"
+            aria-label={t.common.close}
+            onClick={dismissSelectionWarning}
+          >
+            close
+          </button>
+          <div className="service-builder__warning-popover-content">
+            <span className="material-symbols-rounded" aria-hidden="true">
+              warning
+            </span>
+            <p>{selectionWarning ?? t.packageBuilder.warningSelectHotel}</p>
+          </div>
+          <Link
+            href={`/${locale}/services/hotel`}
+            className="service-builder__cta"
+            onClick={dismissSelectionWarning}
+          >
+            {t.packageBuilder.services.hotel}
+          </Link>
+        </div>
 
         {serviceKey === "hotel" ? (
           <div className="search">

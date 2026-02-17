@@ -4570,6 +4570,38 @@ main.service-builder{
     }
   }
 
+  .service-builder__warning-popover{
+    width: min(520px, calc(100vw - 2rem));
+    border-color: rgba(248, 113, 113, 0.5);
+    background: linear-gradient(165deg, rgba(248, 113, 113, 0.2), rgba(15, 23, 42, 0.94));
+    color: #ffe4e6;
+    display: grid;
+    gap: 1rem;
+
+    .service-builder__warning-popover-content{
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: .75rem;
+      align-items: start;
+      padding-right: 2.5rem;
+    }
+
+    .material-symbols-rounded{
+      color: #fecaca;
+    }
+
+    p{
+      margin: 0;
+      line-height: 1.45;
+      color: #ffe4e6;
+    }
+
+    .service-builder__cta{
+      width: auto;
+      justify-self: end;
+    }
+  }
+
   .videoWrap{
     filter: blur(5px) brightness(0.4);
   }
@@ -4998,6 +5030,7 @@ main.service-builder{
     .options{
       display: grid;
       gap: 1.5em;
+      scroll-margin-top: 100px;
 
       .option{
         gap: 1rem;
