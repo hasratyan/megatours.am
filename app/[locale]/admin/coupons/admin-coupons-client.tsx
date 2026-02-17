@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "@/components/language-provider";
 import { postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
+import { sanitizeLeadingZeroNumberInput } from "@/lib/number-input";
 import type { CouponAdminRecord, CouponStatus } from "@/lib/coupons";
 
 type AdminCouponsClientProps = {
@@ -228,6 +229,7 @@ export default function AdminCouponsClient({
               max={100}
               step={0.01}
               value={form.discountPercent}
+              onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
               onChange={(event) => updateForm("discountPercent", event.target.value)}
               placeholder="10"
             />
@@ -239,6 +241,7 @@ export default function AdminCouponsClient({
               min={1}
               step={1}
               value={form.usageLimit}
+              onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
               onChange={(event) => updateForm("usageLimit", event.target.value)}
               placeholder="100"
             />

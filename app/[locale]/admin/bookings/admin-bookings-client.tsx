@@ -7,6 +7,7 @@ import type { Locale } from "@/lib/i18n";
 import { resolveBookingStatusKey, type BookingStatusKey } from "@/lib/booking-status";
 import { postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
+import { sanitizeLeadingZeroNumberInput } from "@/lib/number-input";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 import type { AppliedBookingCoupon } from "@/lib/user-data";
 
@@ -841,6 +842,7 @@ export default function AdminBookingsClient({
                                           inputMode="decimal"
                                           placeholder={t.admin.actions.refundAmountPlaceholder}
                                           value={refundAmountValue}
+                                          onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
                                           onChange={(event) =>
                                             {
                                               setRefundAmountByBookingId((prev) => ({

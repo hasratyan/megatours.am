@@ -14,6 +14,7 @@ import { useLanguage } from "@/components/language-provider";
 import StarBorder from '@/components/StarBorder'
 import { postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
+import { sanitizeLeadingZeroNumberInput } from "@/lib/number-input";
 import type { AoryxSearchParams, HotelInfo } from "@/types/aoryx";
 import type { Locale as AppLocale } from "@/lib/i18n";
 import type { HotelMapPickerProps } from "./hotel-map-picker";
@@ -1365,6 +1366,7 @@ export default function SearchForm({
                   max={4}
                   value={rooms.length}
                   disabled={isFormDisabled}
+                  onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
                   onChange={(e) => updateRoomCount(parseInt(e.target.value) || 1)}
                 />
               </label>
@@ -1393,6 +1395,7 @@ export default function SearchForm({
                       max={6}
                       value={room.adults}
                       disabled={isFormDisabled}
+                      onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
                       onChange={(e) =>
                         updateRoomGuests(roomIndex, "adults", parseInt(e.target.value) || 1)
                       }
@@ -1408,6 +1411,7 @@ export default function SearchForm({
                       max={4}
                       value={room.children}
                       disabled={isFormDisabled}
+                      onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
                       onChange={(e) =>
                         updateRoomGuests(roomIndex, "children", parseInt(e.target.value) || 0)
                       }
@@ -1425,6 +1429,7 @@ export default function SearchForm({
                           max={17}
                           value={age}
                           disabled={isFormDisabled}
+                          onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
                           onChange={(e) =>
                             updateRoomChildAge(
                               roomIndex,
@@ -1453,6 +1458,7 @@ export default function SearchForm({
                   max={6}
                   value={rooms[0].adults}
                   disabled={isFormDisabled}
+                  onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
                   onChange={(e) =>
                     updateRoomGuests(0, "adults", parseInt(e.target.value) || 1)
                   }
@@ -1468,6 +1474,7 @@ export default function SearchForm({
                   max={4}
                   value={rooms[0].children}
                   disabled={isFormDisabled}
+                  onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
                   onChange={(e) => {
                     const value = parseInt(e.target.value) || 0;
                     updateRoomGuests(0, "children", value);
@@ -1492,6 +1499,7 @@ export default function SearchForm({
                       max={17}
                       value={age}
                       disabled={isFormDisabled}
+                      onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
                       onChange={(e) =>
                         updateRoomChildAge(0, childIndex, parseInt(e.target.value) || 0)
                       }

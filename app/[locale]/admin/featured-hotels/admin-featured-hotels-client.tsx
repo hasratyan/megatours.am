@@ -6,6 +6,7 @@ import { getJson, postJson } from "@/lib/api-helpers";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import { resolveSafeErrorFromUnknown, resolveSafeErrorMessage } from "@/lib/error-utils";
 import type { Locale } from "@/lib/i18n";
+import { sanitizeLeadingZeroNumberInput } from "@/lib/number-input";
 import type { AoryxHotelOption, FeaturedHotelAdminItem } from "@/lib/featured-hotels";
 
 type AdminFeaturedHotelsClientProps = {
@@ -385,6 +386,7 @@ export default function AdminFeaturedHotelsClient({
                       type="number"
                       min="0"
                       value={form.priceFrom}
+                      onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
                       onChange={(event) => setForm((prev) => ({ ...prev, priceFrom: event.target.value }))}
                     />
                   </label>
@@ -394,6 +396,7 @@ export default function AdminFeaturedHotelsClient({
                       type="number"
                       min="0"
                       value={form.oldPrice}
+                      onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
                       onChange={(event) => setForm((prev) => ({ ...prev, oldPrice: event.target.value }))}
                     />
                   </label>

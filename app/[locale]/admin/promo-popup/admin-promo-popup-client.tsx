@@ -4,6 +4,7 @@ import { useState } from "react";
 import { postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { useTranslations } from "@/components/language-provider";
+import { sanitizeLeadingZeroNumberInput } from "@/lib/number-input";
 import type { PromoPopupConfig, PromoPopupAdminConfig } from "@/lib/promo-popup";
 
 type AdminPromoPopupClientProps = {
@@ -152,6 +153,7 @@ export default function AdminPromoPopupClient({
               min={0}
               step={100}
               value={config.delayMs}
+              onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
               onChange={(event) => updateField("delayMs", Number(event.target.value) || 0)}
             />
           </label>

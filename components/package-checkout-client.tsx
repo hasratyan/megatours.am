@@ -15,6 +15,7 @@ import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { Locale as AppLocale } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
 import { resolveCountryAlpha2 } from "@/lib/countries";
+import { sanitizeLeadingZeroNumberInput } from "@/lib/number-input";
 import { buildSearchQuery } from "@/lib/search-query";
 import {
   EFES_DEFAULT_COUNTRY_ID,
@@ -3474,6 +3475,7 @@ export default function PackageCheckoutClient({
                                   step="1"
                                   inputMode="numeric"
                                   value={Number.isFinite(guest.age) ? guest.age : ""}
+                                  onInput={(event) => sanitizeLeadingZeroNumberInput(event.currentTarget)}
                                   onChange={(event) => {
                                     const value = event.target.value;
                                     const nextAge =
