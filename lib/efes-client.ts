@@ -36,7 +36,7 @@ type EfesTokenCache = {
 };
 
 const EFES_AUTH_PATH = "/webservice/auth";
-const EFES_SCRIPT_PATH = "/webservice/script?Content-Type=application/json";
+const EFES_SCRIPT_PATH = "/webservice/script";
 const EFES_POLICY_PATH = "/webservice/policy";
 const DEFAULT_RISK_LABEL = "STANDARD";
 const DEFAULT_RISK_AMOUNT = 15000;
@@ -366,7 +366,7 @@ const parseEfesError = (payload: unknown): string | null => {
   if (typeof payload === "string") {
     const normalized = payload.trim();
     if (!normalized) return null;
-    if (/\b(error|invalid|forbidden|unauthoriz|exception|failed)\b/i.test(normalized)) {
+    if (/\b(error|invalid|forbidden|unauthoriz|exception|failed|rejected)\b/i.test(normalized)) {
       return normalized.slice(0, 500);
     }
     return null;
