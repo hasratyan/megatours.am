@@ -363,6 +363,14 @@ const extractCurrency = (payload: unknown): string | null => {
 };
 
 const parseEfesError = (payload: unknown): string | null => {
+  if (typeof payload === "string") {
+    const normalized = payload.trim();
+    if (!normalized) return null;
+    if (/\b(error|invalid|forbidden|unauthoriz|exception|failed)\b/i.test(normalized)) {
+      return normalized.slice(0, 500);
+    }
+    return null;
+  }
   if (!payload || typeof payload !== "object") return null;
   const record = payload as Record<string, unknown>;
   const isErrorValue = record.is_error;
@@ -541,7 +549,10 @@ const efesRequest = async <T>(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), EFES_TIMEOUT_MS);
   try {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
+    };
     if (options.auth !== false) {
       const token = await getEfesToken();
       headers.Authorization = `Bearer ${token}`;
@@ -555,12 +566,17 @@ const efesRequest = async <T>(
     });
     clearTimeout(timeoutId);
 
-    const payload = await response.json().catch(() => ({}));
+    const rawText = await response.text();
+    const payload = parseEfesResponsePayload(rawText);
     if (!response.ok) {
       const message =
-        typeof (payload as { error?: unknown }).error === "string"
-          ? String((payload as { error?: unknown }).error)
-          : `EFES API error: ${response.status} ${response.statusText}`;
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? typeof (payload as { error?: unknown }).error === "string"
+            ? String((payload as { error?: unknown }).error)
+            : `EFES API error: ${response.status} ${response.statusText}`
+          : typeof payload === "string" && payload.trim().length > 0
+            ? payload.trim()
+            : `EFES API error: ${response.status} ${response.statusText}`;
       throw new EfesServiceError(
         resolveSafeErrorMessage(message, "EFES request failed"),
         response.status,
@@ -622,6 +638,19 @@ export async function quoteEfesTravelCost(request: EfesQuoteRequest): Promise<Ef
         }
         const premium = extractPremium(response);
         if (premium === null) {
+          const responseSummary =
+            typeof response === "string"
+              ? {
+                  responseType: "string",
+                  responsePreview: response.slice(0, 500),
+                }
+              : response && typeof response === "object"
+                ? {
+                    responseType: Array.isArray(response) ? "array" : "object",
+                    responseKeys: Object.keys(response as Record<string, unknown>).slice(0, 30),
+                  }
+                : { responseType: typeof response };
+          console.error("[EFES][script] premium missing", responseSummary);
           throw new EfesServiceError("Unable to extract EFES premium from response", 200, response);
         }
         const currency = extractCurrency(response) ?? DEFAULT_PREMIUM_CURRENCY;
