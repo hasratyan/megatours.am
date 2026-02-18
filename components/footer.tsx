@@ -90,6 +90,8 @@ const contactLinks = [
 export default function Footer({ locale }: FooterProps) {
   const resolvedLocale = resolveLocale(locale);
   const t = getTranslations(resolvedLocale);
+  const servicesNavLabel =
+    t.nav.find((entry) => entry.href === "services")?.label ?? t.packageBuilder.subtitle;
 
   return (
     <footer>
@@ -123,6 +125,7 @@ export default function Footer({ locale }: FooterProps) {
         </div>
         <div>
           <nav>
+            <Link href={`/${resolvedLocale}/services`}>{servicesNavLabel}</Link>
             <Link href={`/${resolvedLocale}/refund-policy`}>{t.footer.refundPolicy}</Link>
             <Link href={`/${resolvedLocale}/privacy-policy`}>{t.footer.securityPolicy}</Link>
             <Link href={"https://b2b.megatours.am"} target={"_blank"}>{t.footer.b2bPartnership}</Link>

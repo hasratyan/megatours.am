@@ -13,9 +13,19 @@ type RouteDefinition = {
   changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
 };
 
+const servicePaths = [
+  "/services/hotel",
+  "/services/flight",
+  "/services/transfer",
+  "/services/excursion",
+  "/services/insurance",
+] as const;
+
 const routeDefinitions: RouteDefinition[] = [
   { path: "", priority: 1, changeFrequency: "daily" },
   { path: "/results", priority: 0.7, changeFrequency: "weekly" },
+  { path: "/services", priority: 0.8, changeFrequency: "weekly" },
+  ...servicePaths.map((path) => ({ path, priority: 0.7, changeFrequency: "weekly" as const })),
   { path: "/refund-policy", priority: 0.4, changeFrequency: "monthly" },
   { path: "/privacy-policy", priority: 0.4, changeFrequency: "monthly" },
 ];

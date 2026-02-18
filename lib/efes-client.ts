@@ -136,14 +136,79 @@ const sanitizeScriptPayload = (payload: unknown) => {
   };
 };
 
-const extractToken = (payload: unknown): string | null => {
-  if (typeof payload === "string") return payload;
+const parseEfesResponsePayload = (rawText: string): unknown => {
+  const trimmed = rawText.trim();
+  if (!trimmed) return {};
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return trimmed;
+  }
+};
+
+const normalizeTokenCandidate = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^bearer\s+/i.test(trimmed)) return trimmed;
+  const withoutBearer = trimmed.replace(/^bearer\s+/i, "").trim();
+  return withoutBearer.length > 0 ? withoutBearer : null;
+};
+
+const looksLikeJwt = (value: string) => {
+  const parts = value.split(".");
+  return parts.length === 3 && parts.every((part) => part.length > 0);
+};
+
+const isTokenKey = (key: string) => {
+  const normalized = key.trim().toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized === "jwt" ||
+    normalized === "token" ||
+    normalized === "access_token" ||
+    normalized === "accesstoken" ||
+    normalized === "id_token" ||
+    normalized === "idtoken" ||
+    normalized === "authorization" ||
+    normalized.endsWith("_token") ||
+    normalized.endsWith("token")
+  );
+};
+
+const extractToken = (payload: unknown, depth = 0): string | null => {
+  if (depth > 8) return null;
+  if (typeof payload === "string") {
+    const candidate = normalizeTokenCandidate(payload);
+    if (!candidate) return null;
+    return looksLikeJwt(candidate) || depth === 0 ? candidate : null;
+  }
+  if (Array.isArray(payload)) {
+    for (const entry of payload) {
+      const token = extractToken(entry, depth + 1);
+      if (token) return token;
+    }
+    return null;
+  }
   if (!payload || typeof payload !== "object") return null;
+
   const record = payload as Record<string, unknown>;
-  const candidates = ["token", "access_token", "accessToken", "jwt", "data"];
-  for (const key of candidates) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  for (const [key, value] of Object.entries(record)) {
+    if (typeof value !== "string") continue;
+    const candidate = normalizeTokenCandidate(value);
+    if (!candidate) continue;
+    if (looksLikeJwt(candidate) || isTokenKey(key)) return candidate;
+  }
+
+  const nestedKeys = ["data", "result", "payload", "response", "auth", "authorization"];
+  for (const key of nestedKeys) {
+    if (!(key in record)) continue;
+    const token = extractToken(record[key], depth + 1);
+    if (token) return token;
+  }
+
+  for (const value of Object.values(record)) {
+    const token = extractToken(value, depth + 1);
+    if (token) return token;
   }
   return null;
 };
@@ -410,12 +475,17 @@ const getEfesToken = async () => {
     });
     clearTimeout(timeoutId);
 
-    const payload = await response.json().catch(() => ({}));
+    const rawText = await response.text();
+    const payload = parseEfesResponsePayload(rawText);
     if (!response.ok) {
       const message =
-        typeof (payload as { error?: unknown }).error === "string"
-          ? String((payload as { error?: unknown }).error)
-          : `EFES auth error: ${response.status} ${response.statusText}`;
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? typeof (payload as { error?: unknown }).error === "string"
+            ? String((payload as { error?: unknown }).error)
+            : `EFES auth error: ${response.status} ${response.statusText}`
+          : typeof payload === "string" && payload.trim().length > 0
+            ? payload.trim()
+            : `EFES auth error: ${response.status} ${response.statusText}`;
       throw new EfesServiceError(
         resolveSafeErrorMessage(message, "EFES auth failed"),
         response.status,
@@ -423,8 +493,23 @@ const getEfesToken = async () => {
       );
     }
 
-    const token = extractToken(payload);
+    const headerToken = extractToken(
+      response.headers.get("authorization") ??
+        response.headers.get("x-access-token") ??
+        response.headers.get("x-auth-token") ??
+        ""
+    );
+    const token = extractToken(payload) ?? headerToken;
     if (!token) {
+      const payloadKeys =
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? Object.keys(payload).slice(0, 20)
+          : [];
+      console.error("[EFES][auth] Missing token in auth response", {
+        status: response.status,
+        payloadType: Array.isArray(payload) ? "array" : typeof payload,
+        payloadKeys,
+      });
       throw new EfesServiceError("EFES auth response missing token", response.status, payload);
     }
 

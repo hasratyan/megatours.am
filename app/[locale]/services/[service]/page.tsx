@@ -1,7 +1,7 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import PackageServiceClient from "@/components/package-service-client";
-import ProfileSignIn from "@/components/profile-signin";
 import { authOptions } from "@/lib/auth";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
@@ -14,8 +14,6 @@ const serviceKeys: PackageBuilderService[] = [
   "excursion",
   "insurance",
 ];
-
-export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ locale: string; service: string }>;
@@ -30,6 +28,10 @@ const resolveServiceKey = (value: string | undefined): PackageBuilderService | n
     ? (normalized as PackageBuilderService)
     : null;
 };
+
+export function generateStaticParams() {
+  return serviceKeys.map((service) => ({ service }));
+}
 
 export async function generateMetadata({ params }: PageProps) {
   const { locale, service } = await params;
@@ -46,18 +48,65 @@ export async function generateMetadata({ params }: PageProps) {
 }
 
 export default async function ServicePage({ params }: PageProps) {
-  const { service } = await params;
-  const serviceKey = service.toLowerCase() as PackageBuilderService;
+  const { locale, service } = await params;
+  const resolvedLocale = resolveLocale(locale);
+  const t = getTranslations(resolvedLocale);
+  const serviceKey = resolveServiceKey(service);
 
-  if (!serviceKeys.includes(serviceKey)) {
+  if (!serviceKey) {
     notFound();
   }
 
+  const pageCopy = t.packageBuilder.pages[serviceKey];
   const session = await getServerSession(authOptions);
   if (!session?.user) {
+    const callbackUrl = encodeURIComponent(`/${resolvedLocale}/services/${serviceKey}`);
+    const relatedServices = serviceKeys.filter((entry) => entry !== serviceKey);
+
     return (
-      <main className="container service-builder">
-        <ProfileSignIn />
+      <main className="service-builder service-landing">
+        <div className="container">
+          <div className="header">
+            <h1>{pageCopy.title}</h1>
+            <p>{pageCopy.body}</p>
+          </div>
+
+          <div className="panel service-landing__panel">
+            <p>{pageCopy.note}</p>
+            <div className="service-landing__actions">
+              <Link href={`/${resolvedLocale}/services/hotel`} className="service-builder__cta">
+                {t.packageBuilder.pages.hotel.cta}
+              </Link>
+              <Link
+                href={`/api/auth/signin?callbackUrl=${callbackUrl}`}
+                className="service-builder__cta"
+              >
+                {t.profile.signIn.cta}
+              </Link>
+            </div>
+          </div>
+
+          <section className="service-landing__more">
+            <h2>{t.packageBuilder.subtitle}</h2>
+            <div className="service-landing__grid">
+              {relatedServices.map((entry) => {
+                const copy = t.packageBuilder.pages[entry];
+                return (
+                  <article key={entry}>
+                    <h3>{copy.title}</h3>
+                    <p>{copy.body}</p>
+                    <Link
+                      href={`/${resolvedLocale}/services/${entry}`}
+                      className="service-builder__cta"
+                    >
+                      {copy.cta}
+                    </Link>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        </div>
       </main>
     );
   }

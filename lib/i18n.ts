@@ -1152,6 +1152,7 @@ export type Translation = {
 const translations: Record<Locale, Translation> = {
   hy: {
     nav: [
+      { href: "services", label: "Ծառայություններ" },
       { href: "#featured", label: "Լավագույն հյուրանոցներ" },
       { href: "#offers", label: "Բացառիկ առաջարկներ" },
       { href: "#faq", label: "ՀՏՀ" },
@@ -1526,7 +1527,7 @@ const translations: Record<Locale, Translation> = {
         cardCvc: "CVC",
         termsLabel: "Համաձայն եմ",
         termsConnector: "և",
-        payIdram: "Վճարել Idram-ով",
+        payIdram: "Վճարել Idram-ով (Rocketline)",
         payCard: "Վճարել Այդի Բանկի վճարային տերմինալով",
         payCardAmeria: "Վճարել Ամերիաբանկի վճարային տերմինալով",
         totalTitle: "Վճարման ամփոփում",
@@ -2593,6 +2594,7 @@ const translations: Record<Locale, Translation> = {
   },
   en: {
     nav: [
+      { href: "services", label: "Services" },
       { href: "#featured", label: "Premier Stays" },
       { href: "#offers", label: "Exclusive Offers" },
       { href: "#faq", label: "FAQ" },
@@ -4051,6 +4053,7 @@ const translations: Record<Locale, Translation> = {
   },
   ru: {
     nav: [
+      { href: "services", label: "Услуги" },
       { href: "#featured", label: "Подборка отелей" },
       { href: "#offers", label: "Специальные предложения" },
       { href: "#faq", label: "ЧЗВ" },

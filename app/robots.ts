@@ -11,7 +11,16 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/api/", "/_next/", "/payment/", "/checkout/"],
+      disallow: [
+        "/api/",
+        "/_next/",
+        "/payment/",
+        "/checkout/",
+        "/*/payment",
+        "/*/payment/",
+        "/*/checkout",
+        "/*/checkout/",
+      ],
     },
     sitemap: `${baseUrl}/sitemap.xml`,
   };

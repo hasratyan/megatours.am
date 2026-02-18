@@ -32,6 +32,15 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
     index += 1;
   }
 
+  const resolveServiceHref = (icon: string) => {
+    if (icon === "hotel") return `/${locale}/services/hotel`;
+    if (icon === "flight") return `/${locale}/services/flight`;
+    if (icon === "directions_car") return `/${locale}/services/transfer`;
+    if (icon === "tour" || icon === "attractions") return `/${locale}/services/excursion`;
+    if (icon === "shield_with_heart") return `/${locale}/services/insurance`;
+    return null;
+  };
+
   return (
     <>
       <div className="videoWrap">
@@ -91,15 +100,23 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
           <section id="services" aria-labelledby="services-title">
             <h2 className="section-title">{t.services.title}</h2>
             <div className="grid" role="list" aria-label={t.accessibility.servicesSection}>
-              {t.services.items.map((service) => (
-                <article key={service.title} role="listitem" tabIndex={0}>
-                  <div className="service-icon" aria-hidden="true">
-                    <span className="material-symbols-rounded">{service.icon}</span>
-                  </div>
-                  <h3>{service.title}</h3>
-                  <p>{service.description}</p>
-                </article>
-              ))}
+              {t.services.items.map((service) => {
+                const serviceHref = resolveServiceHref(service.icon);
+                return (
+                  <article key={service.title} role="listitem" tabIndex={0}>
+                    <div className="service-icon" aria-hidden="true">
+                      <span className="material-symbols-rounded">{service.icon}</span>
+                    </div>
+                    <h3>{service.title}</h3>
+                    <p>{service.description}</p>
+                    {serviceHref ? (
+                      <Link className="service-card-link" href={serviceHref}>
+                        {t.packageBuilder.viewService}
+                      </Link>
+                    ) : null}
+                  </article>
+                );
+              })}
             </div>
           </section>
         </div>
