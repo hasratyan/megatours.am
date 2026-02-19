@@ -111,7 +111,7 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
                     <p>{service.description}</p>
                     {serviceHref ? (
                       <Link className="service-card-link" href={serviceHref}>
-                        {t.packageBuilder.viewService}
+                        {t.packageBuilder.viewService} <span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span>
                       </Link>
                     ) : null}
                   </article>

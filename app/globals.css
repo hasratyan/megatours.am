@@ -1481,7 +1481,7 @@ main {
         grid-template-rows: subgrid;
         display: grid;
         gap: 0;
-        grid-row: span 3;
+        grid-row: span 4;
         justify-items: center;
 
         .service-icon {
@@ -1515,19 +1515,16 @@ main {
 
         .service-card-link{
           color: #7cf2d4;
-          border: 1px solid rgba(124, 242, 212, 0.5);
-          border-radius: 999px;
-          margin-top: 1em;
-          padding: 0.45em 0.85em;
-          font-size: 0.9rem;
+          font-size: .9rem;
           font-weight: 600;
-          transition: background .2s, border-color .2s, color .2s;
-        }
+          justify-self: right;
+          margin-top: 0.50em;
+          display: flex;
+          align-items: center;
 
-        .service-card-link:hover{
-          color: #fff;
-          border-color: rgba(124, 242, 212, 0.8);
-          background: rgba(124, 242, 212, 0.2);
+          &:hover{
+            color: #fff;
+          }
         }
 
         &:hover{
@@ -5565,7 +5562,7 @@ main.service-builder{
     .service-landing__grid{
       display: grid;
       gap: 1rem;
-      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
     }
 
     .service-hub__card,
