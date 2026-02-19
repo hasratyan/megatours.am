@@ -683,6 +683,10 @@ main {
       z-index: 2;
       transition: 0.15s ease-in-out;
 
+      @media screen and (max-width:450px) {
+        width: 100%;
+      }
+
       &:hover, &:focus-within {
         transform: scale(1.025);
         background: #fff3;
@@ -5582,6 +5586,13 @@ main.service-builder{
       color: #94a3b8;
     }
 
+    .service-hub__card.is-disabled,
+    .service-landing__panel.is-disabled,
+    .service-landing__grid article.is-disabled{
+      opacity: 0.75;
+      border-color: rgba(248, 113, 113, 0.45);
+    }
+
     .service-landing__panel{
       margin-bottom: 1rem;
     }
@@ -5606,6 +5617,14 @@ main.service-builder{
     .service-landing__grid .service-builder__cta{
       width: auto;
       justify-self: start;
+    }
+
+    .service-builder__cta.is-disabled{
+      color: #94a3b8;
+      border-color: rgba(148, 163, 184, 0.5);
+      background: rgba(15, 23, 42, 0.55);
+      cursor: not-allowed;
+      pointer-events: none;
     }
   }
 }

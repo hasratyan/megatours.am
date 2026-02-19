@@ -5,7 +5,8 @@ import PackageServiceClient from "@/components/package-service-client";
 import { authOptions } from "@/lib/auth";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
-import type { PackageBuilderService } from "@/lib/package-builder-state";
+import { DEFAULT_SERVICE_FLAGS, type PackageBuilderService } from "@/lib/package-builder-state";
+import { getServiceFlags } from "@/lib/service-flags";
 
 const serviceKeys: PackageBuilderService[] = [
   "hotel",
@@ -58,6 +59,32 @@ export default async function ServicePage({ params }: PageProps) {
   }
 
   const pageCopy = t.packageBuilder.pages[serviceKey];
+  const serviceFlags = await getServiceFlags().catch(() => DEFAULT_SERVICE_FLAGS);
+  const isServiceEnabled = serviceFlags[serviceKey] !== false;
+  if (!isServiceEnabled) {
+    return (
+      <main className="service-builder service-landing">
+        <div className="container">
+          <div className="header">
+            <h1>{pageCopy.title}</h1>
+            <p>{pageCopy.body}</p>
+          </div>
+          <div className="panel service-landing__panel is-disabled">
+            <p>{t.packageBuilder.serviceDisabled.replace("{service}", pageCopy.title)}</p>
+            <div className="service-landing__actions">
+              <Link href={`/${resolvedLocale}/services`} className="service-builder__cta">
+                {t.packageBuilder.viewService}
+              </Link>
+              <Link href={`/${resolvedLocale}/services/hotel`} className="service-builder__cta">
+                {t.packageBuilder.pages.hotel.cta}
+              </Link>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     const callbackUrl = encodeURIComponent(`/${resolvedLocale}/services/${serviceKey}`);
@@ -91,16 +118,23 @@ export default async function ServicePage({ params }: PageProps) {
             <div className="service-landing__grid">
               {relatedServices.map((entry) => {
                 const copy = t.packageBuilder.pages[entry];
+                const isEnabled = serviceFlags[entry] !== false;
                 return (
-                  <article key={entry}>
+                  <article key={entry} className={isEnabled ? "" : "is-disabled"}>
                     <h3>{copy.title}</h3>
                     <p>{copy.body}</p>
-                    <Link
-                      href={`/${resolvedLocale}/services/${entry}`}
-                      className="service-builder__cta"
-                    >
-                      {copy.cta}
-                    </Link>
+                    {isEnabled ? (
+                      <Link
+                        href={`/${resolvedLocale}/services/${entry}`}
+                        className="service-builder__cta"
+                      >
+                        {copy.cta}
+                      </Link>
+                    ) : (
+                      <span className="service-builder__cta is-disabled" aria-disabled="true">
+                        {t.packageBuilder.disabledTag}
+                      </span>
+                    )}
                   </article>
                 );
               })}

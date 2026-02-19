@@ -969,8 +969,8 @@ export default function HotelClient({
 
   const roomDetailsPayload = useMemo(() => {
     if (!parsed.payload || !hotelCode) return null;
-    return { ...parsed.payload, hotelCode };
-  }, [hotelCode, parsed.payload]);
+    return { ...parsed.payload, hotelCode, locale };
+  }, [hotelCode, locale, parsed.payload]);
 
   useEffect(() => {
     setRoomsLoading(Boolean(roomDetailsPayload && !initialRoomDetails && !initialRoomsError));
@@ -2096,6 +2096,7 @@ export default function HotelClient({
           hotelCode,
           rateKeys,
           currency: prebookCurrency,
+          locale,
         });
         const mergedRooms = mergePrebookExtras(group.items, result.rooms);
         const guests = buildBookingGuests(mergedRooms, roomDetailsPayload?.rooms ?? null);
@@ -2149,6 +2150,7 @@ export default function HotelClient({
       hotelInfo?.address?.cityName,
       hotelInfo?.name,
       isSignedIn,
+      locale,
       parsed.payload?.checkInDate,
       parsed.payload?.checkOutDate,
       parsed.payload?.countryCode,

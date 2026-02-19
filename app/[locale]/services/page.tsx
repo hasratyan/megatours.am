@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
-import type { PackageBuilderService } from "@/lib/package-builder-state";
+import { DEFAULT_SERVICE_FLAGS, type PackageBuilderService } from "@/lib/package-builder-state";
+import { getServiceFlags } from "@/lib/service-flags";
 
 const serviceKeys: PackageBuilderService[] = [
   "hotel",
@@ -34,6 +35,7 @@ export default async function ServicesHubPage({ params }: PageProps) {
   const { locale } = await params;
   const resolvedLocale = resolveLocale(locale);
   const t = getTranslations(resolvedLocale);
+  const serviceFlags = await getServiceFlags().catch(() => DEFAULT_SERVICE_FLAGS);
 
   return (
     <main className="service-builder service-hub">
@@ -45,17 +47,31 @@ export default async function ServicesHubPage({ params }: PageProps) {
         <div className="service-hub__grid">
           {serviceKeys.map((serviceKey) => {
             const pageCopy = t.packageBuilder.pages[serviceKey];
+            const isEnabled = serviceFlags[serviceKey] !== false;
+            const disabledMessage = t.packageBuilder.serviceDisabled.replace(
+              "{service}",
+              pageCopy.title
+            );
             return (
-              <article key={serviceKey} className="service-hub__card">
+              <article
+                key={serviceKey}
+                className={`service-hub__card${isEnabled ? "" : " is-disabled"}`}
+              >
                 <h2>{pageCopy.title}</h2>
                 <p>{pageCopy.body}</p>
-                <small>{pageCopy.note}</small>
-                <Link
-                  href={`/${resolvedLocale}/services/${serviceKey}`}
-                  className="service-builder__cta"
-                >
-                  {pageCopy.cta}
-                </Link>
+                <small>{isEnabled ? pageCopy.note : disabledMessage}</small>
+                {isEnabled ? (
+                  <Link
+                    href={`/${resolvedLocale}/services/${serviceKey}`}
+                    className="service-builder__cta"
+                  >
+                    {pageCopy.cta}
+                  </Link>
+                ) : (
+                  <span className="service-builder__cta is-disabled" aria-disabled="true">
+                    {t.packageBuilder.disabledTag}
+                  </span>
+                )}
               </article>
             );
           })}

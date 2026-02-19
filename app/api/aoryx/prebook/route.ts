@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { preBook, AoryxServiceError, AoryxClientError } from "@/lib/aoryx-client";
 import { getSessionFromCookie, setPrebookCookie } from "../_shared";
 import { decodeRateToken, hashRateKey, isRateToken } from "@/lib/aoryx-rate-tokens";
+import { localizeAoryxRoomOptions } from "@/lib/aoryx-room-localization";
+import { resolveTranslationLocale } from "@/lib/text-translation";
 
 export const runtime = "nodejs";
 
@@ -111,11 +113,23 @@ export async function POST(request: NextRequest) {
     }
 
     const currency = typeof body.currency === "string" ? body.currency.trim() : undefined;
+    const requestedLocale = resolveTranslationLocale(
+      typeof body.locale === "string"
+        ? body.locale
+        : request.headers.get("x-locale") ?? request.headers.get("accept-language")
+    );
 
     const result = await preBook(sessionId, hotelCode, resolvedGroupCode, rateKeys, currency);
+    const localizedRooms =
+      requestedLocale === "en"
+        ? result.rooms
+        : await localizeAoryxRoomOptions(result.rooms, requestedLocale).catch((error) => {
+            console.error("[Aoryx][prebook] Failed to localize room content", error);
+            return result.rooms;
+          });
 
     const resolvedSessionId = result.sessionId || sessionId;
-    const rooms = result.rooms.map((room) => ({
+    const rooms = localizedRooms.map((room) => ({
       roomIdentifier: typeof room.roomIdentifier === "number" ? room.roomIdentifier : null,
       policies: Array.isArray(room.policies) ? room.policies : [],
       remarks: Array.isArray(room.remarks) ? room.remarks : [],

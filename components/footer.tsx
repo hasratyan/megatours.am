@@ -125,7 +125,6 @@ export default function Footer({ locale }: FooterProps) {
         </div>
         <div>
           <nav>
-            <Link href={`/${resolvedLocale}/services`}>{servicesNavLabel}</Link>
             <Link href={`/${resolvedLocale}/refund-policy`}>{t.footer.refundPolicy}</Link>
             <Link href={`/${resolvedLocale}/privacy-policy`}>{t.footer.securityPolicy}</Link>
             <Link href={"https://b2b.megatours.am"} target={"_blank"}>{t.footer.b2bPartnership}</Link>

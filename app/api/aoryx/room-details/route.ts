@@ -5,6 +5,8 @@ import type { AoryxSearchParams, AoryxRoomSearch } from "@/types/aoryx";
 import { obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
+import { localizeAoryxRoomOptions } from "@/lib/aoryx-room-localization";
+import { resolveTranslationLocale } from "@/lib/text-translation";
 
 export const runtime = "nodejs";
 
@@ -26,6 +28,11 @@ export async function POST(request: NextRequest) {
       typeof body.nationality === "string" ? body.nationality.trim() : "AM";
     const currency =
       typeof body.currency === "string" ? body.currency.trim() : "USD";
+    const requestedLocale = resolveTranslationLocale(
+      typeof body.locale === "string"
+        ? body.locale
+        : request.headers.get("x-locale") ?? request.headers.get("accept-language")
+    );
     const checkInDate =
       typeof body.checkInDate === "string" && body.checkInDate.trim().length > 0
         ? body.checkInDate.trim()
@@ -81,16 +88,23 @@ export async function POST(request: NextRequest) {
       sessionId: result.sessionId,
       hotelCode,
     });
+    const localizedRooms =
+      requestedLocale === "en"
+        ? obfuscatedRooms
+        : await localizeAoryxRoomOptions(obfuscatedRooms, requestedLocale).catch((error) => {
+            console.error("[Aoryx][room-details] Failed to localize room content", error);
+            return obfuscatedRooms;
+          });
     const roomsWithDisplayPrice =
       typeof hotelMarkup === "number"
-        ? obfuscatedRooms.map((room) => ({
+        ? localizedRooms.map((room) => ({
             ...room,
             displayTotalPrice:
               typeof room.totalPrice === "number" && Number.isFinite(room.totalPrice)
                 ? applyMarkup(room.totalPrice, hotelMarkup) ?? room.totalPrice
                 : room.totalPrice,
           }))
-        : obfuscatedRooms;
+        : localizedRooms;
     const response = NextResponse.json({
       currency: result.currency ?? null,
       rooms: roomsWithDisplayPrice,

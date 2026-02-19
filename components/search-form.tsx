@@ -285,7 +285,7 @@ const matchesLocationSearch = (searchableValue: string, userInput: string) => {
   });
 
   const minimumMatchedTokens =
-    queryTokens.length <= 2 ? 1 : Math.ceil(queryTokens.length * 0.67);
+    queryTokens.length === 1 ? 1 : Math.ceil(queryTokens.length * 0.75);
   return primaryMatched && matchedTokens >= minimumMatchedTokens;
 };
 
@@ -410,10 +410,6 @@ export default function SearchForm({
 }: Props) {
   const defaults = useMemo(() => buildDefaultDates(), []);
   const reactSelectId = useId();
-  const reactSelectInstanceId = useMemo(
-    () => `location-select-${reactSelectId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
-    [reactSelectId],
-  );
   const router = useRouter();
   const { locale: appLocale } = useLanguage();
   const dateFnsLocale = dateFnsLocales[appLocale];
@@ -1158,6 +1154,11 @@ export default function SearchForm({
     return merged;
   }, [destinations, hotels, selectedLocation]);
 
+  const filterLocationOption = useCallback((option: { label: string; value: string; data: LocationOption }, input: string) => {
+    const searchableValue = `${option.label} ${option.data.value}`;
+    return matchesLocationSearch(searchableValue, input);
+  }, []);
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -1181,7 +1182,6 @@ export default function SearchForm({
       {!hideLocationFields && (
         <div className="field">
           <Select<LocationOption>
-            instanceId={reactSelectInstanceId}
             options={combinedOptions}
             value={selectedLocation}
             onChange={(option: SingleValue<LocationOption>) => {
@@ -1207,10 +1207,7 @@ export default function SearchForm({
                 ? copy.loadingDestinations
                 : copy.noLocations
             }
-            filterOption={(option, input) => {
-              const searchableValue = `${option.label} ${option.data.value}`;
-              return matchesLocationSearch(searchableValue, input);
-            }}
+            filterOption={filterLocationOption}
             components={{
               IndicatorSeparator: () => null,
               Control: (props) => {
