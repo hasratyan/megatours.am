@@ -6,11 +6,27 @@ export type SupportedTranslationLocale = "en" | "hy" | "ru";
 const TRANSLATION_CACHE_COLLECTION = "text_translation_cache";
 const TRANSLATION_CACHE_VERSION = "v2";
 const MAX_TRANSLATABLE_CHARS = 12000;
-const OPENAI_TRANSLATION_MODEL =
+const OPENAI_TRANSLATION_MODEL_OVERRIDE =
   typeof process.env.OPENAI_TRANSLATION_MODEL === "string" &&
   process.env.OPENAI_TRANSLATION_MODEL.trim().length > 0
     ? process.env.OPENAI_TRANSLATION_MODEL.trim()
+    : "";
+const OPENAI_TRANSLATION_MODEL_SHORT =
+  typeof process.env.OPENAI_TRANSLATION_MODEL_SHORT === "string" &&
+  process.env.OPENAI_TRANSLATION_MODEL_SHORT.trim().length > 0
+    ? process.env.OPENAI_TRANSLATION_MODEL_SHORT.trim()
     : "gpt-4o-mini";
+const OPENAI_TRANSLATION_MODEL_LONG =
+  typeof process.env.OPENAI_TRANSLATION_MODEL_LONG === "string" &&
+  process.env.OPENAI_TRANSLATION_MODEL_LONG.trim().length > 0
+    ? process.env.OPENAI_TRANSLATION_MODEL_LONG.trim()
+    : "gpt-5-mini";
+const OPENAI_TRANSLATION_LONG_THRESHOLD = Number.parseInt(
+  typeof process.env.OPENAI_TRANSLATION_LONG_THRESHOLD === "string"
+    ? process.env.OPENAI_TRANSLATION_LONG_THRESHOLD
+    : "280",
+  10
+);
 const OPENAI_API_KEY =
   typeof process.env.OPENAI_API_KEY === "string" ? process.env.OPENAI_API_KEY.trim() : "";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -31,6 +47,11 @@ const localeNameMap: Record<SupportedTranslationLocale, string> = {
   en: "English",
   hy: "Armenian",
   ru: "Russian",
+};
+
+const localeScriptRegex: Record<Exclude<SupportedTranslationLocale, "en">, RegExp> = {
+  hy: /[\u0531-\u058F]/,
+  ru: /[\u0400-\u04FF]/,
 };
 
 const normalizeSourceText = (value: string) => value.trim().replace(/\s+/g, " ");
@@ -69,6 +90,43 @@ const shouldTranslateText = (value: string, targetLocale: SupportedTranslationLo
   return true;
 };
 
+const resolveModelForChunk = (sourceTexts: string[], forceLongModel: boolean) => {
+  if (OPENAI_TRANSLATION_MODEL_OVERRIDE) return OPENAI_TRANSLATION_MODEL_OVERRIDE;
+  if (forceLongModel) return OPENAI_TRANSLATION_MODEL_LONG;
+  const threshold = Number.isFinite(OPENAI_TRANSLATION_LONG_THRESHOLD) && OPENAI_TRANSLATION_LONG_THRESHOLD > 0
+    ? OPENAI_TRANSLATION_LONG_THRESHOLD
+    : 280;
+  const hasLongText = sourceTexts.some((text) => text.length >= threshold);
+  return hasLongText ? OPENAI_TRANSLATION_MODEL_LONG : OPENAI_TRANSLATION_MODEL_SHORT;
+};
+
+const shouldRetryWithLongModel = (
+  sourceTexts: string[],
+  translatedTexts: string[],
+  targetLocale: SupportedTranslationLocale
+) => {
+  if (targetLocale === "en") return false;
+  const scriptRegex = localeScriptRegex[targetLocale];
+  let candidateCount = 0;
+  let weakCount = 0;
+
+  sourceTexts.forEach((sourceText, index) => {
+    const source = sourceText.trim();
+    const translated = (translatedTexts[index] ?? "").trim();
+    if (source.length < 12) return;
+    if (!/[A-Za-z]/.test(source)) return;
+    candidateCount += 1;
+
+    const sameText = source.toLocaleLowerCase() === translated.toLocaleLowerCase();
+    const hasTargetScript = scriptRegex.test(translated);
+    if (sameText || !hasTargetScript) {
+      weakCount += 1;
+    }
+  });
+
+  return candidateCount > 0 && weakCount / candidateCount >= 0.6;
+};
+
 const resolveProviderFromHeader = (value: unknown): "openai" | "passthrough" =>
   value === "openai" ? "openai" : "passthrough";
 
@@ -100,9 +158,15 @@ const resolveOpenAiTranslations = (raw: unknown, sourceTexts: string[]): string[
   });
 };
 
+type TranslateChunkOptions = {
+  forceLongModel?: boolean;
+  allowLongRetry?: boolean;
+};
+
 const translateChunkWithOpenAi = async (
   sourceTexts: string[],
-  targetLocale: SupportedTranslationLocale
+  targetLocale: SupportedTranslationLocale,
+  options: TranslateChunkOptions = {}
 ): Promise<{ translations: string[]; provider: "openai" | "passthrough" }> => {
   if (sourceTexts.length === 0) {
     return { translations: [], provider: "passthrough" };
@@ -114,6 +178,7 @@ const translateChunkWithOpenAi = async (
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+  const model = resolveModelForChunk(sourceTexts, Boolean(options.forceLongModel));
 
   try {
     const response = await fetch(OPENAI_API_URL, {
@@ -123,7 +188,7 @@ const translateChunkWithOpenAi = async (
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: OPENAI_TRANSLATION_MODEL,
+        model,
         temperature: 0,
         response_format: { type: "json_object" },
         messages: [
@@ -167,6 +232,22 @@ const translateChunkWithOpenAi = async (
       return { translations: sourceTexts, provider: "passthrough" };
     }
 
+    const canRetryWithLongModel =
+      options.allowLongRetry !== false &&
+      !OPENAI_TRANSLATION_MODEL_OVERRIDE &&
+      model !== OPENAI_TRANSLATION_MODEL_LONG &&
+      shouldRetryWithLongModel(sourceTexts, parsed, targetLocale);
+
+    if (canRetryWithLongModel) {
+      const retried = await translateChunkWithOpenAi(sourceTexts, targetLocale, {
+        forceLongModel: true,
+        allowLongRetry: false,
+      });
+      if (retried.provider === "openai") {
+        return retried;
+      }
+    }
+
     return { translations: parsed, provider: "openai" };
   } catch (error) {
     console.error("[Translation] OpenAI request error", error);
@@ -187,7 +268,7 @@ const readFromCache = async (
     const ids = sourceTexts.map((source) => buildCacheId(source, targetLocale));
     const docs = await collection.find({ _id: { $in: ids } }).toArray();
     return docs.reduce<Map<string, string>>((map, doc) => {
-      // Ignore passthrough cache entries so future requests can still be translated./
+      // Ignore passthrough cache entries so future requests can still be translated.
       if (doc.provider !== "openai") return map;
       map.set(doc.source, doc.translated);
       return map;
