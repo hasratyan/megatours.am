@@ -41,3 +41,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to translate texts" }, { status: 500 });
   }
 }
+//

@@ -187,7 +187,7 @@ const readFromCache = async (
     const ids = sourceTexts.map((source) => buildCacheId(source, targetLocale));
     const docs = await collection.find({ _id: { $in: ids } }).toArray();
     return docs.reduce<Map<string, string>>((map, doc) => {
-      // Ignore passthrough cache entries so future requests can still be translated.
+      // Ignore passthrough cache entries so future requests can still be translated./
       if (doc.provider !== "openai") return map;
       map.set(doc.source, doc.translated);
       return map;
