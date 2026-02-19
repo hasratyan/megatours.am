@@ -3056,7 +3056,7 @@ const translations: Record<Locale, Translation> = {
     featured: {
       title: "Distinguished Hotels with Exclusive Privileges",
       subtitle: "Transparent terms, exclusive benefits, and fast confirmation.",
-      cta: "Explore Hotels Across the Emirates",
+      cta: "View all offers",
     },
     faq: {
       title: "Frequently Asked Questions",
@@ -4517,7 +4517,7 @@ const translations: Record<Locale, Translation> = {
     featured: {
       title: "Отели с эксклюзивными привилегиями",
       subtitle: "Прозрачные условия, эксклюзивные преимущества и быстрое подтверждение.",
-      cta: "Открыть отели по всем эмиратам",
+      cta: "Посмотреть все предложения",
     },
     faq: {
       title: "Часто задаваемые вопросы",
