@@ -1,10 +1,30 @@
 import type { AoryxRoomOption } from "@/types/aoryx";
 import { resolveTranslationLocale, translateTextBatch } from "@/lib/text-translation";
 
+const HTML_TAG_REGEX = /(<[^>]+>)/g;
+const HTML_TAG_ONLY_REGEX = /^<[^>]+>$/;
+
 const trimString = (value: string | null | undefined) => {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const isHtmlString = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value);
+
+const isHtmlTagOnly = (value: string) => HTML_TAG_ONLY_REGEX.test(value.trim());
+
+const extractTranslatableChunks = (value: string | null | undefined): string[] => {
+  if (typeof value !== "string") return [];
+  if (!isHtmlString(value)) {
+    const trimmed = trimString(value);
+    return trimmed ? [trimmed] : [];
+  }
+
+  return value
+    .split(HTML_TAG_REGEX)
+    .map((part) => (isHtmlTagOnly(part) ? null : trimString(part)))
+    .filter((part): part is string => Boolean(part));
 };
 
 const withPreservedPadding = (original: string, translated: string) => {
@@ -15,11 +35,24 @@ const withPreservedPadding = (original: string, translated: string) => {
 
 const applyTranslated = (value: string | null | undefined, dictionary: Map<string, string>) => {
   if (typeof value !== "string") return value ?? null;
-  const trimmed = trimString(value);
-  if (!trimmed) return value;
-  const translated = dictionary.get(trimmed);
-  if (!translated) return value;
-  return withPreservedPadding(value, translated);
+  if (!isHtmlString(value)) {
+    const trimmed = trimString(value);
+    if (!trimmed) return value;
+    const translated = dictionary.get(trimmed);
+    if (!translated) return value;
+    return withPreservedPadding(value, translated);
+  }
+
+  const parts = value.split(HTML_TAG_REGEX);
+  return parts
+    .map((part) => {
+      if (isHtmlTagOnly(part)) return part;
+      const trimmed = trimString(part);
+      if (!trimmed) return part;
+      const translated = dictionary.get(trimmed);
+      return translated ? withPreservedPadding(part, translated) : part;
+    })
+    .join("");
 };
 
 export const localizeAoryxRoomOptions = async (
@@ -37,14 +70,11 @@ export const localizeAoryxRoomOptions = async (
       room.name,
       room.boardType,
       room.meal,
-      room.rateType,
       room.cancellationPolicy,
-      ...(Array.isArray(room.bedTypes) ? room.bedTypes : []),
       ...(Array.isArray(room.inclusions) ? room.inclusions : []),
     ];
     directValues.forEach((value) => {
-      const trimmed = trimString(value);
-      if (trimmed) textBucket.push(trimmed);
+      textBucket.push(...extractTranslatableChunks(value));
     });
 
     (room.policies ?? []).forEach((policy) => {
@@ -53,14 +83,12 @@ export const localizeAoryxRoomOptions = async (
         ...(policy?.conditions ?? []).map((condition) => condition?.text ?? null),
       ];
       conditionValues.forEach((value) => {
-        const trimmed = trimString(value);
-        if (trimmed) textBucket.push(trimmed);
+        textBucket.push(...extractTranslatableChunks(value));
       });
     });
 
     (room.remarks ?? []).forEach((remark) => {
-      const trimmed = trimString(remark?.text);
-      if (trimmed) textBucket.push(trimmed);
+      textBucket.push(...extractTranslatableChunks(remark?.text));
     });
   });
 
@@ -79,11 +107,9 @@ export const localizeAoryxRoomOptions = async (
     name: applyTranslated(room.name, dictionary),
     boardType: applyTranslated(room.boardType, dictionary),
     meal: applyTranslated(room.meal, dictionary),
-    rateType: applyTranslated(room.rateType, dictionary),
+    rateType: room.rateType,
     cancellationPolicy: applyTranslated(room.cancellationPolicy, dictionary),
-    bedTypes: Array.isArray(room.bedTypes)
-      ? room.bedTypes.map((bedType) => applyTranslated(bedType, dictionary) ?? bedType)
-      : room.bedTypes,
+    bedTypes: room.bedTypes,
     inclusions: Array.isArray(room.inclusions)
       ? room.inclusions.map((item) => applyTranslated(item, dictionary) ?? item)
       : room.inclusions,

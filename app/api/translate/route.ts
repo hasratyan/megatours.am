@@ -4,7 +4,7 @@ import { resolveTranslationLocale, translateTextBatch } from "@/lib/text-transla
 export const runtime = "nodejs";
 
 const MAX_ITEMS = 100;
-const MAX_TEXT_LENGTH = 3000;
+const MAX_TEXT_LENGTH = 12000;
 
 const parseTexts = (value: unknown): string[] | null => {
   if (!Array.isArray(value)) return null;

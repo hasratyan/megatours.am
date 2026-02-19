@@ -4,6 +4,8 @@ import { getDb } from "@/lib/db";
 export type SupportedTranslationLocale = "en" | "hy" | "ru";
 
 const TRANSLATION_CACHE_COLLECTION = "text_translation_cache";
+const TRANSLATION_CACHE_VERSION = "v2";
+const MAX_TRANSLATABLE_CHARS = 12000;
 const OPENAI_TRANSLATION_MODEL =
   typeof process.env.OPENAI_TRANSLATION_MODEL === "string" &&
   process.env.OPENAI_TRANSLATION_MODEL.trim().length > 0
@@ -34,7 +36,7 @@ const localeNameMap: Record<SupportedTranslationLocale, string> = {
 const normalizeSourceText = (value: string) => value.trim().replace(/\s+/g, " ");
 
 const buildCacheId = (source: string, targetLocale: SupportedTranslationLocale) =>
-  createHash("sha256").update(`${targetLocale}:${source}`).digest("hex");
+  createHash("sha256").update(`${TRANSLATION_CACHE_VERSION}:${targetLocale}:${source}`).digest("hex");
 
 const cleanupJsonString = (value: string) => {
   const trimmed = value.trim();
@@ -56,15 +58,13 @@ const chunkArray = <T>(items: T[], size: number) => {
 };
 
 const hasLetterContent = (value: string) => /[\p{L}]/u.test(value);
-const hasHtmlTag = (value: string) => /<\/?[a-z][^>]*>/i.test(value);
 const looksLikeShortCode = (value: string) => /^[A-Z0-9_/-]{1,8}$/.test(value);
 
 const shouldTranslateText = (value: string, targetLocale: SupportedTranslationLocale) => {
   if (targetLocale === "en") return false;
   if (value.length < 2) return false;
-  if (value.length > 3000) return false;
+  if (value.length > MAX_TRANSLATABLE_CHARS) return false;
   if (!hasLetterContent(value)) return false;
-  if (hasHtmlTag(value)) return false;
   if (looksLikeShortCode(value)) return false;
   return true;
 };
@@ -134,6 +134,8 @@ const translateChunkWithOpenAi = async (
               `Target language: ${localeNameMap[targetLocale]}.`,
               "Rules:",
               "- Keep numbers, percentages, dates, currencies, and proper hotel/brand names unchanged.",
+              "- Translate all natural-language sentences to target language.",
+              "- Do not leave English unchanged unless the text is only code/name/unit/currency.",
               "- Keep punctuation and formatting style.",
               "- Do not add explanations.",
               "- Return strict JSON only: {\"translations\":[...]}",
