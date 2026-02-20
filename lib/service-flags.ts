@@ -1,11 +1,11 @@
 import { getDb } from "@/lib/db";
-import type { PackageBuilderService, ServiceFlags } from "@/lib/package-builder-state";
+import type { ServiceFlagKey, ServiceFlags } from "@/lib/package-builder-state";
 import { DEFAULT_SERVICE_FLAGS } from "@/lib/package-builder-state";
 
 const COLLECTION = "service_flags";
 const DOC_ID = "service_flags";
 
-const serviceKeys = Object.keys(DEFAULT_SERVICE_FLAGS) as PackageBuilderService[];
+const serviceKeys = Object.keys(DEFAULT_SERVICE_FLAGS) as ServiceFlagKey[];
 
 const normalizeFlags = (value: unknown, base: ServiceFlags = DEFAULT_SERVICE_FLAGS): ServiceFlags => {
   const record =

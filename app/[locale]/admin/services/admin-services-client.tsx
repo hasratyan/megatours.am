@@ -4,7 +4,7 @@ import { useState } from "react";
 import { postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { useTranslations } from "@/components/language-provider";
-import type { PackageBuilderService, ServiceFlags } from "@/lib/package-builder-state";
+import type { ServiceFlagKey, ServiceFlags } from "@/lib/package-builder-state";
 import type { CheckoutPaymentMethod, PaymentMethodFlags } from "@/lib/payment-method-flags";
 
 type AdminServicesClientProps = {
@@ -13,12 +13,13 @@ type AdminServicesClientProps = {
   initialPaymentMethodFlags: PaymentMethodFlags;
 };
 
-const serviceOrder: PackageBuilderService[] = [
+const serviceOrder: ServiceFlagKey[] = [
   "hotel",
   "flight",
   "transfer",
   "excursion",
   "insurance",
+  "aiChat",
 ];
 
 const paymentMethodOrder: CheckoutPaymentMethod[] = ["idram", "idbank_card", "ameria_card"];
@@ -37,7 +38,7 @@ export default function AdminServicesClient({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const toggleFlag = (service: PackageBuilderService) => {
+  const toggleFlag = (service: ServiceFlagKey) => {
     setFlags((prev) => ({ ...prev, [service]: !prev[service] }));
     setSaved(false);
     setError(null);
@@ -78,6 +79,11 @@ export default function AdminServicesClient({
     ameria_card: t.packageBuilder.checkout.methodCardAmeria,
   };
 
+  const getServiceLabel = (service: ServiceFlagKey) => {
+    if (service === "aiChat") return t.admin.services.aiChatLabel;
+    return t.packageBuilder.services[service];
+  };
+
   return (
     <>
       <section className="admin-hero">
@@ -111,7 +117,7 @@ export default function AdminServicesClient({
                 className={`admin-service-card${enabled ? "" : " is-disabled"}`}
               >
                 <div>
-                  <strong>{t.packageBuilder.services[service]}</strong>
+                  <strong>{getServiceLabel(service)}</strong>
                   <small>
                     {enabled ? t.admin.services.status.enabled : t.admin.services.status.disabled}
                   </small>

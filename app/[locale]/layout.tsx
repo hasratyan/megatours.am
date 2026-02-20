@@ -2,6 +2,7 @@ import * as React from "react";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import PackageBuilder from "@/components/package-builder";
+import PackageBuilderAiChat from "@/components/package-builder-ai-chat";
 import PromoPopup from "@/components/promo-popup";
 import { locales, Locale } from "@/lib/i18n";
 
@@ -29,6 +30,7 @@ export default async function LocaleLayout({ children, params }: LayoutProps) {
       {children}
       <PromoPopup />
       <Footer locale={locale} />
+      <PackageBuilderAiChat locale={locale as Locale} />
       <PackageBuilder />
     </div>
   );

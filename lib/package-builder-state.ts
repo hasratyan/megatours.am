@@ -1,12 +1,14 @@
 export type PackageBuilderService = "hotel" | "flight" | "transfer" | "excursion" | "insurance";
 
-export type ServiceFlags = Record<PackageBuilderService, boolean>;
+export type ServiceFlagKey = PackageBuilderService | "aiChat";
+export type ServiceFlags = Record<ServiceFlagKey, boolean>;
 export const DEFAULT_SERVICE_FLAGS: ServiceFlags = {
   hotel: true,
   flight: true,
   transfer: true,
   excursion: true,
   insurance: true,
+  aiChat: true,
 };
 
 import type {

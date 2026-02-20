@@ -562,6 +562,7 @@ export type Translation = {
       subtitle: string;
       panelTitle: string;
       note: string;
+      aiChatLabel: string;
       saved: string;
       actions: {
         save: string;
@@ -1996,7 +1997,8 @@ const translations: Record<Locale, Translation> = {
       title: "Ծառայությունների հասանելիություն",
       subtitle: "Ակտիվացրեք կամ անջատեք ծառայությունները օգտատերերի համար։",
       panelTitle: "Հասանելի ծառայություններ",
-      note: "Անջատված ծառայությունները անգործուն կլինեն փաթեթ կազմելու ընթացքում։",
+      note: "Անջատված տարբերակները անգործուն կլինեն կայքում և փաթեթ կազմելու ընթացքում։",
+      aiChatLabel: "AI Chat օգնական",
       saved: "Պահպանված է",
       actions: {
         save: "Պահպանել փոփոխությունները",
@@ -3454,7 +3456,8 @@ const translations: Record<Locale, Translation> = {
       title: "Service Availability",
       subtitle: "Enable or disable services for users.",
       panelTitle: "Available services",
-      note: "Disabled services will be inactive in the package builder.",
+      note: "Disabled options will be unavailable on the website and in the package builder.",
+      aiChatLabel: "AI Chat Assistant",
       saved: "Changes saved.",
       actions: {
         save: "Save changes",
@@ -4915,7 +4918,8 @@ const translations: Record<Locale, Translation> = {
       title: "Доступность услуг",
       subtitle: "Включайте или отключайте услуги для пользователей.",
       panelTitle: "Доступные услуги",
-      note: "Отключенные услуги будут недоступны в конструкторе пакета.",
+      note: "Отключенные опции будут недоступны на сайте и в конструкторе пакета.",
+      aiChatLabel: "AI чат-ассистент",
       saved: "Изменения сохранены.",
       actions: {
         save: "Сохранить изменения",
