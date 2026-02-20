@@ -3,6 +3,9 @@ import {
   AORYX_API_KEY,
   AORYX_BASE_URL,
   AORYX_CUSTOMER_CODE,
+  AORYX_TEST_API_KEY,
+  AORYX_TEST_CUSTOMER_CODE,
+  AORYX_TEST_URL,
   AORYX_TIMEOUT_MS,
   AORYX_DEFAULT_CURRENCY,
   AORYX_TASSPRO_CUSTOMER_CODE,
@@ -53,10 +56,18 @@ const STATIC_ENDPOINTS = {
 
 type AoryxDistributionEndpoint = (typeof DISTRIBUTION_ENDPOINTS)[keyof typeof DISTRIBUTION_ENDPOINTS];
 type AoryxStaticEndpoint = (typeof STATIC_ENDPOINTS)[keyof typeof STATIC_ENDPOINTS];
+export type AoryxEnvironment = "live" | "test";
+
+type AoryxResolvedConfig = {
+  baseUrl: string;
+  apiKey: string;
+  customerCode: string;
+};
 
 // Request options
 interface AoryxRequestOptions {
   timeoutMs?: number;
+  environment?: AoryxEnvironment;
 }
 
 // Error classes
@@ -138,12 +149,49 @@ function pascalizeKeys(value: unknown): unknown {
 }
 
 // Ensure base URL is available
-function ensureBaseUrl(): string {
+function ensureLiveBaseUrl(): string {
   if (!AORYX_BASE_URL) {
     throw new AoryxClientError("Missing AORYX_BASE_URL configuration");
   }
   return AORYX_BASE_URL.replace(/\/$/, "");
 }
+
+function resolveStaticConfig(): AoryxResolvedConfig {
+  if (!AORYX_API_KEY) {
+    throw new AoryxClientError("Missing AORYX_API_KEY configuration");
+  }
+
+  return {
+    baseUrl: ensureLiveBaseUrl(),
+    apiKey: AORYX_API_KEY,
+    customerCode: AORYX_CUSTOMER_CODE ?? "",
+  };
+}
+
+function resolveDistributionConfig(environment: AoryxEnvironment): AoryxResolvedConfig {
+  if (environment === "test") {
+    if (!AORYX_TEST_URL) {
+      throw new AoryxClientError("Missing AORYX_TEST_URL configuration");
+    }
+    if (!AORYX_TEST_API_KEY) {
+      throw new AoryxClientError("Missing AORYX_TEST_API_KEY configuration");
+    }
+
+    return {
+      baseUrl: AORYX_TEST_URL.replace(/\/$/, ""),
+      apiKey: AORYX_TEST_API_KEY,
+      customerCode: AORYX_TEST_CUSTOMER_CODE ?? "",
+    };
+  }
+
+  return resolveStaticConfig();
+}
+
+const staticEndpoints = new Set<AoryxStaticEndpoint>(Object.values(STATIC_ENDPOINTS));
+
+const isStaticEndpoint = (
+  endpoint: AoryxDistributionEndpoint | AoryxStaticEndpoint
+): endpoint is AoryxStaticEndpoint => staticEndpoints.has(endpoint as AoryxStaticEndpoint);
 
 // Core request function
 async function coreRequest<TRequest, TResponse>(
@@ -151,12 +199,11 @@ async function coreRequest<TRequest, TResponse>(
   payload: TRequest,
   options: AoryxRequestOptions = {}
 ): Promise<TResponse> {
-  if (!AORYX_API_KEY) {
-    throw new AoryxClientError("Missing AORYX_API_KEY configuration", endpoint);
-  }
-
-  const baseUrl = ensureBaseUrl();
-  const url = `${baseUrl}/${endpoint}`;
+  const environment = options.environment ?? "live";
+  const config = isStaticEndpoint(endpoint)
+    ? resolveStaticConfig()
+    : resolveDistributionConfig(environment);
+  const url = `${config.baseUrl}/${endpoint}`;
   const timeoutMs = options.timeoutMs ?? AORYX_TIMEOUT_MS;
 
   const controller = new AbortController();
@@ -170,8 +217,8 @@ async function coreRequest<TRequest, TResponse>(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ApiKey: AORYX_API_KEY,
-        ...(AORYX_CUSTOMER_CODE ? { CustomerCode: AORYX_CUSTOMER_CODE } : {}),
+        ApiKey: config.apiKey,
+        ...(config.customerCode ? { CustomerCode: config.customerCode } : {}),
       },
       body: JSON.stringify(pascalizedPayload),
       signal: controller.signal,
@@ -908,13 +955,20 @@ function validateSearchParams(params: AoryxSearchParams): void {
  * Search for hotels
  */
 export async function search(params: AoryxSearchParams): Promise<AoryxSearchResult> {
+  return searchWithOptions(params);
+}
+
+export async function searchWithOptions(
+  params: AoryxSearchParams,
+  options: AoryxRequestOptions = {}
+): Promise<AoryxSearchResult> {
   validateSearchParams(params);
   const request = buildSearchRequest(params);
 
   const response = await coreRequest<AoryxSearchRequest, AoryxSearchResponse>(
     DISTRIBUTION_ENDPOINTS.search,
     request,
-    { timeoutMs: 60000 } // Search can take longer
+    { ...options, timeoutMs: 60000 } // Search can take longer
   );
 
   if (!response.IsSuccess && response.ExceptionMessage) {
@@ -951,12 +1005,19 @@ export async function search(params: AoryxSearchParams): Promise<AoryxSearchResu
  * Get room options for a hotel (requires search parameters for availability).
  */
 export async function roomDetails(params: AoryxSearchParams): Promise<AoryxRoomDetailsResult> {
+  return roomDetailsWithOptions(params);
+}
+
+export async function roomDetailsWithOptions(
+  params: AoryxSearchParams,
+  options: AoryxRequestOptions = {}
+): Promise<AoryxRoomDetailsResult> {
   validateSearchParams(params);
   if (!params.hotelCode) {
     throw new AoryxServiceError("Hotel code is required for room details", "INVALID_PARAMS");
   }
 
-  const { sessionId, currency } = await search(params);
+  const { sessionId, currency } = await searchWithOptions(params, options);
   const searchRequest = buildSearchRequest(params);
   const request: AoryxRoomDetailsRequest = {
     hotelCode: params.hotelCode,
@@ -967,7 +1028,7 @@ export async function roomDetails(params: AoryxSearchParams): Promise<AoryxRoomD
   const response = await coreRequest<AoryxRoomDetailsRequest, AoryxRoomDetailsResponse>(
     DISTRIBUTION_ENDPOINTS.roomDetails,
     request,
-    { timeoutMs: 60000 }
+    { ...options, timeoutMs: 60000 }
   );
 
   if (response.IsSuccess === false) {
@@ -994,7 +1055,8 @@ export async function preBook(
   hotelCode: string,
   groupCode: number,
   rateKeys: string[],
-  currency?: string
+  currency?: string,
+  options: AoryxRequestOptions = {}
 ): Promise<AoryxPreBookResult> {
   if (!sessionId) {
     throw new AoryxServiceError("Session ID is required for prebook", "INVALID_PARAMS");
@@ -1014,7 +1076,7 @@ export async function preBook(
   const response = await coreRequest<AoryxRateKeysRequest, AoryxPreBookResponse>(
     DISTRIBUTION_ENDPOINTS.preBook,
     request,
-    { timeoutMs: 60000 }
+    { ...options, timeoutMs: 60000 }
   );
 
   if (response.IsSuccess === false) {
@@ -1047,12 +1109,19 @@ export async function preBook(
  * Book a prebooked rate.
  */
 export async function book(payload: AoryxBookingPayload): Promise<AoryxBookingResult> {
+  return bookWithOptions(payload);
+}
+
+export async function bookWithOptions(
+  payload: AoryxBookingPayload,
+  options: AoryxRequestOptions = {}
+): Promise<AoryxBookingResult> {
   const request = buildBookingRequest(payload);
 
   const response = await coreRequest<AoryxBookingRequest, AoryxBookingResponse>(
     DISTRIBUTION_ENDPOINTS.book,
     request,
-    { timeoutMs: 60000 }
+    { ...options, timeoutMs: 60000 }
   );
 
   if (response.IsSuccess === false) {
@@ -1269,9 +1338,12 @@ export function normalizeParentDestinationId(rawId?: string): string | null {
 // Export the client object for easy access
 export const aoryxClient = {
   search,
+  searchWithOptions,
   roomDetails,
+  roomDetailsWithOptions,
   preBook,
   book,
+  bookWithOptions,
   hotelsInfoByDestinationId,
   hotelInfo,
   normalizeParentDestinationId,

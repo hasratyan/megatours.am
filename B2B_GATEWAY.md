@@ -94,6 +94,7 @@ Headers returned:
 
 - `x-request-id`
 - `x-b2b-client-id`
+- `x-b2b-aoryx-environment`
 - `x-ratelimit-limit`
 - `x-ratelimit-remaining`
 - `x-ratelimit-reset` (unix seconds)
@@ -109,12 +110,26 @@ B2B_API_ALLOWED_HOSTS=megatours.cloud
 # Default if client-level rateLimitPerMinute is omitted
 B2B_API_DEFAULT_RATE_LIMIT_PER_MINUTE=120
 
+# Aoryx live distribution endpoint
+AORYX_BASE_URL=https://apiv2.giinfotech.ae/api/v2/hotel
+AORYX_API_KEY=replace_with_live_key
+AORYX_CUSTOMER_CODE=replace_with_live_customer_code
+
+# Aoryx test distribution endpoint (used only when partner config sets aoryxEnvironment=test)
+AORYX_TEST_URL=http://uat-apiv2.giinfotech.ae/api/v2/hotel
+AORYX_TEST_API_KEY=replace_with_test_key
+AORYX_TEST_CUSTOMER_CODE=replace_with_test_customer_code
+
 # Preferred: JSON list of clients
-B2B_API_CLIENTS_JSON=[{"id":"partner-a","name":"Partner A","token":"replace_with_secret","scopes":["hotels:search","hotels:book","insurance:quote"],"rateLimitPerMinute":60,"allowedIps":["203.0.113.10"]}]
+B2B_API_CLIENTS_JSON=[{"id":"partner-a-live","name":"Partner A Live","token":"replace_with_live_secret","scopes":["hotels:search","hotels:book","insurance:quote"],"rateLimitPerMinute":60,"allowedIps":["203.0.113.10"],"aoryxEnvironment":"live"},{"id":"partner-a-test","name":"Partner A Test","token":"replace_with_test_secret","scopes":["hotels:search","hotels:book","insurance:quote"],"rateLimitPerMinute":60,"allowedIps":["203.0.113.10"],"aoryxEnvironment":"test"}]
 
 # Optional fallback for one global client (full scope)
 # B2B_API_TOKEN=replace_with_single_shared_token
 ```
+
+Notes:
+- `aoryxEnvironment` supports `live` and `test` (default: `live`).
+- Static Aoryx content endpoints remain on live host for all partners (`/v1/destinations`, `/v1/hotels/info` via DB-backed content).
 
 Generate strong tokens:
 

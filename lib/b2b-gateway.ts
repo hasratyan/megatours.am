@@ -8,6 +8,7 @@ type ParsedClientConfig = {
   scopes: Set<string>;
   allowedIps: string[] | null;
   rateLimitPerMinute: number;
+  aoryxEnvironment: B2bAoryxEnvironment;
 };
 
 type RateLimitState = {
@@ -32,6 +33,7 @@ export type B2bGatewayContext = {
   clientId: string;
   clientName: string;
   scopes: string[];
+  aoryxEnvironment: B2bAoryxEnvironment;
   rateLimit: {
     limit: number;
     remaining: number;
@@ -42,6 +44,8 @@ export type B2bGatewayContext = {
 export type B2bGatewayAuthResult =
   | { ok: true; context: B2bGatewayContext }
   | { ok: false; response: NextResponse };
+
+export type B2bAoryxEnvironment = "live" | "test";
 
 const ONE_MINUTE_MS = 60_000;
 const DEFAULT_RATE_LIMIT_PER_MINUTE = 120;
@@ -99,6 +103,12 @@ const parseAllowedIps = (rawAllowedIps: unknown): string[] | null => {
   return ips.length > 0 ? ips : null;
 };
 
+const parseAoryxEnvironment = (rawEnvironment: unknown): B2bAoryxEnvironment => {
+  if (typeof rawEnvironment !== "string") return "live";
+  const normalized = rawEnvironment.trim().toLowerCase();
+  return normalized === "test" ? "test" : "live";
+};
+
 const parseClientsFromJson = (
   raw: string,
   defaultRateLimitPerMinute: number
@@ -126,6 +136,9 @@ const parseClientsFromJson = (
         record.rateLimitPerMinute,
         defaultRateLimitPerMinute
       );
+      const aoryxEnvironment = parseAoryxEnvironment(
+        record.aoryxEnvironment ?? record.environment ?? record.aoryxEnv
+      );
 
       clients.push({
         id,
@@ -134,6 +147,7 @@ const parseClientsFromJson = (
         scopes: parseScopes(record.scopes),
         allowedIps: parseAllowedIps(record.allowedIps),
         rateLimitPerMinute,
+        aoryxEnvironment,
       });
     }
     return clients;
@@ -164,6 +178,7 @@ const getParsedClients = () => {
       scopes: new Set<string>(["*"]),
       allowedIps: null,
       rateLimitPerMinute: defaultRateLimitPerMinute,
+      aoryxEnvironment: "live",
     });
   }
 
@@ -284,6 +299,7 @@ export const withB2bGatewayHeaders = (
   response.headers.set("x-ratelimit-limit", String(context.rateLimit.limit));
   response.headers.set("x-ratelimit-remaining", String(context.rateLimit.remaining));
   response.headers.set("x-ratelimit-reset", String(context.rateLimit.resetEpochSeconds));
+  response.headers.set("x-b2b-aoryx-environment", context.aoryxEnvironment);
   response.headers.set("cache-control", "no-store");
   return response;
 };
@@ -366,6 +382,7 @@ export const authenticateB2bRequest = (
       clientId: client.id,
       clientName: client.name,
       scopes: Array.from(client.scopes.values()),
+      aoryxEnvironment: client.aoryxEnvironment,
       rateLimit: {
         limit: rateLimit.limit,
         remaining: rateLimit.remaining,

@@ -102,7 +102,9 @@ export async function POST(request: NextRequest) {
       rooms,
     };
 
-    const result = await runAoryxSearch(payload);
+    const result = await runAoryxSearch(payload, {
+      environment: auth.context.aoryxEnvironment,
+    });
     return withB2bGatewayHeaders(
       NextResponse.json({
         requestId: auth.context.requestId,
@@ -150,4 +152,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

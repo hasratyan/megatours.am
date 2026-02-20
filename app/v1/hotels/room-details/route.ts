@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AoryxClientError, AoryxServiceError, roomDetails } from "@/lib/aoryx-client";
+import {
+  AoryxClientError,
+  AoryxServiceError,
+  roomDetailsWithOptions,
+} from "@/lib/aoryx-client";
 import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env";
 import { obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
 import { authenticateB2bRequest, withB2bGatewayHeaders } from "@/lib/b2b-gateway";
@@ -107,7 +111,9 @@ export async function POST(request: NextRequest) {
       rooms,
     };
 
-    const result = await roomDetails(params);
+    const result = await roomDetailsWithOptions(params, {
+      environment: auth.context.aoryxEnvironment,
+    });
     const hotelMarkup = await getAoryxHotelB2BPlatformFee();
     const obfuscatedRooms = obfuscateRoomOptions(result.rooms, {
       sessionId: result.sessionId,

@@ -1,4 +1,9 @@
-import { search, AoryxClientError, AoryxServiceError } from "@/lib/aoryx-client";
+import {
+  searchWithOptions,
+  type AoryxEnvironment,
+  AoryxClientError,
+  AoryxServiceError,
+} from "@/lib/aoryx-client";
 import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env";
 import { getAoryxHotelB2BPlatformFee } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
@@ -13,9 +18,18 @@ export const withAoryxDefaults = (payload: AoryxSearchParams): AoryxSearchParams
   regionId: payload.regionId ?? AORYX_TASSPRO_REGION_ID,
 });
 
-export async function runAoryxSearch(payload: AoryxSearchParams): Promise<SafeSearchResult> {
+type RunAoryxSearchOptions = {
+  environment?: AoryxEnvironment;
+};
+
+export async function runAoryxSearch(
+  payload: AoryxSearchParams,
+  options: RunAoryxSearchOptions = {}
+): Promise<SafeSearchResult> {
   const params = withAoryxDefaults(payload);
-  const result = await search(params);
+  const result = await searchWithOptions(params, {
+    environment: options.environment ?? "live",
+  });
   const safeResult: SafeSearchResult = {
     currency: result.currency,
     propertyCount: result.propertyCount,

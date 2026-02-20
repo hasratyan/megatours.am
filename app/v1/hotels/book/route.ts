@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AoryxClientError, AoryxServiceError, book } from "@/lib/aoryx-client";
+import { AoryxClientError, AoryxServiceError, bookWithOptions } from "@/lib/aoryx-client";
 import { parseBookingPayload } from "@/lib/aoryx-booking";
 import { obfuscateBookingResult } from "@/lib/aoryx-rate-tokens";
 import { authenticateB2bRequest, withB2bGatewayHeaders } from "@/lib/b2b-gateway";
@@ -108,7 +108,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await book(payload);
+    const result = await bookWithOptions(payload, {
+      environment: auth.context.aoryxEnvironment,
+    });
     const obfuscatedResult = obfuscateBookingResult(result);
     const emptyServices: B2bServicesBookingResult = {
       transfer: { status: "skipped", referenceId: null, message: null },

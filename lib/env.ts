@@ -4,9 +4,12 @@
 const {
   AORYX_BASE_URL: RAW_AORYX_BASE_URL = "",
   AORYX_API_KEY = "",
+  AORYX_TEST_URL: RAW_AORYX_TEST_URL = "",
+  AORYX_TEST_API_KEY = "",
   AORYX_DEFAULT_CURRENCY = "USD",
   AORYX_TIMEOUT_MS_RAW = "15000",
   AORYX_CUSTOMER_CODE,
+  AORYX_TEST_CUSTOMER_CODE,
   FLYDUBAI_SEARCH_URL: RAW_FLYDUBAI_SEARCH_URL = "",
   FLYDUBAI_API_KEY = "",
   FLYDUBAI_ACCESS_TOKEN = "",
@@ -33,7 +36,14 @@ function normalizeBaseUrl(url: string): string {
 }
 
 export const AORYX_BASE_URL = normalizeBaseUrl(RAW_AORYX_BASE_URL);
-export { AORYX_API_KEY, AORYX_DEFAULT_CURRENCY, AORYX_CUSTOMER_CODE };
+export const AORYX_TEST_URL = normalizeBaseUrl(RAW_AORYX_TEST_URL);
+export {
+  AORYX_API_KEY,
+  AORYX_TEST_API_KEY,
+  AORYX_DEFAULT_CURRENCY,
+  AORYX_CUSTOMER_CODE,
+  AORYX_TEST_CUSTOMER_CODE,
+};
 export const AORYX_TIMEOUT_MS_NUMBER = Number.parseInt(AORYX_TIMEOUT_MS_RAW, 10);
 export const AORYX_TIMEOUT_MS = AORYX_TIMEOUT_MS_NUMBER;
 
@@ -65,6 +75,10 @@ export const AORYX_TASSPRO_REGION_ID = "93";
 // Validation helper
 export function isAoryxConfigured(): boolean {
   return Boolean(AORYX_API_KEY && AORYX_BASE_URL);
+}
+
+export function isAoryxTestConfigured(): boolean {
+  return Boolean(AORYX_TEST_API_KEY && AORYX_TEST_URL);
 }
 
 export function isFlydubaiConfigured(): boolean {

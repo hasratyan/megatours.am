@@ -171,7 +171,9 @@ export async function POST(request: NextRequest) {
     }
 
     const currency = parseString((body as { currency?: unknown }).currency) || undefined;
-    const result = await preBook(sessionId, hotelCode, resolvedGroupCode, rateKeys, currency);
+    const result = await preBook(sessionId, hotelCode, resolvedGroupCode, rateKeys, currency, {
+      environment: auth.context.aoryxEnvironment,
+    });
     const hotelMarkup = await getAoryxHotelB2BPlatformFee();
     const resolvedSessionId = result.sessionId || sessionId;
     const obfuscatedRooms = obfuscateRoomOptions(result.rooms, {
