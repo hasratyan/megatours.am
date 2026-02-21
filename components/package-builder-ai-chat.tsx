@@ -594,11 +594,12 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
             onChange={(event) => setInputValue(event.target.value)}
             onKeyDown={onInputKeyDown}
             disabled={isSending}
-            rows={2}
+            rows={4}
             maxLength={700}
           />
           <button type="submit" disabled={isSending || inputValue.trim().length === 0}>
-            {copy.send}
+            {/* {copy.send} */}
+            <span className="material-symbols-outlined">send</span>
           </button>
         </form>
 

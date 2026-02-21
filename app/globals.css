@@ -7872,7 +7872,7 @@ select:focus-visible {
     padding: 1.5rem;
     border: 1px solid rgba(148, 163, 184, 0.2);
     background: linear-gradient(160deg, #0f172a9e, #090e18d6);
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(15px) saturate(150%);
     box-shadow: 0 15px 100px 30px #0f172af5;
     overflow: auto;
     display: flex;
@@ -9084,21 +9084,17 @@ select:focus-visible {
 .concierge-ai__panel{
   position: absolute;
   right: 0;
-  bottom: 3.6rem;
+  bottom: 3.5rem;
   width: min(420px, calc(100vw - 2.6rem));
-  background:
-    radial-gradient(130% 140% at 8% -15%, rgba(124, 242, 212, 0.22), transparent 50%),
-    radial-gradient(120% 120% at 110% 0%, rgba(56, 189, 248, 0.2), transparent 52%),
-    linear-gradient(165deg, rgba(10, 16, 36, 0.97), rgba(4, 8, 22, 0.98));
+  background:linear-gradient(160deg, #0f172a9e, #090e18d6);
   border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 1.2rem;
-  backdrop-filter: blur(16px) saturate(150%);
-  box-shadow: 0 24px 70px rgba(2, 6, 23, 0.75);
-  color: #e2e8f0;
-  padding: 0.9rem;
+  border-radius: 1.5rem;
+  backdrop-filter: blur(20px) saturate(100%);
+  box-shadow: 0 25px 70px rgba(2, 6, 23, 0.75);
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
+  gap: 1rem;
   transform: translateY(18px) scale(0.97);
   transform-origin: right bottom;
   opacity: 0;
@@ -9119,35 +9115,38 @@ select:focus-visible {
   align-items: flex-start;
   justify-content: space-between;
   display: flex;
-  gap: 0.8rem;
-}
+  gap: 0.5rem;
+  border-bottom: 1px dashed #94a3b83d;
+  padding-bottom: 0.75rem;
 
-.concierge-ai__header h2{
-  color: #f8fafc;
-  font-size: 1.05rem;
-  line-height: 1.15;
-  margin-bottom: 0.3rem;
-}
+  h2{
+    color: #f8fafc;
+    font-size: 1.25rem;
+    font-weight: 500;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+  }
 
-.concierge-ai__header p{
-  color: #94a3b8;
-  font-size: 0.82rem;
-  line-height: 1.35;
-}
+  p{
+    color: #94a3b8;
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
 
-.concierge-ai__close{
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  color: #cbd5e1;
-  padding: 0.35rem;
-  min-width: 34px;
-  min-height: 34px;
+  .concierge-ai__close{
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: #cbd5e1;
+    min-width: 40px;
+    min-height: 40px;
+    padding: .5rem;
+  }
 }
 
 .concierge-ai__chips{
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 
 .concierge-ai__chips span{
@@ -9161,108 +9160,111 @@ select:focus-visible {
 
 .concierge-ai__content{
   display: grid;
-  gap: 0.6rem;
+  gap: 0.75rem;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 0.2rem;
   overscroll-behavior: contain;
+
+  .concierge-ai__messages{
+    display: grid;
+    gap: 0.75rem;
+
+    .concierge-ai__message{
+      border: 1px solid #94a3b83d;
+      border-radius: 1rem;
+      width: fit-content;
+      min-width: 0;
+      max-width: 90%;
+      padding: 0.7rem 1rem;
+
+      &.concierge-ai__message--assistant{
+        background: rgba(15, 23, 42, 0.65);
+        color: #e2e8f0;
+        border-bottom-left-radius: 0;
+      }
+
+      &.concierge-ai__message--user{
+        margin-left: auto;
+        background: linear-gradient(135deg, rgba(20, 184, 166, 0.26), rgba(14, 165, 233, 0.25));
+        border-color: rgba(124, 242, 212, 0.3);
+        color: #ecfeff;
+        border-bottom-right-radius: 0;
+      }
+
+      p{
+        font-size: 0.9rem;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+    }
+  }
 }
 
-.concierge-ai__messages{
-  display: grid;
-  gap: 0.55rem;
-}
-
-.concierge-ai__message{
-  width: fit-content;
-  max-width: 92%;
-  border-radius: 0.95rem;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  line-height: 1.4;
-  padding: 0.55rem 0.7rem;
-  min-width: 0;
-}
-
-.concierge-ai__message p{
-  font-size: 0.86rem;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.concierge-ai__message--assistant{
-  background: rgba(15, 23, 42, 0.65);
-  color: #e2e8f0;
-}
-
-.concierge-ai__message--user{
-  margin-left: auto;
-  background: linear-gradient(135deg, rgba(20, 184, 166, 0.26), rgba(14, 165, 233, 0.25));
-  border-color: rgba(124, 242, 212, 0.3);
-  color: #ecfeff;
-}
 
 .concierge-ai__typing{
-  font-size: 0.78rem;
+  font-size: 0.9rem;
   color: #7dd3fc;
 }
 
 .concierge-ai__missing{
-  font-size: 0.78rem;
+  font-size: 0.9rem;
   color: #cbd5e1;
 }
 
 .concierge-ai__options{
   display: grid;
-  gap: 0.6rem;
-}
-
-.concierge-ai__options h3{
-  color: #f8fafc;
-  font-size: 0.95rem;
-}
-
-.concierge-ai__options-grid{
-  display: grid;
   gap: 0.5rem;
-}
 
-.concierge-ai__option-card{
-  border-radius: 0.95rem;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(15, 23, 42, 0.6);
-  padding: 0.65rem;
-  display: grid;
-  gap: 0.45rem;
-  min-width: 0;
-}
+  h3{
+    color: #f8fafc;
+    font-size: 0.95rem;
+    margin-block: 0.5em;
+    font-weight: 500;
+  }
 
-.concierge-ai__option-card header{
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  position: static;
-  inset: auto;
-  transform: none;
-  transition: none;
-}
+  .concierge-ai__options-grid{
+    display: grid;
+    gap: 1rem;
 
-.concierge-ai__option-card h4{
-  color: #f8fafc;
-  font-size: 0.9rem;
-  margin: 0;
-}
+    .concierge-ai__option-card{
+      border-radius: 1rem;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(15, 23, 42, 0.6);
+      padding: 1rem;
+      display: grid;
+      gap: 0.5rem;
+      min-width: 0;
 
-.concierge-ai__option-card header span{
-  color: #7cf2d4;
-  font-size: 0.78rem;
-}
+      & > div:first-child{
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        position: static;
+        inset: auto;
+        transform: none;
+        transition: none;
 
-.concierge-ai__option-card p{
-  font-size: 0.78rem;
-  color: #cbd5e1;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
+         h4{
+          color: #f8fafc;
+          font-size: 0.9rem;
+          margin: 0;
+        }
+
+        span{
+          color: #7cf2d4;
+          font-size: 0.78rem;
+        }
+      }
+    }
+
+    p{
+      font-size: 0.8rem;
+      color: #cbd5e1;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+  }
 }
 
 .concierge-ai__option-tags{
@@ -9297,12 +9299,12 @@ select:focus-visible {
 
 .concierge-ai__option-footer small{
   color: #94a3b8;
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   line-height: 1.3;
 }
 
 .concierge-ai__option-footer button{
-  border-radius: 0.72rem;
+  border-radius: 1rem;
   padding: 0.45rem 0.7rem;
   font-size: 0.74rem;
   color: #032321;
@@ -9317,58 +9319,60 @@ select:focus-visible {
   align-items: end;
   gap: 0.5rem;
   margin-top: auto;
+
+   textarea{
+    color: #f8fafc;
+    resize: none;
+    background: #0f172abf;
+    border: 1px solid #94a3b842;
+    border-radius: 1rem;
+    width: 100%;
+    min-height: 60px;
+    max-height: 150px;
+    padding: 0.75rem 1rem;
+    font-size: .9rem;
+    line-height: 1.5;
+    overflow-y: auto;
+  }
+
+  button{
+    color: #032321;
+    background: linear-gradient(135deg, #7cf2d4, #38bdf8);
+    border-radius: 1rem;
+    justify-self: end;
+
+    &:disabled{
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    span{
+      font-size: 1.5em;
+    }
+  }
 }
 
-.concierge-ai__input textarea{
-  width: 100%;
-  border-radius: 0.85rem;
-  border: 1px solid rgba(148, 163, 184, 0.26);
-  background: rgba(15, 23, 42, 0.75);
-  color: #f8fafc;
-  font-size: 0.83rem;
-  line-height: 1.3;
-  padding: 0.58rem 0.68rem;
-  resize: none;
-  min-height: 60px;
-  max-height: 128px;
-  overflow-y: auto;
-}
-
-.concierge-ai__input button{
-  justify-self: end;
-  border-radius: 0.72rem;
-  padding: 0.44rem 0.85rem;
-  color: #032321;
-  font-size: 0.78rem;
-  background: linear-gradient(135deg, #7cf2d4, #38bdf8);
-}
-
-.concierge-ai__input button:disabled{
-  opacity: 0.45;
-  pointer-events: none;
-}
 
 .concierge-ai__quick-prompts{
+  gap: .5rem;
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.4rem;
-}
+  background: #fff1;
+  padding: 0.5rem;
+  border-radius: 1em;
 
-.concierge-ai__quick-prompts button{
-  display: block;
-  border-radius: 0.65rem;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(15, 23, 42, 0.45);
-  color: #cbd5e1;
-  font-size: 0.72rem;
-  font-weight: 500;
-  line-height: 1.2;
-  padding: 0.34rem 0.5rem;
-  text-align: left;
-  width: 100%;
-  justify-content: flex-start;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  button{
+    color: #cbd5e1;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    background: #0f172a73;
+    border: 1px solid #94a3b83d;
+    border-radius: .75rem;
+    justify-content: flex-start;
+    width: 100%;
+    font-size: .8rem;
+    font-weight: 500;
+  }
 }
 
 .concierge-ai__error{
@@ -9386,7 +9390,6 @@ select:focus-visible {
 
   .concierge-ai__panel{
     width: min(420px, calc(100vw - 1.2rem - env(safe-area-inset-left) - env(safe-area-inset-right)));
-    bottom: 3.4rem;
     height: min(82dvh, 760px);
     max-height: min(82dvh, 760px);
   }
