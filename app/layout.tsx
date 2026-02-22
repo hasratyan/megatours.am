@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import * as React from "react";
-import { GoogleTagManager } from '@next/third-parties/google'
+import Script from "next/script";
+import { GoogleTagManager } from "@next/third-parties/google";
 import { Google_Sans } from "next/font/google";
-import 'material-symbols';
+import "material-symbols";
 import Providers from "@/components/providers";
 import { metadataBase } from "@/lib/metadata";
 import "./globals.css";
@@ -28,15 +29,32 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({children,}: Readonly<{
+const zohoSalesIqScriptUrl =
+  typeof process.env.NEXT_PUBLIC_ZOHO_SALESIQ_SCRIPT_URL === "string"
+    ? process.env.NEXT_PUBLIC_ZOHO_SALESIQ_SCRIPT_URL.trim()
+    : "";
+
+export default function RootLayout({ children }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
     <html suppressHydrationWarning>
-    <body className={`${body.variable} antialiased`}>
-    <GoogleTagManager gtmId="GTM-MQJD3BQN" />
-      <Providers>{children}</Providers>
-    </body>
+      <body className={`${body.variable} antialiased`}>
+        <GoogleTagManager gtmId="GTM-MQJD3BQN" />
+        {zohoSalesIqScriptUrl ? (
+          <>
+            <Script id="zoho-salesiq-bootstrap" strategy="beforeInteractive">
+              {`window.$zoho=window.$zoho||{};window.$zoho.salesiq=window.$zoho.salesiq||{ready:function(){}};`}
+            </Script>
+            <Script
+              id="zoho-salesiq-widget"
+              src={zohoSalesIqScriptUrl}
+              strategy="afterInteractive"
+            />
+          </>
+        ) : null}
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getJson, postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { Locale as AppLocale } from "@/lib/i18n";
@@ -30,6 +30,31 @@ type UiMessage = {
   content: string;
 };
 
+type ZohoSalesIqApi = {
+  visitor?: {
+    info?: (details: Record<string, string>) => void;
+    question?: (question: string) => void;
+  };
+  chat?: {
+    start?: () => void;
+  };
+  chatwindow?: {
+    visible?: (state: "show" | "hide") => void;
+  };
+  floatwindow?: {
+    visible?: (state: "show" | "hide") => void;
+  };
+  floatbutton?: {
+    visible?: (state: "show" | "hide") => void;
+  };
+};
+
+type ZohoWindow = Window & {
+  $zoho?: {
+    salesiq?: ZohoSalesIqApi;
+  };
+};
+
 const copyMap: Record<
   AppLocale,
   {
@@ -49,78 +74,94 @@ const copyMap: Record<
     close: string;
     open: string;
     livePrice: string;
+    liveAgent: string;
+    liveAgentUnavailable: string;
   }
 > = {
   en: {
     title: "Megatours Concierge AI",
-    subtitle: "Premium package builder with live supplier data.",
+    subtitle: "Package builder with live supplier data.",
     welcome:
-      "Tell me your destination, dates, traveler count, and budget. I’ll craft premium package options.",
+      "Tell me your destination, dates, traveler count, and budget. I’ll craft tailored package options.",
     placeholder: "Example: Dubai, 5 nights in March, 2 adults + 1 child, around $1,800.",
     send: "Send",
     quickPrompts: [
       "Build me a value Dubai package",
-      "I want premium Abu Dhabi with private transfer",
+      "I want Abu Dhabi with private transfer",
       "Add family-friendly excursions to my package",
     ],
     searching: "Curating your options...",
     optionsTitle: "Suggested Packages",
-    apply: "Apply To Builder",
-    applied: "Applied",
+    apply: "Add to Package",
+    applied: "Added",
     missingPrefix: "Still needed:",
     fallbackError: "Unable to contact assistant right now. Please try again.",
     launcher: "AI Concierge",
     close: "Close assistant",
     open: "Open assistant",
     livePrice: "Live prices",
+    liveAgent: "Continue with live agent",
+    liveAgentUnavailable:
+      "Our support team is currently unavailable. Please try again later.",
   },
   hy: {
     title: "Megatours Concierge AI",
-    subtitle: "Պրեմիում փաթեթների հավաքում՝ իրական մատակարարների տվյալներով։",
+    subtitle: "Փաթեթների հավաքում՝ իրական մատակարարների տվյալներով։",
     welcome:
       "Գրեք ուղղությունը, ամսաթվերը, ուղևորների քանակը և բյուջեն․ կառաջարկեմ լավագույն փաթեթներ։",
     placeholder: "Օրինակ՝ Դուբայ, 5 գիշեր մարտին, 2 մեծ + 1 երեխա, մոտ $1,800։",
     send: "Ուղարկել",
     quickPrompts: [
       "Կազմիր բյուջետային Դուբայ փաթեթ",
-      "Ուզում եմ premium Աբու Դաբի՝ անհատական տրանսֆերով",
+      "Ուզում եմ Աբու Դաբի՝ անհատական տրանսֆերով",
       "Ավելացրու ընտանեկան էքսկուրսիաներ",
     ],
     searching: "Ձևավորում եմ լավագույն տարբերակները...",
     optionsTitle: "Առաջարկվող Փաթեթներ",
-    apply: "Ավելացնել Builder-ին",
+    apply: "Ավելացնել փաթեթին",
     applied: "Ավելացված է",
     missingPrefix: "Պետք է նաև՝",
     fallbackError: "Օգնականը ժամանակավորապես հասանելի չէ։ Կրկին փորձեք։",
     launcher: "AI Concierge",
     close: "Փակել օգնականը",
     open: "Բացել օգնականը",
-    livePrice: "Կենդանի գներ",
+    livePrice: "Իրական գներ",
+    liveAgent: "Շարունակել աշխատակցի հետ",
+    liveAgentUnavailable:
+      "Մեր սպասարկման թիմը այս պահին հասանելի չէ։ Խնդրում ենք կրկին փորձել քիչ անց։",
   },
   ru: {
     title: "Megatours Concierge AI",
-    subtitle: "Премиальная сборка туров на основе живых данных поставщиков.",
+    subtitle: "Сборка туров на основе живых данных поставщиков.",
     welcome:
       "Напишите направление, даты, состав туристов и бюджет. Подготовлю лучшие пакетные варианты.",
     placeholder: "Например: Дубай, 5 ночей в марте, 2 взрослых + 1 ребенок, около $1,800.",
     send: "Отправить",
     quickPrompts: [
       "Собери мне выгодный пакет в Дубай",
-      "Хочу premium Абу-Даби с private трансфером",
+      "Хочу Абу-Даби с private трансфером",
       "Добавь семейные экскурсии к моему туру",
     ],
     searching: "Подбираю варианты...",
     optionsTitle: "Рекомендуемые Пакеты",
-    apply: "Применить В Builder",
-    applied: "Применено",
+    apply: "Добавить к пакету",
+    applied: "Добавлено",
     missingPrefix: "Еще нужно:",
     fallbackError: "Не удалось связаться с ассистентом. Повторите попытку.",
     launcher: "AI Concierge",
     close: "Закрыть ассистента",
     open: "Открыть ассистента",
     livePrice: "Живые цены",
+    liveAgent: "Продолжить с агентом",
+    liveAgentUnavailable:
+      "Наша служба поддержки сейчас недоступна. Пожалуйста, попробуйте позже.",
   },
 };
+
+const ZOHO_SALESIQ_FALLBACK_URL =
+  typeof process.env.NEXT_PUBLIC_ZOHO_SALESIQ_FALLBACK_URL === "string"
+    ? process.env.NEXT_PUBLIC_ZOHO_SALESIQ_FALLBACK_URL.trim()
+    : "";
 
 const createMessageId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -262,6 +303,105 @@ const resolveOptionTags = (option: PackageAssistantPackageOption) => {
   return tags;
 };
 
+const normalizePromptKey = (value: string) =>
+  value
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[!?.,;:]+$/g, "")
+    .toLocaleLowerCase();
+
+const dedupePrompts = (items: string[], max = 5) => {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  items.forEach((item) => {
+    const prompt = item.trim();
+    if (!prompt) return;
+    const key = normalizePromptKey(prompt);
+    if (!key) return;
+    if (seen.has(key)) return;
+    seen.add(key);
+    output.push(prompt);
+  });
+  return output.slice(0, max);
+};
+
+const resolveMissingPrompt = (locale: AppLocale, rawField: string): string | null => {
+  const field = rawField.trim().toLocaleLowerCase();
+  if (!field) return null;
+
+  const isDestination = field.includes("destination") || field.includes("ուղղ") || field.includes("направ");
+  if (isDestination) {
+    if (locale === "ru") return "Подбери отель в Дубае на мои даты";
+    if (locale === "hy") return "Ընտրիր հյուրանոց Դուբայում իմ ամսաթվերով";
+    return "Find me a hotel in Dubai for my dates";
+  }
+
+  const isHotel = field.includes("hotel") || field.includes("հյուրան") || field.includes("отел");
+  if (isHotel) {
+    if (locale === "ru") return "Покажи 3 варианта отелей с лучшей ценой";
+    if (locale === "hy") return "Ցույց տուր 3 հյուրանոց լավագույն գնով";
+    return "Show 3 hotel options with best value";
+  }
+
+  const isDates =
+    field.includes("date") ||
+    field.includes("check in") ||
+    field.includes("check out") ||
+    field.includes("ամսաթ") ||
+    field.includes("дат");
+  if (isDates) {
+    if (locale === "ru") return "Даты: 12 марта – 17 марта";
+    if (locale === "hy") return "Ամսաթվեր՝ 12 մարտից 17 մարտ";
+    return "Dates: March 12 to March 17";
+  }
+
+  const isTravelers =
+    field.includes("traveler") ||
+    field.includes("adult") ||
+    field.includes("child") ||
+    field.includes("guest") ||
+    field.includes("ուղևոր") ||
+    field.includes("пассаж") ||
+    field.includes("взросл") ||
+    field.includes("реб");
+  if (isTravelers) {
+    if (locale === "ru") return "Состав: 2 взрослых и 1 ребенок";
+    if (locale === "hy") return "Ուղևորներ՝ 2 մեծահասակ և 1 երեխա";
+    return "Travelers: 2 adults and 1 child";
+  }
+
+  const isBudget = field.includes("budget") || field.includes("բյուջե") || field.includes("бюджет");
+  if (isBudget) {
+    if (locale === "ru") return "Бюджет: до 2000 USD";
+    if (locale === "hy") return "Բյուջե՝ մինչև 2000 USD";
+    return "Budget: up to 2000 USD";
+  }
+
+  return null;
+};
+
+const buildOptionStagePrompts = (locale: AppLocale) => {
+  if (locale === "ru") {
+    return [
+      "Оставь отель и добавь private трансфер",
+      "Сделай вариант дешевле, но с тем же отелем",
+      "Добавь семейные экскурсии к этому варианту",
+    ];
+  }
+  if (locale === "hy") {
+    return [
+      "Թող նույն հյուրանոցը և ավելացրու անհատական տրանսֆեր",
+      "Արա ավելի մատչելի տարբերակ նույն հյուրանոցով",
+      "Այս տարբերակին ավելացրու ընտանեկան էքսկուրսիաներ",
+    ];
+  }
+  return [
+    "Keep this hotel and add private transfer",
+    "Make it cheaper with the same hotel",
+    "Add family-friendly excursions to this option",
+  ];
+};
+
 export default function PackageBuilderAiChat({ locale, context }: PackageBuilderAiChatProps) {
   const copy = copyMap[locale] ?? copyMap.en;
   const [isOpen, setIsOpen] = useState(false);
@@ -280,6 +420,9 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
   const [packageOptions, setPackageOptions] = useState<PackageAssistantPackageOption[]>([]);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [appliedOptionId, setAppliedOptionId] = useState<string | null>(null);
+  const [hasTopFade, setHasTopFade] = useState(false);
+  const [hasBottomFade, setHasBottomFade] = useState(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -300,6 +443,38 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
     };
   }, []);
 
+  const syncContentFade = useCallback(() => {
+    const node = contentRef.current;
+    if (!node) return;
+    const maxScrollTop = node.scrollHeight - node.clientHeight;
+    const canScroll = maxScrollTop > 1;
+    const nextTop = canScroll && node.scrollTop > 1;
+    const nextBottom = canScroll && node.scrollTop < maxScrollTop - 1;
+    setHasTopFade((prev) => (prev === nextTop ? prev : nextTop));
+    setHasBottomFade((prev) => (prev === nextBottom ? prev : nextBottom));
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setHasTopFade(false);
+      setHasBottomFade(false);
+      return;
+    }
+    const raf = window.requestAnimationFrame(syncContentFade);
+    const onResize = () => syncContentFade();
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [isOpen, syncContentFade]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const raf = window.requestAnimationFrame(syncContentFade);
+    return () => window.cancelAnimationFrame(raf);
+  }, [isOpen, messages, packageOptions, missingFields, isSending, syncContentFade]);
+
   const contextChips = useMemo(() => {
     const chips: string[] = [];
     if (context?.destinationName) chips.push(context.destinationName);
@@ -316,6 +491,41 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
     }
     return chips;
   }, [context?.adults, context?.checkInDate, context?.checkOutDate, context?.children, context?.destinationName]);
+
+  const usedPromptKeys = useMemo(() => {
+    const used = new Set<string>();
+    messages.forEach((message) => {
+      if (message.role !== "user") return;
+      const key = normalizePromptKey(message.content);
+      if (!key) return;
+      used.add(key);
+    });
+    return used;
+  }, [messages]);
+
+  const dynamicQuickPrompts = useMemo(() => {
+    const takeUnused = (items: string[]) =>
+      dedupePrompts(
+        items.filter((item) => {
+          const key = normalizePromptKey(item);
+          return key.length > 0 && !usedPromptKeys.has(key);
+        }),
+        5
+      );
+
+    const fromMissing = takeUnused(
+      missingFields
+        .map((field) => resolveMissingPrompt(locale, field))
+        .filter((entry): entry is string => Boolean(entry))
+    );
+    if (fromMissing.length > 0) return fromMissing;
+
+    if (packageOptions.length > 0) {
+      const fromOptions = takeUnused(buildOptionStagePrompts(locale));
+      if (fromOptions.length > 0) return fromOptions;
+    }
+    return takeUnused(copy.quickPrompts);
+  }, [copy.quickPrompts, locale, missingFields, packageOptions.length, usedPromptKeys]);
 
   const sendMessage = async (content: string) => {
     const trimmed = content.trim();
@@ -484,6 +694,63 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
     setAppliedOptionId(option.id);
   };
 
+  const onContinueWithLiveAgent = useCallback(() => {
+    const lines = messages
+      .slice(-8)
+      .map((message) => `${message.role === "user" ? "User" : "AI"}: ${message.content.trim()}`)
+      .filter((line) => line.length > 0);
+    const handoverSummary = [
+      "Conversation handover request from AI Concierge.",
+      `Locale: ${locale}`,
+      sessionId ? `Session ID: ${sessionId}` : null,
+      missingFields.length > 0 ? `Missing fields: ${missingFields.join(", ")}` : null,
+      packageOptions.length > 0
+        ? `Current options: ${packageOptions
+            .slice(0, 3)
+            .map((option) => option.title)
+            .join(", ")}`
+        : null,
+      lines.length > 0 ? "Recent messages:" : null,
+      lines.length > 0 ? lines.join("\n") : null,
+    ]
+      .filter((entry): entry is string => Boolean(entry))
+      .join("\n")
+      .slice(0, 1800);
+
+    const zoho = (window as ZohoWindow).$zoho?.salesiq;
+    const hasZohoOpenApi = Boolean(
+      zoho?.chat?.start ||
+        zoho?.chatwindow?.visible ||
+        zoho?.floatwindow?.visible ||
+        zoho?.floatbutton?.visible
+    );
+    if (zoho && hasZohoOpenApi) {
+      try {
+        zoho.visitor?.info?.({
+          source: "AI Concierge",
+          locale: locale.toUpperCase(),
+          sessionId: sessionId ?? "n/a",
+          missing: missingFields.join(", ") || "none",
+        });
+        zoho.visitor?.question?.(handoverSummary);
+        zoho.floatbutton?.visible?.("show");
+        zoho.floatwindow?.visible?.("show");
+        zoho.chatwindow?.visible?.("show");
+        zoho.chat?.start?.();
+        return;
+      } catch {
+        // fallback handled below
+      }
+    }
+
+    if (ZOHO_SALESIQ_FALLBACK_URL) {
+      window.open(ZOHO_SALESIQ_FALLBACK_URL, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    setErrorMessage(copy.liveAgentUnavailable);
+  }, [copy.liveAgentUnavailable, locale, messages, missingFields, packageOptions, sessionId]);
+
   if (!isAiChatEnabled) {
     return null;
   }
@@ -528,7 +795,11 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
           </div>
         ) : null}
 
-        <div className="concierge-ai__content">
+        <div
+          ref={contentRef}
+          className={`concierge-ai__content${hasTopFade ? " has-top-fade" : ""}${hasBottomFade ? " has-bottom-fade" : ""}`}
+          onScroll={syncContentFade}
+        >
           <div className="concierge-ai__messages" role="log" aria-live="polite">
             {messages.map((message) => (
               <article
@@ -603,13 +874,27 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
           </button>
         </form>
 
-        <div className="concierge-ai__quick-prompts">
-          {copy.quickPrompts.map((prompt) => (
-            <button key={prompt} type="button" onClick={() => sendMessage(prompt)} disabled={isSending}>
-              {prompt}
-            </button>
-          ))}
-        </div>
+        {dynamicQuickPrompts.length > 0 ? (
+          <div className="concierge-ai__quick-prompts">
+            {dynamicQuickPrompts.map((prompt) => (
+              <button key={prompt} type="button" onClick={() => sendMessage(prompt)} disabled={isSending}>
+                {prompt}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          className="concierge-ai__live-agent"
+          onClick={onContinueWithLiveAgent}
+          disabled={isSending}
+        >
+          <span className="material-symbols-rounded" aria-hidden="true">
+            support_agent
+          </span>
+          <span>{copy.liveAgent}</span>
+        </button>
 
         {errorMessage ? <p className="concierge-ai__error">{errorMessage}</p> : null}
       </section>

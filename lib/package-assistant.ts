@@ -59,6 +59,9 @@ const DEFAULT_INSURANCE_RISK_CURRENCY = "EUR";
 const DEFAULT_INSURANCE_RISK_LABEL = "STANDARD";
 const DEFAULT_INSURANCE_ADULT_AGE = 30;
 const DEFAULT_INSURANCE_CHILD_AGE = 8;
+const AI_ALLOWED_DESTINATION_COUNTRY = "AE";
+const UAE_DESTINATION_ONLY_ERROR =
+  "Megatours Concierge AI supports UAE destinations only. Please choose a UAE destination.";
 const OPENAI_PACKAGE_ASSISTANT_FULL_CONTEXT_ENABLED =
   typeof process.env.OPENAI_PACKAGE_ASSISTANT_FULL_CONTEXT === "string"
     ? ["1", "true", "yes", "on"].includes(
@@ -420,6 +423,48 @@ const normalizeMatchToken = (value: string | null | undefined) =>
         .replace(/\s+/g, " ")
         .trim()
     : "";
+
+const destinationNameMatches = (left: string | null | undefined, right: string | null | undefined) => {
+  const normalizedLeft = normalizeMatchToken(left);
+  const normalizedRight = normalizeMatchToken(right);
+  if (!normalizedLeft || !normalizedRight) return false;
+  return (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.includes(normalizedRight) ||
+    normalizedRight.includes(normalizedLeft)
+  );
+};
+
+const resolveUaeDestinationMatches = async (query: string, limit = 30) => {
+  try {
+    const result = await listAoryxDestinations({
+      q: query,
+      countryCode: AI_ALLOWED_DESTINATION_COUNTRY,
+      limit: clampInteger(limit, 1, 30, 30),
+    });
+    return result.destinations;
+  } catch {
+    return [];
+  }
+};
+
+const isAllowedUaeDestinationCode = async (value: string | null | undefined) => {
+  const destinationCode = toTrimmedString(value);
+  if (!destinationCode) return false;
+  const normalizedCode = destinationCode.toUpperCase();
+  const matches = await resolveUaeDestinationMatches(destinationCode, 30);
+  return matches.some((destination) => {
+    const candidate = toTrimmedString(destination.destinationCode)?.toUpperCase();
+    return candidate === normalizedCode;
+  });
+};
+
+const isAllowedUaeDestinationName = async (value: string | null | undefined) => {
+  const destinationName = toTrimmedString(value);
+  if (!destinationName) return false;
+  const matches = await resolveUaeDestinationMatches(destinationName, 30);
+  return matches.some((destination) => destinationNameMatches(destination.name, destinationName));
+};
 
 const amountsClose = (left: number, right: number) =>
   Math.abs(left - right) <= Math.max(3, Math.abs(right) * 0.03);
@@ -1095,12 +1140,46 @@ const applyServiceAvailabilityToReply = (
   };
 };
 
+const applyHotelFirstPolicyToReply = (
+  reply: PackageAssistantReply,
+  locale: Locale
+): PackageAssistantReply => {
+  const packageOptions = reply.packageOptions.filter((option) => Boolean(option.draft.hotel?.selected));
+  if (packageOptions.length === reply.packageOptions.length) {
+    return reply;
+  }
+
+  const followUpNotice =
+    locale === "ru"
+      ? "Сначала выберите отель, после этого я добавлю трансфер, перелет и другие услуги."
+      : locale === "hy"
+        ? "Սկզբում ընտրենք հյուրանոցը, հետո կավելացնեմ տրանսֆեր, թռիչք և մյուս ծառայությունները։"
+        : "Please choose a hotel first, then I will add transfers, flights, and other services.";
+
+  const hotelFirstMessage =
+    locale === "ru"
+      ? "Начнем с отеля. Укажите направление в ОАЭ, даты и количество путешественников."
+      : locale === "hy"
+        ? "Սկսենք հյուրանոցից։ Նշեք ԱՄԷ ուղղությունը, ամսաթվերը և ուղևորների քանակը։"
+        : "Let’s start with a hotel. Share UAE destination, dates, and traveler count.";
+
+  const nextMissing = uniqueStrings([...reply.missing, "hotel"], 8);
+  return {
+    ...reply,
+    message: packageOptions.length > 0 ? reply.message : hotelFirstMessage,
+    stage: packageOptions.length > 0 ? reply.stage : "collecting",
+    missing: nextMissing,
+    followUps: uniqueStrings([...reply.followUps, followUpNotice], 5),
+    packageOptions,
+  };
+};
+
 const toolDefinitions = [
   {
     type: "function",
     function: {
       name: "lookup_destinations",
-      description: "Find destination codes by name/country before a hotel search.",
+      description: "Find UAE destination codes by name before a hotel search.",
       parameters: {
         type: "object",
         properties: {
@@ -1117,7 +1196,7 @@ const toolDefinitions = [
     function: {
       name: "search_hotels",
       description:
-        "Search real hotel inventory with dates/occupancy. Use this before proposing concrete hotel options.",
+        "Search UAE hotel inventory with dates/occupancy. Use this before proposing concrete hotel options.",
       parameters: {
         type: "object",
         properties: {
@@ -1140,7 +1219,7 @@ const toolDefinitions = [
     type: "function",
     function: {
       name: "search_transfers",
-      description: "Find transfer options by destination name/code and passenger count.",
+      description: "Find UAE transfer options by destination name/code and passenger count.",
       parameters: {
         type: "object",
         properties: {
@@ -1245,7 +1324,7 @@ const buildSystemPrompt = (
 ) => {
   const language = localeLanguageName[locale] ?? "English";
   return [
-    "You are Megatours Concierge AI for premium package building.",
+    "You are Megatours Concierge AI for package building.",
     `Always answer in ${language}.`,
     "Core goals:",
     "- Deliver delightful, high-confidence recommendations that feel personal and decisive.",
@@ -1253,11 +1332,13 @@ const buildSystemPrompt = (
     "- Never invent hotel rates, flight prices, transfer prices, or excursion prices.",
     "- If core inputs are missing, ask concise follow-up questions before finalizing options.",
     "- Never include disabled services in package drafts.",
+    "- Hotel-first rule: every package option must include hotel. Never propose transfer/flight/excursion/insurance without hotel.",
     "- Personalize suggestions using recent user signals when available.",
     "- If insurance is selected and dates/travelers are known, call quote_insurance before returning insurance price.",
+    "- Destination policy: support UAE destinations only. If user requests another country, decline and ask for a UAE destination.",
     "When proposing options:",
     "- Provide 1-3 package options max.",
-    "- Keep each option clearly differentiated (value, comfort, premium).",
+    "- Keep each option clearly differentiated (value, comfort, upscale).",
     "- Include practical reasoning and tradeoffs.",
     "- Mark pricing as live and subject to availability.",
     "Output rules:",
@@ -1628,8 +1709,17 @@ const executeLookupDestinations = async (
   args: Record<string, unknown>
 ): Promise<ToolExecutionResult> => {
   const query = toTrimmedString(args.query) ?? undefined;
-  const countryCode = toTrimmedString(args.countryCode)?.toUpperCase() ?? "AE";
+  const requestedCountryCode = toTrimmedString(args.countryCode)?.toUpperCase() ?? null;
+  const countryCode = AI_ALLOWED_DESTINATION_COUNTRY;
   const limit = clampInteger(args.limit, 1, 30, 12);
+
+  if (requestedCountryCode && requestedCountryCode !== AI_ALLOWED_DESTINATION_COUNTRY) {
+    return {
+      ok: false,
+      tool: "lookup_destinations",
+      error: UAE_DESTINATION_ONLY_ERROR,
+    };
+  }
 
   try {
     const result = await listAoryxDestinations({
@@ -1672,7 +1762,8 @@ const executeSearchHotels = async (
   const adults = clampInteger(args.adults ?? context?.adults, 1, 12, 2);
   const children = clampInteger(args.children ?? context?.children, 0, 8, 0);
   const currency = toCurrencyCode(args.currency) ?? toCurrencyCode(context?.budgetCurrency) ?? "USD";
-  const countryCode = toTrimmedString(args.countryCode)?.toUpperCase() ?? "AE";
+  const requestedCountryCode = toTrimmedString(args.countryCode)?.toUpperCase() ?? null;
+  const countryCode = AI_ALLOWED_DESTINATION_COUNTRY;
   const nationality = toTrimmedString(args.nationality)?.toUpperCase() ?? "AM";
 
   if (!checkInDate || !checkOutDate || (!destinationCode && !hotelCode)) {
@@ -1682,6 +1773,34 @@ const executeSearchHotels = async (
       error:
         "Missing required inputs for hotel search. Need checkInDate, checkOutDate and destinationCode/hotelCode.",
     };
+  }
+
+  if (requestedCountryCode && requestedCountryCode !== AI_ALLOWED_DESTINATION_COUNTRY) {
+    return {
+      ok: false,
+      tool: "search_hotels",
+      error: UAE_DESTINATION_ONLY_ERROR,
+    };
+  }
+
+  if (destinationCode) {
+    const isAllowedDestinationCode = await isAllowedUaeDestinationCode(destinationCode);
+    if (!isAllowedDestinationCode) {
+      return {
+        ok: false,
+        tool: "search_hotels",
+        error: UAE_DESTINATION_ONLY_ERROR,
+      };
+    }
+  } else {
+    const hasAllowedContextDestination = await isAllowedUaeDestinationName(context?.destinationName);
+    if (!hasAllowedContextDestination) {
+      return {
+        ok: false,
+        tool: "search_hotels",
+        error: `${UAE_DESTINATION_ONLY_ERROR} Provide a UAE destination code.`,
+      };
+    }
   }
 
   try {
@@ -1771,6 +1890,18 @@ const executeSearchTransfers = async (
       ok: false,
       tool: "search_transfers",
       error: "Missing destinationName or destinationLocationCode.",
+    };
+  }
+
+  const [hasCodeMatch, hasNameMatch] = await Promise.all([
+    destinationLocationCode ? isAllowedUaeDestinationCode(destinationLocationCode) : Promise.resolve(false),
+    destinationName ? isAllowedUaeDestinationName(destinationName) : Promise.resolve(false),
+  ]);
+  if (!hasCodeMatch && !hasNameMatch) {
+    return {
+      ok: false,
+      tool: "search_transfers",
+      error: UAE_DESTINATION_ONLY_ERROR,
     };
   }
 
@@ -2233,9 +2364,12 @@ export async function generatePackageAssistantReply(
 
   if (sanitizedMessages.length === 0) {
     return {
-      reply: applyServiceAvailabilityToReply(
-        fallback,
-        projectContext.serviceFlags,
+      reply: applyHotelFirstPolicyToReply(
+        applyServiceAvailabilityToReply(
+          fallback,
+          projectContext.serviceFlags,
+          locale
+        ),
         locale
       ),
       meta: { model: "fallback", toolCalls: 0, priceAudit: emptyAudit },
@@ -2243,17 +2377,20 @@ export async function generatePackageAssistantReply(
   }
 
   if (!OPENAI_API_KEY) {
-    const unavailableReply = applyServiceAvailabilityToReply(
-      {
-        ...fallback,
-        message:
-          locale === "ru"
-            ? "AI временно недоступен. Напишите направление, даты и бюджет, и менеджер поможет вручную."
-            : locale === "hy"
-              ? "AI-ը ժամանակավորապես հասանելի չէ։ Գրեք ուղղությունը, ամսաթվերը և բյուջեն, և մենեջերը կօգնի։"
-              : "AI is temporarily unavailable. Share destination, dates and budget, and our manager can assist.",
-      },
-      projectContext.serviceFlags,
+    const unavailableReply = applyHotelFirstPolicyToReply(
+      applyServiceAvailabilityToReply(
+        {
+          ...fallback,
+          message:
+            locale === "ru"
+              ? "AI временно недоступен. Напишите направление, даты и бюджет, и менеджер поможет вручную."
+              : locale === "hy"
+                ? "AI-ը ժամանակավորապես հասանելի չէ։ Գրեք ուղղությունը, ամսաթվերը և բյուջեն, և մենեջերը կօգնի։"
+                : "AI is temporarily unavailable. Share destination, dates and budget, and our manager can assist.",
+        },
+        projectContext.serviceFlags,
+        locale
+      ),
       locale
     );
     return {
@@ -2344,9 +2481,12 @@ export async function generatePackageAssistantReply(
       });
     }
     const normalized = normalizeReplyFromModel(nextMessage.content ?? "", locale);
-    const restricted = applyServiceAvailabilityToReply(
-      normalized,
-      projectContext.serviceFlags,
+    const restricted = applyHotelFirstPolicyToReply(
+      applyServiceAvailabilityToReply(
+        normalized,
+        projectContext.serviceFlags,
+        locale
+      ),
       locale
     );
     const audited = applyHardPriceAudit(restricted, priceEvidence);
@@ -2360,9 +2500,12 @@ export async function generatePackageAssistantReply(
     };
   }
 
-  const restrictedFallback = applyServiceAvailabilityToReply(
-    fallback,
-    projectContext.serviceFlags,
+  const restrictedFallback = applyHotelFirstPolicyToReply(
+    applyServiceAvailabilityToReply(
+      fallback,
+      projectContext.serviceFlags,
+      locale
+    ),
     locale
   );
   const auditedFallback = applyHardPriceAudit(restrictedFallback, priceEvidence);
