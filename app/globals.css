@@ -7779,7 +7779,9 @@ select:focus-visible {
   pointer-events: none;
 
   @media screen and (max-width:450px) {
-    justify-content: flex-start;
+    &:has(.package-builder__toggle-status){
+      justify-content: flex-start;
+    }
   }
 
   &.is-open{
