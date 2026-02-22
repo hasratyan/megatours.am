@@ -9314,13 +9314,10 @@ select:focus-visible {
 }
 
 .concierge-ai__input{
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: end;
-  gap: 0.5rem;
   margin-top: auto;
+  position: relative;
 
-   textarea{
+  textarea{
     color: #f8fafc;
     resize: none;
     background: #0f172abf;
@@ -9333,13 +9330,17 @@ select:focus-visible {
     font-size: .9rem;
     line-height: 1.5;
     overflow-y: auto;
+    display: block;
   }
 
   button{
     color: #032321;
     background: linear-gradient(135deg, #7cf2d4, #38bdf8);
     border-radius: 1rem;
-    justify-self: end;
+    position: absolute;
+    bottom: 1em;
+    right: 1em;
+    padding: 0.5em;
 
     &:disabled{
       opacity: 0.5;
