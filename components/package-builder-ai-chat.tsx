@@ -764,7 +764,7 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
         onClick={() => setIsOpen((current) => !current)}
       >
         <span className="material-symbols-rounded" aria-hidden="true">
-          auto_awesome
+          robot_2
         </span>
         <span>{copy.launcher}</span>
       </button>
