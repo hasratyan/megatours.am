@@ -1,5 +1,6 @@
 import { createHash, randomUUID, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { AORYX_RUNTIME_ENV } from "@/lib/env";
 
 type ParsedClientConfig = {
   id: string;
@@ -178,7 +179,7 @@ const getParsedClients = () => {
       scopes: new Set<string>(["*"]),
       allowedIps: null,
       rateLimitPerMinute: defaultRateLimitPerMinute,
-      aoryxEnvironment: "live",
+      aoryxEnvironment: AORYX_RUNTIME_ENV,
     });
   }
 

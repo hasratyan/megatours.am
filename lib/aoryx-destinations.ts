@@ -1,5 +1,11 @@
 import { AoryxClientError, AoryxServiceError } from "@/lib/aoryx-client";
-import { AORYX_API_KEY, AORYX_BASE_URL, AORYX_CUSTOMER_CODE, AORYX_TIMEOUT_MS } from "@/lib/env";
+import {
+  AORYX_ACTIVE_API_KEY,
+  AORYX_ACTIVE_BASE_URL,
+  AORYX_ACTIVE_CUSTOMER_CODE,
+  AORYX_RUNTIME_ENV,
+  AORYX_TIMEOUT_MS,
+} from "@/lib/env";
 import { resolveSafeErrorMessage } from "@/lib/error-utils";
 
 const EXCLUDED_DESTINATION_CODES = new Set(["650", "650-0"]);
@@ -61,17 +67,19 @@ const includesQuery = (destination: AoryxDestination, query: string | null) => {
 export async function listAoryxDestinations(
   input: DestinationLookupInput = {}
 ): Promise<{ countryCode: string; destinations: AoryxDestination[] }> {
-  if (!AORYX_API_KEY) {
-    throw new AoryxClientError("Missing AORYX_API_KEY configuration", "country-info");
+  const apiKeyName = AORYX_RUNTIME_ENV === "test" ? "AORYX_TEST_API_KEY" : "AORYX_API_KEY";
+  const baseUrlName = AORYX_RUNTIME_ENV === "test" ? "AORYX_TEST_URL" : "AORYX_BASE_URL";
+  if (!AORYX_ACTIVE_API_KEY) {
+    throw new AoryxClientError(`Missing ${apiKeyName} configuration`, "country-info");
   }
-  if (!AORYX_BASE_URL) {
-    throw new AoryxClientError("Missing AORYX_BASE_URL configuration", "country-info");
+  if (!AORYX_ACTIVE_BASE_URL) {
+    throw new AoryxClientError(`Missing ${baseUrlName} configuration`, "country-info");
   }
 
   const countryCode = normalizeCountryCode(input.countryCode);
   const query = toStringValue(input.q)?.toLowerCase() ?? null;
   const limit = normalizeLimit(input.limit);
-  const baseUrl = AORYX_BASE_URL.replace(/\/$/, "");
+  const baseUrl = AORYX_ACTIVE_BASE_URL.replace(/\/$/, "");
   const url = `${baseUrl}/country-info`;
 
   const controller = new AbortController();
@@ -82,8 +90,8 @@ export async function listAoryxDestinations(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ApiKey: AORYX_API_KEY,
-        ...(AORYX_CUSTOMER_CODE ? { CustomerCode: AORYX_CUSTOMER_CODE } : {}),
+        ApiKey: AORYX_ACTIVE_API_KEY,
+        ...(AORYX_ACTIVE_CUSTOMER_CODE ? { CustomerCode: AORYX_ACTIVE_CUSTOMER_CODE } : {}),
       },
       body: JSON.stringify({ CountryCode: countryCode }),
       signal: controller.signal,

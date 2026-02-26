@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { buildSearchQuery } from "@/lib/search-query";
 import type { AoryxBookingPayload, AoryxBookingResult, AoryxSearchParams } from "@/types/aoryx";
 import { useLanguage, useTranslations } from "@/components/language-provider";
@@ -133,6 +133,8 @@ const getNights = (start?: string | null, end?: string | null) => {
   return nights > 0 ? nights : null;
 };
 
+const subscribeHydration = () => () => {};
+
 export default function ProfileView({
   user,
   profile,
@@ -147,11 +149,7 @@ export default function ProfileView({
   const t = useTranslations();
   const { locale } = useLanguage();
   const intlLocale = intlLocales[locale] ?? "en-GB";
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setHydrated(true);
-  }, []);
+  const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
 
   const formatDateSafe = (value: string | null | undefined) =>
     hydrated ? formatDate(value ?? null, intlLocale) : null;
@@ -410,6 +408,11 @@ export default function ProfileView({
                     booking?.supplierConfirmationNumber ??
                     booking?.adsConfirmationNumber ??
                     "—";
+                  const hasTransfer = Boolean(payload?.transferSelection);
+                  const hasExcursion = Boolean(payload?.excursions);
+                  const hasInsurance = Boolean(payload?.insurance);
+                  const hasFlight = Boolean(payload?.airTickets);
+                  const hasMissingAddonService = !(hasTransfer && hasExcursion && hasInsurance && hasFlight);
                   return (
                     <li key={`${payload?.customerRefNumber ?? "booking"}-${index}`} className="profile-item">
                       <div className="profile-item-header">
@@ -446,6 +449,14 @@ export default function ProfileView({
                               rel="noreferrer"
                             >
                               {t.profile.bookings.downloadVoucher}
+                            </Link>
+                          )}
+                          {payload?.customerRefNumber && statusKey === "confirmed" && hasMissingAddonService && (
+                            <Link
+                              className="profile-link"
+                              href={`/${locale}/profile/voucher/${payload.customerRefNumber}/add-services`}
+                            >
+                              {t.packageBuilder.checkoutButton}
                             </Link>
                           )}
                         </div>
@@ -499,7 +510,6 @@ export default function ProfileView({
                     params.destinationCode ??
                     params.hotelCode ??
                     "—";
-                  const labelType = params.hotelCode ? t.profile.searches.labels.hotel : t.profile.searches.labels.destination;
                   return (
                     <li key={`${params.checkInDate}-${index}`} className="profile-item">
                       <div className="profile-item-header">

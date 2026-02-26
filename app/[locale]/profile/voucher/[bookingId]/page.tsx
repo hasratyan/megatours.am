@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { getServerSession } from "next-auth";
 import ProfileSignIn from "@/components/profile-signin";
 import VoucherActions from "@/components/voucher-actions";
@@ -11,6 +12,9 @@ import { getAmdRates, getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { resolveBookingStatusKey } from "@/lib/booking-status";
+import { getServiceFlags } from "@/lib/service-flags";
+import { DEFAULT_SERVICE_FLAGS } from "@/lib/package-builder-state";
+import { resolveExistingBookingAddonServiceKeys } from "@/lib/booking-addons";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 import type { AppliedBookingCoupon } from "@/lib/user-data";
 
@@ -317,6 +321,22 @@ export default async function VoucherPage({ params }: PageProps) {
     refundedAmountLabel !== null ||
     refundedServices.length > 0;
 
+  const serviceFlags = await getServiceFlags().catch(() => DEFAULT_SERVICE_FLAGS);
+  const existingAddonServices = new Set(resolveExistingBookingAddonServiceKeys(payload));
+  const missingAddonServices = [
+    { key: "transfer", enabled: serviceFlags.transfer !== false, label: t.packageBuilder.services.transfer },
+    { key: "excursion", enabled: serviceFlags.excursion !== false, label: t.packageBuilder.services.excursion },
+    { key: "insurance", enabled: serviceFlags.insurance !== false, label: t.packageBuilder.services.insurance },
+    { key: "flight", enabled: serviceFlags.flight !== false, label: t.packageBuilder.services.flight },
+  ]
+    .filter((service) =>
+      service.enabled &&
+      !existingAddonServices.has(service.key as "transfer" | "excursion" | "insurance" | "flight")
+    )
+    .map((service) => service.label);
+  const canManageAddons = statusKey === "confirmed" && !bookingCanceledByAdmin && missingAddonServices.length > 0;
+  const manageAddonsHref = `/${resolvedLocale}/profile/voucher/${encodeURIComponent(bookingId)}/add-services`;
+
   const serviceCards: ServiceCard[] = [
     {
       id: "hotel",
@@ -533,6 +553,18 @@ export default async function VoucherPage({ params }: PageProps) {
           backLabel={t.profile.voucher.backToProfile}
           profileHref={`/${resolvedLocale}/profile`}
         />
+
+        {canManageAddons ? (
+          <section className="voucher-card voucher-card--addons">
+            <h2>{t.profile.voucher.sections.services}</h2>
+            <p>
+              {missingAddonServices.join(", ")}
+            </p>
+            <Link href={manageAddonsHref} className="service-builder__cta">
+              {t.packageBuilder.checkoutButton}
+            </Link>
+          </section>
+        ) : null}
 
         <section className="voucher-grid">
           <div className="voucher-card">

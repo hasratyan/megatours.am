@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
+import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/db";
 import { book } from "@/lib/aoryx-client";
 import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
 import { recordUserBooking, type AppliedBookingCoupon } from "@/lib/user-data";
 import { sendBookingConfirmationEmail } from "@/lib/email";
 import { incrementCouponSuccessfulOrders } from "@/lib/coupons";
+import {
+  mergeBookingAddonPayload,
+  parseBookingAddonServices,
+  resolveBookingAddonServiceKeys,
+} from "@/lib/booking-addons";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
 export const runtime = "nodejs";
 
 type IdramPaymentRecord = {
+  flow?: string | null;
   billNo: string;
   status?: string;
   recAccount?: string;
@@ -31,6 +38,12 @@ type IdramPaymentRecord = {
   userEmail?: string | null;
   userName?: string | null;
   locale?: string | null;
+  addon?: {
+    targetBookingId?: string | null;
+    customerRefNumber?: string | null;
+    serviceKeys?: unknown;
+    services?: unknown;
+  } | null;
 };
 
 const textResponse = (message: string, status = 200) =>
@@ -52,6 +65,7 @@ const parseAmount = (value: string): number | null => {
 };
 
 const formatAmount = (value: number) => value.toFixed(2);
+const resolveString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
 const checksumFor = (parts: string[]) =>
   createHash("md5").update(parts.join(":"), "utf8").digest("hex");
@@ -273,6 +287,94 @@ export async function POST(request: NextRequest) {
         },
       }
     );
+    return textResponse("OK", 200);
+  }
+
+  const paymentFlow = resolveString(lockedRecord.flow).toLowerCase();
+  if (paymentFlow === "booking_addons") {
+    try {
+      const targetBookingId = resolveString(lockedRecord.addon?.targetBookingId);
+      if (!targetBookingId || !ObjectId.isValid(targetBookingId)) {
+        throw new Error("Missing add-on booking reference.");
+      }
+      const userId = resolveString(lockedRecord.userId);
+      if (!userId) {
+        throw new Error("Missing add-on booking owner.");
+      }
+      const addonServices = parseBookingAddonServices(lockedRecord.addon?.services ?? null);
+      const requestedServiceKeys = resolveBookingAddonServiceKeys(addonServices);
+      if (requestedServiceKeys.length === 0) {
+        throw new Error("Missing add-on services payload.");
+      }
+
+      const bookingObjectId = new ObjectId(targetBookingId);
+      const userBookings = db.collection("user_bookings");
+      const userBooking = (await userBookings.findOne({
+        _id: bookingObjectId,
+        userIdString: userId,
+      })) as { payload?: AoryxBookingPayload | null; booking?: AoryxBookingResult | null } | null;
+      if (!userBooking?.payload) {
+        throw new Error("Target booking not found.");
+      }
+
+      const merged = mergeBookingAddonPayload(userBooking.payload, addonServices);
+      const appliedAt = new Date();
+      await userBookings.updateOne(
+        { _id: bookingObjectId, userIdString: userId },
+        {
+          $set: {
+            payload: merged.payload,
+            updatedAt: appliedAt,
+            addonLastPayment: {
+              at: appliedAt,
+              provider: "idram",
+              billNo,
+              amountValue:
+                typeof lockedRecord.amount?.value === "number" &&
+                Number.isFinite(lockedRecord.amount.value)
+                  ? lockedRecord.amount.value
+                  : null,
+              currency: lockedRecord.amount?.currency ?? null,
+              requestedServices: requestedServiceKeys,
+              appliedServices: merged.appliedServiceKeys,
+              skippedServices: merged.skippedServiceKeys,
+            },
+          },
+        }
+      );
+
+      await collection.updateOne(
+        { billNo },
+        {
+          $set: {
+            status: "booking_complete",
+            payload: merged.payload,
+            bookingResult: userBooking.booking ?? null,
+            addonAppliedAt: appliedAt,
+            addonApply: {
+              targetBookingId,
+              requestedServices: requestedServiceKeys,
+              appliedServices: merged.appliedServiceKeys,
+              skippedServices: merged.skippedServiceKeys,
+            },
+            updatedAt: appliedAt,
+          },
+        }
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to apply booking add-ons";
+      await collection.updateOne(
+        { billNo },
+        {
+          $set: {
+            status: "booking_failed",
+            bookingError: message,
+            updatedAt: new Date(),
+          },
+        }
+      );
+      console.error("[Idram][result] Add-on booking update failed", error);
+    }
     return textResponse("OK", 200);
   }
 

@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import type { Collection, Document } from "mongodb";
+import { ObjectId, type Collection, type Document } from "mongodb";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -16,7 +16,20 @@ import {
   type CouponValidationFailureReason,
 } from "@/lib/coupons";
 import { getPaymentMethodFlags } from "@/lib/payment-method-flags";
-import type { AoryxBookingPayload } from "@/types/aoryx";
+import { getServiceFlags } from "@/lib/service-flags";
+import { DEFAULT_SERVICE_FLAGS } from "@/lib/package-builder-state";
+import { validateTransferFlightDetailsForBooking } from "@/lib/b2b-service-booking";
+import {
+  calculateBookingAddonAmountAmd,
+  isBookingCanceled,
+  isBookingConfirmed,
+  mergeBookingAddonPayload,
+  parseBookingAddonCheckoutRequest,
+  resolveExistingBookingAddonServiceKeys,
+  type BookingAddonCheckoutRequest,
+  type BookingAddonServiceKey,
+} from "@/lib/booking-addons";
+import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
 export const runtime = "nodejs";
 
@@ -31,8 +44,28 @@ const DUPLICATE_ATTEMPT_STATUSES = [
 ] as const;
 const ACTIVE_CREATED_ATTEMPT_TTL_MS = 20 * 60 * 1000;
 const DUPLICATE_ATTEMPT_LOOKUP_LIMIT = 20;
+const ADDON_ACTIVE_ATTEMPT_STATUSES = [
+  "created",
+  "prechecked",
+  "payment_success",
+  "booking_in_progress",
+] as const;
 
 type BlockingIdramAttempt = {
+  billNo?: string;
+  status?: string;
+  createdAt?: Date | string | number | null;
+  updatedAt?: Date | string | number | null;
+};
+
+type UserBookingRecord = {
+  _id: ObjectId;
+  userIdString?: string | null;
+  payload?: AoryxBookingPayload | null;
+  booking?: AoryxBookingResult | null;
+};
+
+type BlockingAddonIdramAttempt = {
   billNo?: string;
   status?: string;
   createdAt?: Date | string | number | null;
@@ -187,6 +220,61 @@ const duplicateAttemptMessage = (attempt: BlockingIdramAttempt): string => {
   return "A payment attempt for this prebook session is already active. Please complete it or wait a few minutes before retrying.";
 };
 
+const isBlockingAddonAttempt = (record: BlockingAddonIdramAttempt): boolean => {
+  const status = resolveString(record.status).toLowerCase();
+  if (status === "booking_in_progress" || status === "payment_success") {
+    return true;
+  }
+  if (status === "created" || status === "prechecked") {
+    const lastUpdatedAt = toDate(record.updatedAt) ?? toDate(record.createdAt);
+    if (!lastUpdatedAt) return false;
+    return Date.now() - lastUpdatedAt.getTime() <= ACTIVE_CREATED_ATTEMPT_TTL_MS;
+  }
+  return false;
+};
+
+const findBlockingAddonAttempt = async (
+  collection: Collection<Document>,
+  targetBookingId: string,
+  serviceKeys: BookingAddonServiceKey[]
+): Promise<BlockingAddonIdramAttempt | null> => {
+  if (!targetBookingId || serviceKeys.length === 0) return null;
+  const sort = { updatedAt: -1, createdAt: -1 } as const;
+  const projection = {
+    _id: 0,
+    billNo: 1,
+    status: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const attempts = (await collection
+    .find(
+      {
+        flow: "booking_addons",
+        "addon.targetBookingId": targetBookingId,
+        status: { $in: [...ADDON_ACTIVE_ATTEMPT_STATUSES] },
+        "addon.serviceKeys": { $in: serviceKeys },
+      },
+      { projection }
+    )
+    .sort(sort)
+    .limit(DUPLICATE_ATTEMPT_LOOKUP_LIMIT)
+    .toArray()) as BlockingAddonIdramAttempt[];
+
+  for (const attempt of attempts) {
+    if (isBlockingAddonAttempt(attempt)) return attempt;
+  }
+
+  return null;
+};
+
+const resolveAddonServiceFlag = (service: BookingAddonServiceKey) => {
+  if (service === "transfer") return "transfer" as const;
+  if (service === "excursion") return "excursion" as const;
+  if (service === "flight") return "flight" as const;
+  return "insurance" as const;
+};
+
 const couponValidationFailureToResponse = (reason: CouponValidationFailureReason) => {
   if (reason === "invalid_format" || reason === "not_found") {
     return { status: 400, error: "Coupon is invalid.", code: "invalid_coupon" };
@@ -214,6 +302,199 @@ const couponValidationFailureToResponse = (reason: CouponValidationFailureReason
   };
 };
 
+const tryHandleBookingAddonCheckout = async (params: {
+  body: unknown;
+  locale: string | null;
+}): Promise<NextResponse | null> => {
+  const addonRequest: BookingAddonCheckoutRequest | null = parseBookingAddonCheckoutRequest(params.body);
+  if (!addonRequest) return null;
+
+  const session = await getServerSession(authOptions);
+  const userId = session?.user?.id ?? null;
+  if (!userId) {
+    return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
+  }
+
+  const recAccount = typeof process.env.IDRAM_REC_ACCOUNT === "string"
+    ? process.env.IDRAM_REC_ACCOUNT.trim()
+    : "";
+  if (!recAccount) {
+    return NextResponse.json(
+      { error: "Idram is not configured. Please contact support." },
+      { status: 500 }
+    );
+  }
+
+  const db = await getDb();
+  const idramCollection = db.collection("idram_payments");
+  const userBookingsCollection = db.collection("user_bookings");
+  const userBooking = (await userBookingsCollection.findOne({
+    userIdString: userId,
+    "payload.customerRefNumber": addonRequest.bookingId,
+  })) as UserBookingRecord | null;
+
+  if (!userBooking?.payload) {
+    return NextResponse.json({ error: "Booking not found." }, { status: 404 });
+  }
+  if (!isBookingConfirmed(userBooking.booking ?? null)) {
+    return NextResponse.json(
+      {
+        error: "This booking is not confirmed yet.",
+        code: "booking_not_confirmed",
+      },
+      { status: 409 }
+    );
+  }
+  if (isBookingCanceled(userBooking.booking ?? null)) {
+    return NextResponse.json(
+      {
+        error: "Canceled bookings can not receive additional services.",
+        code: "booking_canceled",
+      },
+      { status: 409 }
+    );
+  }
+
+  try {
+    validateTransferFlightDetailsForBooking(addonRequest.services.transferSelection);
+  } catch (validationError) {
+    return NextResponse.json(
+      {
+        error:
+          validationError instanceof Error
+            ? validationError.message
+            : "Transfer flight details are invalid.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const existingServiceKeys = new Set(resolveExistingBookingAddonServiceKeys(userBooking.payload));
+  const duplicateServices = addonRequest.serviceKeys.filter((service) => existingServiceKeys.has(service));
+  if (duplicateServices.length > 0) {
+    return NextResponse.json(
+      {
+        error: "Selected services are already attached to this booking.",
+        code: "addon_service_exists",
+        services: duplicateServices,
+      },
+      { status: 409 }
+    );
+  }
+
+  const serviceFlags = await getServiceFlags().catch(() => DEFAULT_SERVICE_FLAGS);
+  const disabledServices = addonRequest.serviceKeys.filter(
+    (service) => serviceFlags[resolveAddonServiceFlag(service)] === false
+  );
+  if (disabledServices.length > 0) {
+    return NextResponse.json(
+      {
+        error: "One or more selected services are currently disabled.",
+        code: "service_disabled",
+        services: disabledServices,
+      },
+      { status: 403 }
+    );
+  }
+
+  const blockingAddonAttempt = await findBlockingAddonAttempt(
+    idramCollection,
+    userBooking._id.toString(),
+    addonRequest.serviceKeys
+  );
+  if (blockingAddonAttempt) {
+    return NextResponse.json(
+      {
+        error:
+          "A payment attempt for the selected add-on services is already active. Please complete it or wait a few minutes.",
+        code: "duplicate_payment_attempt",
+        existingPayment: {
+          provider: "idram",
+          status: resolveString(blockingAddonAttempt.status) || null,
+          billNo: resolveString(blockingAddonAttempt.billNo) || null,
+        },
+      },
+      { status: 409 }
+    );
+  }
+
+  let addonAmountAmd: Awaited<ReturnType<typeof calculateBookingAddonAmountAmd>>;
+  try {
+    addonAmountAmd = await calculateBookingAddonAmountAmd(
+      addonRequest.services,
+      userBooking.payload.currency ?? "USD"
+    );
+  } catch (error) {
+    console.error("[Idram][checkout][addons] Failed to calculate add-on amount", error);
+    return NextResponse.json(
+      { error: "Failed to calculate add-on amount in AMD." },
+      { status: 500 }
+    );
+  }
+
+  const amountValue = Math.round(addonAmountAmd.totalAmd);
+  if (!Number.isFinite(amountValue) || amountValue <= 0) {
+    return NextResponse.json({ error: "Invalid booking total." }, { status: 400 });
+  }
+
+  const amountFormatted = formatAmount(amountValue);
+  const billNo = buildBillNo();
+  const language = normalizeLanguage(process.env.IDRAM_LANGUAGE);
+  const description = `Add-ons ${addonRequest.bookingId}`;
+  const mergedPayload = mergeBookingAddonPayload(userBooking.payload, addonRequest.services).payload;
+  const now = new Date();
+
+  await idramCollection.insertOne({
+    flow: "booking_addons",
+    billNo,
+    status: "created",
+    recAccount,
+    amount: {
+      value: amountValue,
+      formatted: amountFormatted,
+      currency: "AMD",
+      baseValue: addonAmountAmd.totalAmd,
+      baseCurrency: "AMD",
+      breakdownAmd: {
+        rooms: 0,
+        transfer: addonAmountAmd.breakdownAmd.transfer,
+        excursions: addonAmountAmd.breakdownAmd.excursions,
+        insurance: addonAmountAmd.breakdownAmd.insurance,
+        flights: addonAmountAmd.breakdownAmd.flights,
+      },
+      discount: null,
+    },
+    description,
+    payload: mergedPayload,
+    addon: {
+      targetBookingId: userBooking._id.toString(),
+      customerRefNumber: addonRequest.bookingId,
+      serviceKeys: addonRequest.serviceKeys,
+      services: addonRequest.services,
+      existingServiceKeys: [...existingServiceKeys],
+    },
+    userId,
+    userEmail: session?.user?.email ?? null,
+    userName: session?.user?.name ?? null,
+    locale: params.locale,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return NextResponse.json({
+    action: IDRAM_ACTION,
+    billNo,
+    fields: {
+      EDP_LANGUAGE: language,
+      EDP_REC_ACCOUNT: recAccount,
+      EDP_DESCRIPTION: description,
+      EDP_AMOUNT: amountFormatted,
+      EDP_BILL_NO: billNo,
+      ...(session?.user?.email ? { EDP_EMAIL: session.user.email } : {}),
+    },
+  });
+};
+
 export async function POST(request: NextRequest) {
   try {
     const paymentMethodFlags = await getPaymentMethodFlags();
@@ -230,8 +511,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const locale =
       typeof (body as { locale?: unknown }).locale === "string"
-        ? (body as { locale?: string }).locale?.trim()
+        ? (body as { locale?: string }).locale?.trim() ?? null
         : null;
+
+    const addonResponse = await tryHandleBookingAddonCheckout({
+      body,
+      locale,
+    });
+    if (addonResponse) {
+      return addonResponse;
+    }
+
     const sessionId =
       parseSessionId((body as { sessionId?: unknown }).sessionId) ??
       getSessionFromCookie(request);

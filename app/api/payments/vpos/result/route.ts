@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/db";
 import { book } from "@/lib/aoryx-client";
 import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
@@ -6,6 +7,11 @@ import { recordUserBooking, type AppliedBookingCoupon } from "@/lib/user-data";
 import { sendBookingConfirmationEmail } from "@/lib/email";
 import { incrementCouponSuccessfulOrders } from "@/lib/coupons";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
+import {
+  mergeBookingAddonPayload,
+  parseBookingAddonServices,
+  resolveBookingAddonServiceKeys,
+} from "@/lib/booking-addons";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
 export const runtime = "nodejs";
@@ -13,6 +19,7 @@ export const runtime = "nodejs";
 type PaymentProvider = "idbank" | "ameriabank";
 
 type VposPaymentRecord = {
+  flow?: string | null;
   provider?: PaymentProvider | string;
   orderId?: string;
   orderNumber?: string;
@@ -37,6 +44,12 @@ type VposPaymentRecord = {
   userName?: string | null;
   locale?: string | null;
   bookingResult?: AoryxBookingResult | Record<string, unknown> | null;
+  addon?: {
+    targetBookingId?: string | null;
+    customerRefNumber?: string | null;
+    serviceKeys?: unknown;
+    services?: unknown;
+  } | null;
   updatedAt?: Date | string | number | null;
   paidAt?: Date | string | number | null;
 };
@@ -85,6 +98,38 @@ const VPOS_PUBLIC_ORIGIN = "https://megatours.am";
 const normalizeBaseUrl = (value: string) => value.trim().replace(/\/+$/, "");
 
 const resolveString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+const normalizeOrigin = (value: string | null | undefined): string | null => {
+  const trimmed = resolveString(value);
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return null;
+  }
+};
+
+const resolvePublicOrigin = (request: NextRequest): string => {
+  const explicitOrigin = normalizeOrigin(process.env.VPOS_PUBLIC_ORIGIN);
+  if (explicitOrigin) return explicitOrigin;
+
+  const forwardedHost = resolveString(request.headers.get("x-forwarded-host")).split(",")[0]?.trim() ?? "";
+  const forwardedProto = resolveString(request.headers.get("x-forwarded-proto")).split(",")[0]?.trim() ?? "";
+  if (forwardedHost) {
+    const protocol = forwardedProto || request.nextUrl.protocol.replace(":", "") || "https";
+    const forwardedOrigin = normalizeOrigin(`${protocol}://${forwardedHost}`);
+    if (forwardedOrigin) return forwardedOrigin;
+  }
+
+  const requestOrigin = normalizeOrigin(request.nextUrl.origin);
+  if (requestOrigin) return requestOrigin;
+
+  const siteOrigin = normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXTAUTH_URL);
+  if (siteOrigin) return siteOrigin;
+
+  if (process.env.NODE_ENV !== "production") return "http://localhost:3000";
+  return VPOS_PUBLIC_ORIGIN;
+};
 
 const normalizeLanguage = (value: string | undefined) => {
   const normalized = (value ?? DEFAULT_LANGUAGE).trim().toLowerCase();
@@ -188,11 +233,12 @@ const unwrapFindOneAndUpdateResult = <T,>(
 };
 
 const buildRedirect = (
+  publicOrigin: string,
   locale: Locale,
   path: "/payment/success" | "/payment/fail",
   params: Record<string, string | undefined>
 ) => {
-  const url = new URL(`/${locale}${path}`, VPOS_PUBLIC_ORIGIN);
+  const url = new URL(`/${locale}${path}`, publicOrigin);
   Object.entries(params).forEach(([key, value]) => {
     if (value) url.searchParams.set(key, value);
   });
@@ -343,13 +389,20 @@ const getGatewayStatus = async (
 };
 
 export async function GET(request: NextRequest) {
+  const publicOrigin = resolvePublicOrigin(request);
+  const redirect = (
+    locale: Locale,
+    path: "/payment/success" | "/payment/fail",
+    params: Record<string, string | undefined>
+  ) => buildRedirect(publicOrigin, locale, path, params);
+
   const searchParams = request.nextUrl.searchParams;
   const paymentIdParam = searchParams.get("paymentID") || searchParams.get("paymentId");
   const orderIdParam = searchParams.get("orderId") || searchParams.get("mdOrder") || paymentIdParam;
   const orderNumberParam = searchParams.get("orderNumber") || searchParams.get("orderID");
 
   if (!orderIdParam && !orderNumberParam) {
-    return buildRedirect(defaultLocale, "/payment/fail", {});
+    return redirect(defaultLocale, "/payment/fail", {});
   }
 
   let db: Awaited<ReturnType<typeof getDb>>;
@@ -357,7 +410,7 @@ export async function GET(request: NextRequest) {
     db = await getDb();
   } catch (error) {
     console.error("[Vpos][result] Failed to connect to database", error);
-    return buildRedirect(defaultLocale, "/payment/fail", {});
+    return redirect(defaultLocale, "/payment/fail", {});
   }
 
   const collection = db.collection("vpos_payments");
@@ -372,7 +425,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (!record) {
-    return buildRedirect(defaultLocale, "/payment/fail", {});
+    return redirect(defaultLocale, "/payment/fail", {});
   }
 
   const locale = resolveLocale(record.locale);
@@ -381,7 +434,7 @@ export async function GET(request: NextRequest) {
   const orderNumber = record.orderNumber || orderNumberParam || "";
 
   if (!orderId) {
-    return buildRedirect(locale, "/payment/fail", { orderNumber });
+    return redirect(locale, "/payment/fail", { orderNumber });
   }
 
   if (record.status === "booking_complete") {
@@ -422,10 +475,10 @@ export async function GET(request: NextRequest) {
         console.error("[Vpos][result] Failed to update coupon order stats", error);
       }
     }
-    return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
+    return redirect(locale, "/payment/success", { orderId, orderNumber });
   }
   if (record.status === "booking_failed") {
-    return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
+    return redirect(locale, "/payment/fail", { orderId, orderNumber });
   }
 
   let statusResponse: GatewayStatus;
@@ -442,7 +495,7 @@ export async function GET(request: NextRequest) {
     statusResponse = await getGatewayStatus(provider, orderId, language, decimals);
   } catch (error) {
     console.error("[Vpos][result] Failed to query gateway status", error);
-    return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
+    return redirect(locale, "/payment/fail", { orderId, orderNumber });
   }
 
   const expectedAmountMinor =
@@ -504,7 +557,7 @@ export async function GET(request: NextRequest) {
   );
 
   if (!paymentSuccess) {
-    return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
+    return redirect(locale, "/payment/fail", { orderId, orderNumber });
   }
 
   const lock = await collection.findOneAndUpdate(
@@ -534,7 +587,7 @@ export async function GET(request: NextRequest) {
           }
         );
       }
-      return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
+      return redirect(locale, "/payment/success", { orderId, orderNumber });
     }
     if (latest?.status === "booking_in_progress") {
       for (let attempt = 0; attempt < BOOKING_STATUS_POLL_ATTEMPTS; attempt += 1) {
@@ -552,10 +605,10 @@ export async function GET(request: NextRequest) {
               }
             );
           }
-          return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
+          return redirect(locale, "/payment/success", { orderId, orderNumber });
         }
         if (polled?.status === "booking_failed") {
-          return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
+          return redirect(locale, "/payment/fail", { orderId, orderNumber });
         }
       }
 
@@ -592,12 +645,12 @@ export async function GET(request: NextRequest) {
           orderId,
           provider,
         });
-        return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
+        return redirect(locale, "/payment/success", { orderId, orderNumber });
       }
     }
 
     if (!lockedRecord && latest?.status === "booking_failed") {
-      return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
+      return redirect(locale, "/payment/fail", { orderId, orderNumber });
     }
 
     if (!lockedRecord) {
@@ -617,17 +670,17 @@ export async function GET(request: NextRequest) {
             }
           );
         }
-        return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
+        return redirect(locale, "/payment/success", { orderId, orderNumber });
       }
       if (latestAfterRecovery?.status === "booking_failed") {
-        return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
+        return redirect(locale, "/payment/fail", { orderId, orderNumber });
       }
       if (latestAfterRecovery?.status === "booking_in_progress" && !isStaleInProgressRecord(latestAfterRecovery)) {
         console.info("[Vpos][result] Booking still in progress after recovery check", {
           orderId,
           provider,
         });
-        return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
+        return redirect(locale, "/payment/success", { orderId, orderNumber });
       }
     }
 
@@ -636,7 +689,7 @@ export async function GET(request: NextRequest) {
         orderId,
         provider,
       });
-      return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
+      return redirect(locale, "/payment/fail", { orderId, orderNumber });
     }
   }
 
@@ -652,7 +705,100 @@ export async function GET(request: NextRequest) {
         },
       }
     );
-    return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
+    return redirect(locale, "/payment/fail", { orderId, orderNumber });
+  }
+
+  const paymentFlow = resolveString(lockedRecord.flow).toLowerCase();
+  if (paymentFlow === "booking_addons") {
+    try {
+      const targetBookingId = resolveString(lockedRecord.addon?.targetBookingId);
+      if (!targetBookingId || !ObjectId.isValid(targetBookingId)) {
+        throw new Error("Missing add-on booking reference.");
+      }
+      const userId = resolveString(lockedRecord.userId);
+      if (!userId) {
+        throw new Error("Missing add-on booking owner.");
+      }
+      const addonServices = parseBookingAddonServices(lockedRecord.addon?.services ?? null);
+      const requestedServiceKeys = resolveBookingAddonServiceKeys(addonServices);
+      if (requestedServiceKeys.length === 0) {
+        throw new Error("Missing add-on services payload.");
+      }
+
+      const bookingObjectId = new ObjectId(targetBookingId);
+      const userBookings = db.collection("user_bookings");
+      const userBooking = (await userBookings.findOne({
+        _id: bookingObjectId,
+        userIdString: userId,
+      })) as { payload?: AoryxBookingPayload | null; booking?: AoryxBookingResult | null } | null;
+      if (!userBooking?.payload) {
+        throw new Error("Target booking not found.");
+      }
+
+      const merged = mergeBookingAddonPayload(userBooking.payload, addonServices);
+      const appliedAt = new Date();
+      const paymentCurrency =
+        lockedRecord.amount?.currency ?? lockedRecord.amount?.currencyCode ?? null;
+      await userBookings.updateOne(
+        { _id: bookingObjectId, userIdString: userId },
+        {
+          $set: {
+            payload: merged.payload,
+            updatedAt: appliedAt,
+            addonLastPayment: {
+              at: appliedAt,
+              provider,
+              orderId,
+              orderNumber: orderNumber || null,
+              amountValue:
+                typeof lockedRecord.amount?.value === "number" &&
+                Number.isFinite(lockedRecord.amount.value)
+                  ? lockedRecord.amount.value
+                  : null,
+              currency: paymentCurrency,
+              requestedServices: requestedServiceKeys,
+              appliedServices: merged.appliedServiceKeys,
+              skippedServices: merged.skippedServiceKeys,
+            },
+          },
+        }
+      );
+
+      await collection.updateOne(
+        { orderId },
+        {
+          $set: {
+            status: "booking_complete",
+            payload: merged.payload,
+            bookingResult: userBooking.booking ?? null,
+            addonAppliedAt: appliedAt,
+            addonApply: {
+              targetBookingId,
+              requestedServices: requestedServiceKeys,
+              appliedServices: merged.appliedServiceKeys,
+              skippedServices: merged.skippedServiceKeys,
+            },
+            updatedAt: appliedAt,
+          },
+        }
+      );
+
+      return redirect(locale, "/payment/success", { orderId, orderNumber });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to apply booking add-ons";
+      await collection.updateOne(
+        { orderId },
+        {
+          $set: {
+            status: "booking_failed",
+            bookingError: message,
+            updatedAt: new Date(),
+          },
+        }
+      );
+      console.error("[Vpos][result] Add-on booking update failed", error);
+      return redirect(locale, "/payment/fail", { orderId, orderNumber });
+    }
   }
 
   try {
@@ -762,7 +908,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return buildRedirect(locale, "/payment/success", { orderId, orderNumber });
+    return redirect(locale, "/payment/success", { orderId, orderNumber });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to complete booking";
     await collection.updateOne(
@@ -776,6 +922,6 @@ export async function GET(request: NextRequest) {
       }
     );
     console.error("[Vpos][result] Booking failed", error);
-    return buildRedirect(locale, "/payment/fail", { orderId, orderNumber });
+    return redirect(locale, "/payment/fail", { orderId, orderNumber });
   }
 }

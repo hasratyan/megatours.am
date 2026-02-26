@@ -6322,6 +6322,51 @@ main.payment-status{
   background: rgba(12, 28, 35, 0.85);
 }
 
+.voucher-card--addons{
+  margin-bottom: 1.5rem;
+  display: grid;
+  gap: 0.9rem;
+
+  p{
+    color: rgba(226, 232, 240, 0.8);
+  }
+}
+
+.booking-addons-page{
+  display: grid;
+  gap: 1.25rem;
+}
+
+.booking-addons-actions{
+  display: flex;
+  justify-content: flex-start;
+}
+
+.booking-addons-grid{
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.booking-addon-card{
+  display: grid;
+  gap: 0.75rem;
+}
+
+.booking-addon-status{
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.booking-addons-summary{
+  display: grid;
+  gap: 1rem;
+}
+
+.booking-addons-payment{
+  display: grid;
+  gap: 0.8rem;
+}
+
 @media (max-width: 960px){
   .voucher-hero{
     grid-template-columns: minmax(0, 1fr);

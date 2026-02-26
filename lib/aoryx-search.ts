@@ -4,7 +4,11 @@ import {
   AoryxClientError,
   AoryxServiceError,
 } from "@/lib/aoryx-client";
-import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env";
+import {
+  AORYX_RUNTIME_ENV,
+  AORYX_TASSPRO_CUSTOMER_CODE,
+  AORYX_TASSPRO_REGION_ID,
+} from "@/lib/env";
 import { getAoryxHotelB2BPlatformFee } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
 import { isTechnicalErrorMessage } from "@/lib/error-utils";
@@ -28,7 +32,7 @@ export async function runAoryxSearch(
 ): Promise<SafeSearchResult> {
   const params = withAoryxDefaults(payload);
   const result = await searchWithOptions(params, {
-    environment: options.environment ?? "live",
+    environment: options.environment ?? AORYX_RUNTIME_ENV,
   });
   const safeResult: SafeSearchResult = {
     currency: result.currency,

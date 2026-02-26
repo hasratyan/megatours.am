@@ -16,6 +16,7 @@ Set:
 ```
 NEXTAUTH_SECRET=generated-secret
 NEXTAUTH_URL=http://localhost:3000
+VPOS_PUBLIC_ORIGIN=http://localhost:3000
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
 MONGODB_URI=your-mongodb-uri
@@ -66,6 +67,8 @@ NEXT_PUBLIC_ZOHO_SALESIQ_FALLBACK_URL=https://your-support-page-or-salesiq-link
   - FAIL_URL: `http://localhost:3000/payment/fail`
 
 ## Card payment setup
+- `VPOS_PUBLIC_ORIGIN` controls where payment result redirects land (`/payment/success` / `/payment/fail`).
+- For local development set: `VPOS_PUBLIC_ORIGIN=http://localhost:3000`.
 - IDBank VPOS callback URL:
   - `http://localhost:3000/api/payments/vpos/result`
 - Ameriabank VPOS callback URL (`BackURL` in InitPayment):

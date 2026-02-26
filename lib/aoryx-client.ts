@@ -1,8 +1,12 @@
 // Aoryx API Client
 import {
   AORYX_API_KEY,
+  AORYX_ACTIVE_API_KEY,
+  AORYX_ACTIVE_BASE_URL,
+  AORYX_ACTIVE_CUSTOMER_CODE,
   AORYX_BASE_URL,
   AORYX_CUSTOMER_CODE,
+  AORYX_RUNTIME_ENV,
   AORYX_TEST_API_KEY,
   AORYX_TEST_CUSTOMER_CODE,
   AORYX_TEST_URL,
@@ -20,7 +24,6 @@ import type {
   AoryxHotelSummary,
   AoryxSearchHotel,
   AoryxHotelsInfoByDestinationIdRequest,
-  AoryxHotelsInfoByDestinationIdResponse,
   HotelInfo,
   AoryxHotelInfoRequest,
   AoryxHotelInfoResponse,
@@ -156,15 +159,24 @@ function ensureLiveBaseUrl(): string {
   return AORYX_BASE_URL.replace(/\/$/, "");
 }
 
+function ensureActiveBaseUrl(): string {
+  const activeBaseUrlName = AORYX_RUNTIME_ENV === "test" ? "AORYX_TEST_URL" : "AORYX_BASE_URL";
+  if (!AORYX_ACTIVE_BASE_URL) {
+    throw new AoryxClientError(`Missing ${activeBaseUrlName} configuration`);
+  }
+  return AORYX_ACTIVE_BASE_URL.replace(/\/$/, "");
+}
+
 function resolveStaticConfig(): AoryxResolvedConfig {
-  if (!AORYX_API_KEY) {
-    throw new AoryxClientError("Missing AORYX_API_KEY configuration");
+  const activeApiKeyName = AORYX_RUNTIME_ENV === "test" ? "AORYX_TEST_API_KEY" : "AORYX_API_KEY";
+  if (!AORYX_ACTIVE_API_KEY) {
+    throw new AoryxClientError(`Missing ${activeApiKeyName} configuration`);
   }
 
   return {
-    baseUrl: ensureLiveBaseUrl(),
-    apiKey: AORYX_API_KEY,
-    customerCode: AORYX_CUSTOMER_CODE ?? "",
+    baseUrl: ensureActiveBaseUrl(),
+    apiKey: AORYX_ACTIVE_API_KEY,
+    customerCode: AORYX_ACTIVE_CUSTOMER_CODE,
   };
 }
 
@@ -184,7 +196,15 @@ function resolveDistributionConfig(environment: AoryxEnvironment): AoryxResolved
     };
   }
 
-  return resolveStaticConfig();
+  if (!AORYX_API_KEY) {
+    throw new AoryxClientError("Missing AORYX_API_KEY configuration");
+  }
+
+  return {
+    baseUrl: ensureLiveBaseUrl(),
+    apiKey: AORYX_API_KEY,
+    customerCode: AORYX_CUSTOMER_CODE ?? "",
+  };
 }
 
 const staticEndpoints = new Set<AoryxStaticEndpoint>(Object.values(STATIC_ENDPOINTS));
@@ -199,7 +219,7 @@ async function coreRequest<TRequest, TResponse>(
   payload: TRequest,
   options: AoryxRequestOptions = {}
 ): Promise<TResponse> {
-  const environment = options.environment ?? "live";
+  const environment = options.environment ?? AORYX_RUNTIME_ENV;
   const config = isStaticEndpoint(endpoint)
     ? resolveStaticConfig()
     : resolveDistributionConfig(environment);

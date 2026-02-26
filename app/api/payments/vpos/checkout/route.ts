@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import type { Collection, Document } from "mongodb";
+import { ObjectId, type Collection, type Document } from "mongodb";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -16,7 +16,20 @@ import {
   type CouponValidationFailureReason,
 } from "@/lib/coupons";
 import { getPaymentMethodFlags } from "@/lib/payment-method-flags";
-import type { AoryxBookingPayload } from "@/types/aoryx";
+import { getServiceFlags } from "@/lib/service-flags";
+import { DEFAULT_SERVICE_FLAGS } from "@/lib/package-builder-state";
+import { validateTransferFlightDetailsForBooking } from "@/lib/b2b-service-booking";
+import {
+  calculateBookingAddonAmountAmd,
+  isBookingCanceled,
+  isBookingConfirmed,
+  mergeBookingAddonPayload,
+  parseBookingAddonCheckoutRequest,
+  resolveExistingBookingAddonServiceKeys,
+  type BookingAddonCheckoutRequest,
+  type BookingAddonServiceKey,
+} from "@/lib/booking-addons";
+import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
 export const runtime = "nodejs";
 
@@ -44,6 +57,25 @@ type BlockingVposAttempt = {
   updatedAt?: Date | string | number | null;
 };
 
+type UserBookingRecord = {
+  _id: ObjectId;
+  userIdString?: string | null;
+  payload?: AoryxBookingPayload | null;
+  booking?: AoryxBookingResult | null;
+};
+
+type BlockingAddonAttempt = {
+  provider?: string;
+  orderId?: string;
+  orderNumber?: string;
+  status?: string;
+  createdAt?: Date | string | number | null;
+  updatedAt?: Date | string | number | null;
+  addon?: {
+    serviceKeys?: BookingAddonServiceKey[];
+  };
+};
+
 const IDBANK_DEFAULT_BASE_URL = "https://ipaytest.arca.am:8445/payment/rest";
 const AMERIA_DEFAULT_BASE_URL = "https://servicestest.ameriabank.am/VPOS";
 const DEFAULT_CURRENCY_CODE = "051";
@@ -62,10 +94,43 @@ const DUPLICATE_ATTEMPT_STATUSES = [
 ] as const;
 const ACTIVE_CREATED_ATTEMPT_TTL_MS = 20 * 60 * 1000;
 const DUPLICATE_ATTEMPT_LOOKUP_LIMIT = 20;
+const ADDON_ACTIVE_ATTEMPT_STATUSES = ["created", "payment_success", "booking_in_progress"] as const;
 
 const normalizeBaseUrl = (value: string) => value.trim().replace(/\/+$/, "");
 
 const resolveString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+const normalizeOrigin = (value: string | null | undefined): string | null => {
+  const trimmed = resolveString(value);
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return null;
+  }
+};
+
+const resolvePublicOrigin = (request: NextRequest): string => {
+  const explicitOrigin = normalizeOrigin(process.env.VPOS_PUBLIC_ORIGIN);
+  if (explicitOrigin) return explicitOrigin;
+
+  const forwardedHost = resolveString(request.headers.get("x-forwarded-host")).split(",")[0]?.trim() ?? "";
+  const forwardedProto = resolveString(request.headers.get("x-forwarded-proto")).split(",")[0]?.trim() ?? "";
+  if (forwardedHost) {
+    const protocol = forwardedProto || request.nextUrl.protocol.replace(":", "") || "https";
+    const forwardedOrigin = normalizeOrigin(`${protocol}://${forwardedHost}`);
+    if (forwardedOrigin) return forwardedOrigin;
+  }
+
+  const requestOrigin = normalizeOrigin(request.nextUrl.origin);
+  if (requestOrigin) return requestOrigin;
+
+  const siteOrigin = normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXTAUTH_URL);
+  if (siteOrigin) return siteOrigin;
+
+  if (process.env.NODE_ENV !== "production") return "http://localhost:3000";
+  return VPOS_PUBLIC_ORIGIN;
+};
 
 const parseSessionId = (input: unknown): string | undefined => {
   if (typeof input !== "string") return undefined;
@@ -136,7 +201,8 @@ const sanitizeDescription = (value: string) =>
 const resolvePageView = (userAgent: string | null) =>
   /Mobi|Android|iPhone|iPad|iPod/i.test(userAgent ?? "") ? "MOBILE" : "DESKTOP";
 
-const buildReturnUrl = () => new URL("/api/payments/vpos/result", VPOS_PUBLIC_ORIGIN).toString();
+const buildReturnUrl = (request: NextRequest) =>
+  new URL("/api/payments/vpos/result", resolvePublicOrigin(request)).toString();
 
 const resolveCurrencyConfig = (provider: PaymentProvider) => {
   if (provider === "ameriabank") {
@@ -382,6 +448,65 @@ const duplicateAttemptMessage = (attempt: BlockingVposAttempt): string => {
   return "A payment attempt for this prebook session is already active. Please complete it or wait a few minutes before retrying.";
 };
 
+const isBlockingAddonAttempt = (record: BlockingAddonAttempt): boolean => {
+  const status = resolveString(record.status).toLowerCase();
+  if (status === "booking_in_progress" || status === "payment_success") {
+    return true;
+  }
+  if (status === "created") {
+    const lastUpdatedAt = toDate(record.updatedAt) ?? toDate(record.createdAt);
+    if (!lastUpdatedAt) return false;
+    return Date.now() - lastUpdatedAt.getTime() <= ACTIVE_CREATED_ATTEMPT_TTL_MS;
+  }
+  return false;
+};
+
+const findBlockingAddonAttempt = async (
+  collection: Collection<Document>,
+  targetBookingId: string,
+  serviceKeys: BookingAddonServiceKey[]
+): Promise<BlockingAddonAttempt | null> => {
+  if (!targetBookingId || serviceKeys.length === 0) return null;
+  const sort = { updatedAt: -1, createdAt: -1 } as const;
+  const statusFilter = { $in: [...ADDON_ACTIVE_ATTEMPT_STATUSES] };
+  const projection = {
+    _id: 0,
+    provider: 1,
+    orderId: 1,
+    orderNumber: 1,
+    status: 1,
+    createdAt: 1,
+    updatedAt: 1,
+    addon: 1,
+  };
+  const attempts = (await collection
+    .find(
+      {
+        flow: "booking_addons",
+        "addon.targetBookingId": targetBookingId,
+        status: statusFilter,
+        "addon.serviceKeys": { $in: serviceKeys },
+      },
+      { projection }
+    )
+    .sort(sort)
+    .limit(DUPLICATE_ATTEMPT_LOOKUP_LIMIT)
+    .toArray()) as BlockingAddonAttempt[];
+
+  for (const attempt of attempts) {
+    if (isBlockingAddonAttempt(attempt)) return attempt;
+  }
+
+  return null;
+};
+
+const resolveAddonServiceFlag = (service: BookingAddonServiceKey) => {
+  if (service === "transfer") return "transfer" as const;
+  if (service === "excursion") return "excursion" as const;
+  if (service === "flight") return "flight" as const;
+  return "insurance" as const;
+};
+
 const couponValidationFailureToResponse = (reason: CouponValidationFailureReason) => {
   if (reason === "invalid_format" || reason === "not_found") {
     return { status: 400, error: "Coupon is invalid.", code: "invalid_coupon" };
@@ -574,6 +699,243 @@ const initializeAmeriaPayment = async (params: {
   throw new Error(lastErrorMessage);
 };
 
+const tryHandleBookingAddonCheckout = async (params: {
+  body: unknown;
+  request: NextRequest;
+  provider: PaymentProvider;
+  locale: string | null;
+}): Promise<NextResponse | null> => {
+  const addonRequest: BookingAddonCheckoutRequest | null = parseBookingAddonCheckoutRequest(params.body);
+  if (!addonRequest) return null;
+
+  const session = await getServerSession(authOptions);
+  const userId = session?.user?.id ?? null;
+  if (!userId) {
+    return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
+  }
+
+  const db = await getDb();
+  const vposCollection = db.collection("vpos_payments");
+  const userBookingsCollection = db.collection("user_bookings");
+  const userBooking = (await userBookingsCollection.findOne({
+    userIdString: userId,
+    "payload.customerRefNumber": addonRequest.bookingId,
+  })) as UserBookingRecord | null;
+
+  if (!userBooking?.payload) {
+    return NextResponse.json({ error: "Booking not found." }, { status: 404 });
+  }
+  if (!isBookingConfirmed(userBooking.booking ?? null)) {
+    return NextResponse.json(
+      {
+        error: "This booking is not confirmed yet.",
+        code: "booking_not_confirmed",
+      },
+      { status: 409 }
+    );
+  }
+  if (isBookingCanceled(userBooking.booking ?? null)) {
+    return NextResponse.json(
+      {
+        error: "Canceled bookings can not receive additional services.",
+        code: "booking_canceled",
+      },
+      { status: 409 }
+    );
+  }
+
+  try {
+    validateTransferFlightDetailsForBooking(addonRequest.services.transferSelection);
+  } catch (validationError) {
+    return NextResponse.json(
+      {
+        error:
+          validationError instanceof Error
+            ? validationError.message
+            : "Transfer flight details are invalid.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const existingServiceKeys = new Set(resolveExistingBookingAddonServiceKeys(userBooking.payload));
+  const duplicateServices = addonRequest.serviceKeys.filter((service) => existingServiceKeys.has(service));
+  if (duplicateServices.length > 0) {
+    return NextResponse.json(
+      {
+        error: "Selected services are already attached to this booking.",
+        code: "addon_service_exists",
+        services: duplicateServices,
+      },
+      { status: 409 }
+    );
+  }
+
+  const serviceFlags = await getServiceFlags().catch(() => DEFAULT_SERVICE_FLAGS);
+  const disabledServices = addonRequest.serviceKeys.filter(
+    (service) => serviceFlags[resolveAddonServiceFlag(service)] === false
+  );
+  if (disabledServices.length > 0) {
+    return NextResponse.json(
+      {
+        error: "One or more selected services are currently disabled.",
+        code: "service_disabled",
+        services: disabledServices,
+      },
+      { status: 403 }
+    );
+  }
+
+  const blockingAddonAttempt = await findBlockingAddonAttempt(
+    vposCollection,
+    userBooking._id.toString(),
+    addonRequest.serviceKeys
+  );
+  if (blockingAddonAttempt) {
+    return NextResponse.json(
+      {
+        error:
+          "A payment attempt for the selected add-on services is already active. Please complete it or wait a few minutes.",
+        code: "duplicate_payment_attempt",
+        existingPayment: {
+          provider: resolveString(blockingAddonAttempt.provider) || null,
+          status: resolveString(blockingAddonAttempt.status) || null,
+          orderId: resolveString(blockingAddonAttempt.orderId) || null,
+          orderNumber: resolveString(blockingAddonAttempt.orderNumber) || null,
+        },
+      },
+      { status: 409 }
+    );
+  }
+
+  let addonAmountAmd: Awaited<ReturnType<typeof calculateBookingAddonAmountAmd>>;
+  try {
+    addonAmountAmd = await calculateBookingAddonAmountAmd(
+      addonRequest.services,
+      userBooking.payload.currency ?? "USD"
+    );
+  } catch (error) {
+    console.error("[Vpos][checkout][addons] Failed to calculate add-on amount", error);
+    return NextResponse.json(
+      { error: "Failed to calculate add-on amount in AMD." },
+      { status: 500 }
+    );
+  }
+
+  const { code: currencyCode, decimals: currencyDecimals } = resolveCurrencyConfig(params.provider);
+  if (currencyCode !== "051") {
+    return NextResponse.json(
+      { error: "Card payment is configured for AMD only." },
+      { status: 500 }
+    );
+  }
+
+  let amountValue = Number(addonAmountAmd.totalAmd.toFixed(currencyDecimals));
+  const ameriaBaseUrl = params.provider === "ameriabank" ? resolveAmeriaConfig().baseUrl : "";
+  const ameriaOverrideAmount =
+    params.provider === "ameriabank" ? resolveAmeriaOverrideAmount(ameriaBaseUrl) : null;
+  if (params.provider === "ameriabank" && ameriaOverrideAmount !== null) {
+    amountValue = Number(ameriaOverrideAmount.toFixed(currencyDecimals));
+  }
+
+  const amountMinor = toMinorUnits(amountValue, currencyDecimals);
+  if (!Number.isFinite(amountMinor) || amountMinor <= 0) {
+    return NextResponse.json({ error: "Invalid payment amount." }, { status: 400 });
+  }
+
+  const orderNumber = buildOrderNumber(`ADDON-${addonRequest.bookingId}`);
+  const description = sanitizeDescription(`Add-ons ${addonRequest.bookingId}`);
+  const language = normalizeLanguage(
+    params.provider === "ameriabank"
+      ? process.env.AMERIA_VPOS_LANGUAGE ?? params.locale ?? undefined
+      : process.env.VPOS_LANGUAGE ?? params.locale ?? undefined
+  );
+  const returnUrl = buildReturnUrl(params.request);
+  const pageView = resolvePageView(params.request.headers.get("user-agent"));
+
+  let initResult: VposInitResult;
+  try {
+    initResult =
+      params.provider === "ameriabank"
+        ? await initializeAmeriaPayment({
+            amountValue,
+            amountMinor,
+            currencyCode,
+            description,
+            language,
+            returnUrl,
+            payload: userBooking.payload,
+            locale: params.locale,
+          })
+        : await initializeIdbankPayment({
+            amountMinor,
+            currencyCode,
+            orderNumber,
+            description,
+            language,
+            returnUrl,
+            pageView,
+            locale: params.locale,
+          });
+  } catch (gatewayError) {
+    const message =
+      gatewayError instanceof Error && gatewayError.message.trim().length > 0
+        ? gatewayError.message
+        : "Failed to initialize card payment.";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
+
+  const mergedPayload = mergeBookingAddonPayload(userBooking.payload, addonRequest.services).payload;
+  const now = new Date();
+  await vposCollection.insertOne({
+    flow: "booking_addons",
+    provider: params.provider,
+    orderId: initResult.orderId,
+    orderNumber: initResult.orderNumber,
+    status: "created",
+    amount: {
+      value: amountValue,
+      minor: amountMinor,
+      currency: "AMD",
+      currencyCode,
+      decimals: currencyDecimals,
+      baseValue: addonAmountAmd.totalAmd,
+      baseCurrency: "AMD",
+      convertedValue: addonAmountAmd.totalAmd,
+      breakdownAmd: {
+        rooms: 0,
+        transfer: addonAmountAmd.breakdownAmd.transfer,
+        excursions: addonAmountAmd.breakdownAmd.excursions,
+        insurance: addonAmountAmd.breakdownAmd.insurance,
+        flights: addonAmountAmd.breakdownAmd.flights,
+      },
+      discount: null,
+    },
+    description,
+    payload: mergedPayload,
+    addon: {
+      targetBookingId: userBooking._id.toString(),
+      customerRefNumber: addonRequest.bookingId,
+      serviceKeys: addonRequest.serviceKeys,
+      services: addonRequest.services,
+      existingServiceKeys: [...existingServiceKeys],
+    },
+    userId,
+    userEmail: session?.user?.email ?? null,
+    userName: session?.user?.name ?? null,
+    locale: params.locale,
+    gateway: initResult.gatewayMeta,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return NextResponse.json({
+    formUrl: initResult.formUrl,
+    orderId: initResult.orderId,
+    orderNumber: initResult.orderNumber,
+  });
+};
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -594,6 +956,16 @@ export async function POST(request: NextRequest) {
         },
         { status: 403 }
       );
+    }
+
+    const addonResponse = await tryHandleBookingAddonCheckout({
+      body,
+      request,
+      provider,
+      locale,
+    });
+    if (addonResponse) {
+      return addonResponse;
     }
 
     const sessionId =
@@ -799,7 +1171,7 @@ export async function POST(request: NextRequest) {
         ? process.env.AMERIA_VPOS_LANGUAGE ?? locale ?? undefined
         : process.env.VPOS_LANGUAGE ?? locale ?? undefined
     );
-    const returnUrl = buildReturnUrl();
+    const returnUrl = buildReturnUrl(request);
     const pageView = resolvePageView(request.headers.get("user-agent"));
 
     let initResult: VposInitResult;

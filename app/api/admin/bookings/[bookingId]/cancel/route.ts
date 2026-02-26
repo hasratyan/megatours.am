@@ -4,7 +4,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin";
 import { getDb } from "@/lib/db";
-import { AORYX_API_KEY, AORYX_BASE_URL, AORYX_CUSTOMER_CODE, AORYX_DEFAULT_CURRENCY, AORYX_TIMEOUT_MS } from "@/lib/env";
+import {
+  AORYX_ACTIVE_API_KEY,
+  AORYX_ACTIVE_BASE_URL,
+  AORYX_ACTIVE_CUSTOMER_CODE,
+  AORYX_DEFAULT_CURRENCY,
+  AORYX_TIMEOUT_MS,
+} from "@/lib/env";
 import { getAmdRates } from "@/lib/pricing";
 import { convertToAmd } from "@/lib/currency";
 import { cancelVposPayment } from "@/lib/vpos-cancel";
@@ -241,7 +247,7 @@ const buildRoomIdentifiers = (
 };
 
 const ensureAoryxConfig = () => {
-  if (!AORYX_BASE_URL || !AORYX_API_KEY) {
+  if (!AORYX_ACTIVE_BASE_URL || !AORYX_ACTIVE_API_KEY) {
     throw new Error("Aoryx API is not configured.");
   }
 };
@@ -251,7 +257,7 @@ const requestAoryx = async (
   payload: Record<string, unknown>
 ) => {
   ensureAoryxConfig();
-  const url = `${AORYX_BASE_URL.replace(/\/+$/, "")}/${endpoint}`;
+  const url = `${AORYX_ACTIVE_BASE_URL.replace(/\/+$/, "")}/${endpoint}`;
   const timeoutMs = Number.isFinite(AORYX_TIMEOUT_MS) && AORYX_TIMEOUT_MS > 0 ? AORYX_TIMEOUT_MS : 15000;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -261,8 +267,8 @@ const requestAoryx = async (
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ApiKey: AORYX_API_KEY,
-        ...(AORYX_CUSTOMER_CODE ? { CustomerCode: AORYX_CUSTOMER_CODE } : {}),
+        ApiKey: AORYX_ACTIVE_API_KEY,
+        ...(AORYX_ACTIVE_CUSTOMER_CODE ? { CustomerCode: AORYX_ACTIVE_CUSTOMER_CODE } : {}),
       },
       body: JSON.stringify(payload),
       signal: controller.signal,

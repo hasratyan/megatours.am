@@ -6,6 +6,7 @@ const {
   AORYX_API_KEY = "",
   AORYX_TEST_URL: RAW_AORYX_TEST_URL = "",
   AORYX_TEST_API_KEY = "",
+  AORYX_ENV: RAW_AORYX_ENV = "auto",
   AORYX_DEFAULT_CURRENCY = "USD",
   AORYX_TIMEOUT_MS_RAW = "15000",
   AORYX_CUSTOMER_CODE,
@@ -16,7 +17,7 @@ const {
   FLYDUBAI_TIMEOUT_MS_RAW = "15000",
   EFES_ENV: RAW_EFES_ENV = "staging",
   EFES_BASE_URL: RAW_EFES_BASE_URL = "https://stagingimex.efes.am",
-  EFES_BASE_URL_PROD = "",
+  EFES_BASE_URL_PROD = "https://imex.efes.am",
   EFES_USER = "",
   EFES_PASSWORD = "",
   EFES_COMPANY_ID = "",
@@ -47,6 +48,36 @@ export {
 export const AORYX_TIMEOUT_MS_NUMBER = Number.parseInt(AORYX_TIMEOUT_MS_RAW, 10);
 export const AORYX_TIMEOUT_MS = AORYX_TIMEOUT_MS_NUMBER;
 
+type AoryxRuntimeMode = "auto" | "live" | "test";
+export type AoryxRuntimeEnvironment = "live" | "test";
+
+const normalizeAoryxRuntimeMode = (value: string): AoryxRuntimeMode => {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "live" || normalized === "prod" || normalized === "production") return "live";
+  if (normalized === "test" || normalized === "sandbox" || normalized === "staging") return "test";
+  return "auto";
+};
+
+export const AORYX_RUNTIME_MODE = normalizeAoryxRuntimeMode(RAW_AORYX_ENV);
+
+const hasLiveAoryxConfig = Boolean(AORYX_API_KEY && AORYX_BASE_URL);
+const hasTestAoryxConfig = Boolean(AORYX_TEST_API_KEY && AORYX_TEST_URL);
+const isDevelopmentRuntime = process.env.NODE_ENV !== "production";
+
+export const AORYX_RUNTIME_ENV: AoryxRuntimeEnvironment = (() => {
+  if (AORYX_RUNTIME_MODE === "live") return "live";
+  if (AORYX_RUNTIME_MODE === "test") return "test";
+  if (isDevelopmentRuntime && hasTestAoryxConfig) return "test";
+  return "live";
+})();
+
+export const AORYX_ACTIVE_BASE_URL =
+  AORYX_RUNTIME_ENV === "test" ? AORYX_TEST_URL : AORYX_BASE_URL;
+export const AORYX_ACTIVE_API_KEY =
+  AORYX_RUNTIME_ENV === "test" ? AORYX_TEST_API_KEY : AORYX_API_KEY;
+export const AORYX_ACTIVE_CUSTOMER_CODE =
+  (AORYX_RUNTIME_ENV === "test" ? AORYX_TEST_CUSTOMER_CODE : AORYX_CUSTOMER_CODE) ?? "";
+
 export const FLYDUBAI_SEARCH_URL = RAW_FLYDUBAI_SEARCH_URL.trim();
 export { FLYDUBAI_API_KEY, FLYDUBAI_ACCESS_TOKEN };
 export const FLYDUBAI_TIMEOUT_MS_NUMBER = Number.parseInt(FLYDUBAI_TIMEOUT_MS_RAW, 10);
@@ -74,11 +105,11 @@ export const AORYX_TASSPRO_REGION_ID = "93";
 
 // Validation helper
 export function isAoryxConfigured(): boolean {
-  return Boolean(AORYX_API_KEY && AORYX_BASE_URL);
+  return AORYX_RUNTIME_ENV === "test" ? hasTestAoryxConfig : hasLiveAoryxConfig;
 }
 
 export function isAoryxTestConfigured(): boolean {
-  return Boolean(AORYX_TEST_API_KEY && AORYX_TEST_URL);
+  return hasTestAoryxConfig;
 }
 
 export function isFlydubaiConfigured(): boolean {
