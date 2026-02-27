@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/db";
-import { book } from "@/lib/aoryx-client";
+import { AoryxClientError, book, bookingDetails } from "@/lib/aoryx-client";
 import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
 import { recordUserBooking, type AppliedBookingCoupon } from "@/lib/user-data";
 import { sendBookingConfirmationEmail } from "@/lib/email";
 import { incrementCouponSuccessfulOrders } from "@/lib/coupons";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
+import { resolveBookingStatusKey } from "@/lib/booking-status";
 import {
   mergeBookingAddonPayload,
   parseBookingAddonServices,
@@ -98,6 +99,95 @@ const VPOS_PUBLIC_ORIGIN = "https://megatours.am";
 const normalizeBaseUrl = (value: string) => value.trim().replace(/\/+$/, "");
 
 const resolveString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+const summarizeEfesInsurance = (payload: AoryxBookingPayload | undefined) => {
+  const insurance = payload?.insurance;
+  return {
+    hasInsurance: Boolean(insurance),
+    provider: insurance?.provider ?? null,
+    travelersCount: Array.isArray(insurance?.travelers) ? insurance.travelers.length : 0,
+    startDate: insurance?.startDate ?? payload?.checkInDate ?? null,
+    endDate: insurance?.endDate ?? payload?.checkOutDate ?? null,
+    territoryCode: insurance?.territoryCode ?? null,
+    riskAmount: insurance?.riskAmount ?? null,
+    riskCurrency: insurance?.riskCurrency ?? null,
+  };
+};
+
+const isBookingResultConfirmed = (result: AoryxBookingResult | null | undefined) =>
+  resolveBookingStatusKey(result?.status) === "confirmed" ||
+  Boolean(
+    result?.hotelConfirmationNumber ||
+    result?.supplierConfirmationNumber ||
+    result?.adsConfirmationNumber
+  );
+
+const shouldAttemptBookReconciliation = (error: unknown) => {
+  if (error instanceof AoryxClientError) {
+    const endpoint = resolveString(error.endpoint).toLowerCase();
+    const isBookEndpoint = endpoint === "book";
+    if (!isBookEndpoint) return false;
+    if (typeof error.statusCode !== "number") return true;
+    return error.statusCode >= 500;
+  }
+  if (error instanceof Error) {
+    const normalizedMessage = error.message.toLowerCase();
+    return (
+      normalizedMessage.includes("aborted") ||
+      normalizedMessage.includes("timeout") ||
+      normalizedMessage.includes("timed out")
+    );
+  }
+  return false;
+};
+
+const bookWithRecovery = async (
+  payload: AoryxBookingPayload,
+  context: { orderId: string; provider: PaymentProvider; orderNumber: string | null }
+): Promise<AoryxBookingResult> => {
+  try {
+    return await book(payload);
+  } catch (error) {
+    if (!shouldAttemptBookReconciliation(error)) {
+      throw error;
+    }
+
+    console.warn("[Vpos][result] Aoryx book failed, attempting BookingDetails recovery", {
+      orderId: context.orderId,
+      orderNumber: context.orderNumber,
+      provider: context.provider,
+      sessionId: payload.sessionId,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+
+    try {
+      const recovered = await bookingDetails(payload.sessionId);
+      if (isBookingResultConfirmed(recovered)) {
+        console.info("[Vpos][result] BookingDetails recovery confirmed booking", {
+          orderId: context.orderId,
+          orderNumber: context.orderNumber,
+          provider: context.provider,
+          sessionId: payload.sessionId,
+          status: recovered.status,
+          hotelConfirmationNumber: recovered.hotelConfirmationNumber,
+          supplierConfirmationNumber: recovered.supplierConfirmationNumber,
+          adsConfirmationNumber: recovered.adsConfirmationNumber,
+        });
+        return recovered;
+      }
+    } catch (recoveryError) {
+      console.error("[Vpos][result] BookingDetails recovery failed", {
+        orderId: context.orderId,
+        orderNumber: context.orderNumber,
+        provider: context.provider,
+        sessionId: payload.sessionId,
+        message: recoveryError instanceof Error ? recoveryError.message : "Unknown error",
+      });
+    }
+
+    throw error;
+  }
+};
 
 const normalizeOrigin = (value: string | null | undefined): string | null => {
   const trimmed = resolveString(value);
@@ -802,7 +892,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result: AoryxBookingResult = await book(payload);
+    const result: AoryxBookingResult = await bookWithRecovery(payload, {
+      orderId,
+      provider,
+      orderNumber: orderNumber || null,
+    });
     await collection.updateOne(
       { orderId },
       {
@@ -852,8 +946,25 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    let insurancePolicies: unknown[] | null = null;
+    let insuranceError: string | null = null;
     try {
+      console.info("[EFES][vpos-result] policy request", {
+        orderId,
+        orderNumber: orderNumber || null,
+        paymentProvider: provider,
+        flow: paymentFlow || "booking",
+        ...summarizeEfesInsurance(payload),
+      });
       const policies = await createEfesPoliciesFromBooking(payload);
+      insurancePolicies = policies;
+      console.info("[EFES][vpos-result] policy response", {
+        orderId,
+        orderNumber: orderNumber || null,
+        provider,
+        flow: paymentFlow || "booking",
+        policies,
+      });
       if (policies.length > 0) {
         await collection.updateOne(
           { orderId },
@@ -867,6 +978,8 @@ export async function GET(request: NextRequest) {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create EFES policies";
+      insurancePolicies = [];
+      insuranceError = message;
       await collection.updateOne(
         { orderId },
         {
@@ -888,6 +1001,8 @@ export async function GET(request: NextRequest) {
           result,
           source: provider === "ameriabank" ? "vpos-ameriabank" : "vpos-idbank",
           coupon: appliedCoupon,
+          insurancePolicies,
+          insuranceError,
         });
       } catch (error) {
         console.error("[Vpos][result] Failed to record user booking", error);

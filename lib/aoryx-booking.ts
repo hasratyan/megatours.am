@@ -24,6 +24,77 @@ const normalizeGender = (value: unknown): "M" | "F" | null => {
   return normalized === "M" || normalized === "F" ? normalized : null;
 };
 
+const ISO_DATE_INPUT_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const parseIsoDateInput = (value: string): Date | null => {
+  if (!ISO_DATE_INPUT_REGEX.test(value)) return null;
+  const [yearRaw, monthRaw, dayRaw] = value.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(date.getTime())) return null;
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+};
+
+const resolveTodayUtc = () => {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+};
+
+const validateInsuranceTravelerDates = (
+  traveler: {
+    id?: string;
+    birthDate?: string;
+    passportIssueDate?: string;
+    passportExpiryDate?: string;
+  },
+  travelerIndex: number,
+  todayUtc: Date
+) => {
+  const travelerLabel = traveler.id
+    ? `Insurance traveler ${traveler.id}`
+    : `Insurance traveler ${travelerIndex + 1}`;
+
+  if (traveler.birthDate && !parseIsoDateInput(traveler.birthDate)) {
+    throw new Error(`${travelerLabel} has invalid birthDate format. Expected YYYY-MM-DD.`);
+  }
+  const birthDate = traveler.birthDate ? parseIsoDateInput(traveler.birthDate) : null;
+  if (birthDate && birthDate.getTime() > todayUtc.getTime()) {
+    throw new Error(`${travelerLabel} birthDate cannot be in the future.`);
+  }
+
+  const issueDate = traveler.passportIssueDate
+    ? parseIsoDateInput(traveler.passportIssueDate)
+    : null;
+  if (traveler.passportIssueDate && !issueDate) {
+    throw new Error(`${travelerLabel} has invalid passportIssueDate format. Expected YYYY-MM-DD.`);
+  }
+  if (issueDate && issueDate.getTime() > todayUtc.getTime()) {
+    throw new Error(`${travelerLabel} passportIssueDate cannot be in the future.`);
+  }
+
+  const expiryDate = traveler.passportExpiryDate
+    ? parseIsoDateInput(traveler.passportExpiryDate)
+    : null;
+  if (traveler.passportExpiryDate && !expiryDate) {
+    throw new Error(`${travelerLabel} has invalid passportExpiryDate format. Expected YYYY-MM-DD.`);
+  }
+  if (issueDate && expiryDate && expiryDate.getTime() < issueDate.getTime()) {
+    throw new Error(
+      `${travelerLabel} passportExpiryDate cannot be earlier than passportIssueDate.`
+    );
+  }
+};
+
 const isTransferType = (value: string): value is AoryxTransferType =>
   value === "INDIVIDUAL" || value === "GROUP";
 
@@ -209,8 +280,9 @@ const parseInsurance = (
 
   const parseTravelers = (value: unknown) => {
     if (!Array.isArray(value)) return undefined;
+    const todayUtc = resolveTodayUtc();
     const travelers = value
-      .map((entry) => {
+      .map((entry, index) => {
         if (!entry || typeof entry !== "object") return null;
         const traveler = entry as UnknownRecord;
         const firstName = sanitizeString(traveler.firstName);
@@ -232,7 +304,7 @@ const parseInsurance = (
             .map((entry) => sanitizeString(entry))
             .filter((entry): entry is string => Boolean(entry))
         : undefined;
-      return {
+      const normalizedTraveler = {
         id: sanitizeString(traveler.id),
         firstName,
         lastName,
@@ -256,6 +328,8 @@ const parseInsurance = (
         policyPremium: toNumber(traveler.policyPremium),
         subrisks,
       };
+      validateInsuranceTravelerDates(normalizedTraveler, index, todayUtc);
+      return normalizedTraveler;
     })
       .filter((traveler): traveler is NonNullable<typeof traveler> => Boolean(traveler));
     return travelers.length > 0 ? travelers : undefined;

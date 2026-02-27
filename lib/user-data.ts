@@ -128,12 +128,19 @@ export async function recordUserBooking(input: {
   result: AoryxBookingResult;
   source?: string;
   coupon?: AppliedBookingCoupon | null;
+  insurancePolicies?: unknown[] | null;
+  insuranceError?: string | null;
 }) {
-  const { userId, payload, result, source, coupon } = input;
+  const { userId, payload, result, source, coupon, insurancePolicies, insuranceError } = input;
   const db = await getDb();
   const now = new Date();
   const ids = normalizeUserId(userId);
   const normalizedCoupon = normalizeAppliedBookingCoupon(coupon);
+  const normalizedInsuranceError =
+    typeof insuranceError === "string" && insuranceError.trim().length > 0
+      ? insuranceError.trim()
+      : null;
+  const normalizedInsurancePolicies = Array.isArray(insurancePolicies) ? insurancePolicies : null;
 
   await db.collection("user_bookings").insertOne({
     ...ids,
@@ -142,6 +149,8 @@ export async function recordUserBooking(input: {
     booking: result,
     payload,
     coupon: normalizedCoupon,
+    ...(normalizedInsurancePolicies ? { insurancePolicies: normalizedInsurancePolicies } : {}),
+    ...(normalizedInsuranceError ? { insuranceError: normalizedInsuranceError } : {}),
   });
 
   await db.collection("user_profiles").updateOne(

@@ -46,6 +46,12 @@ type ServiceCard = {
   details: string[];
 };
 
+type StoredEfesPolicy = {
+  travelerId: string | null;
+  contractNumber: string | null;
+  externalId: string | null;
+};
+
 const resolveLocale = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
 
@@ -181,6 +187,50 @@ const normalizeAppliedCoupon = (value: unknown): AppliedBookingCoupon | null => 
   };
 };
 
+const toOptionalText = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return null;
+};
+
+const parseStoredEfesPolicies = (value: unknown): StoredEfesPolicy[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const record = entry as Record<string, unknown>;
+      const response =
+        record.response && typeof record.response === "object"
+          ? (record.response as Record<string, unknown>)
+          : null;
+      const travelerId = toOptionalText(record.travelerId);
+      const contractNumber = toOptionalText(response?.result);
+      const externalId = toOptionalText(response?.external_id ?? response?.externalId);
+      if (!travelerId && !contractNumber && !externalId) return null;
+      return {
+        travelerId,
+        contractNumber,
+        externalId,
+      };
+    })
+    .filter((entry): entry is StoredEfesPolicy => Boolean(entry));
+};
+
+const humanizeSubriskLabel = (value: string) =>
+  value
+    .trim()
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const resolveIndexedLabel = (template: string, index: number) =>
+  template.includes("{index}") ? template.replace("{index}", String(index + 1)) : `${template} ${index + 1}`;
+
 export default async function VoucherPage({ params }: PageProps) {
   const { locale, bookingId } = await params;
   const resolvedLocale = resolveLocale(locale);
@@ -208,6 +258,9 @@ export default async function VoucherPage({ params }: PageProps) {
 
   const payload = bookingRecord.payload as AoryxBookingPayload;
   const booking = (bookingRecord.booking ?? null) as AoryxBookingResult | null;
+  const storedInsurancePolicies = parseStoredEfesPolicies(
+    (bookingRecord as { insurancePolicies?: unknown }).insurancePolicies ?? null
+  );
   const appliedCoupon = normalizeAppliedCoupon((bookingRecord as { coupon?: unknown }).coupon ?? null);
   const cancellation =
     ((bookingRecord as { cancellation?: BookingCancellationRecord }).cancellation ?? null) as BookingCancellationRecord;
@@ -454,6 +507,87 @@ export default async function VoucherPage({ params }: PageProps) {
   }
 
   if (payload.insurance) {
+    const policiesByTravelerId = new Map<string, StoredEfesPolicy>();
+    const policiesWithoutTraveler: StoredEfesPolicy[] = [];
+    storedInsurancePolicies.forEach((policy) => {
+      if (policy.travelerId) {
+        policiesByTravelerId.set(policy.travelerId, policy);
+      } else {
+        policiesWithoutTraveler.push(policy);
+      }
+    });
+    const insuranceTravelers = payload.insurance.travelers ?? [];
+    const subriskLabels: Record<string, string> = {
+      AMATEUR_SPORT_EXPENCES: t.packageBuilder.insurance.subrisks.amateurSport.label,
+      BAGGAGE_EXPENCES: t.packageBuilder.insurance.subrisks.baggage.label,
+      TRAVEL_INCONVENIENCES: t.packageBuilder.insurance.subrisks.travelInconveniences.label,
+      HOUSE_INSURANCE: t.packageBuilder.insurance.subrisks.houseInsurance.label,
+      TRIP_CANCELLATION: t.packageBuilder.insurance.subrisks.tripCancellation.label,
+    };
+    const travelerInsuranceDetails = insuranceTravelers.flatMap((traveler, index) => {
+      const matchedPolicy =
+        (traveler.id ? policiesByTravelerId.get(traveler.id) : null) ??
+        policiesWithoutTraveler[index] ??
+        null;
+      const travelerNameEn = [traveler.firstNameEn, traveler.lastNameEn].filter(Boolean).join(" ").trim();
+      const travelerNameLocal = [traveler.firstName, traveler.lastName].filter(Boolean).join(" ").trim();
+      const travelerName = travelerNameEn || travelerNameLocal || "—";
+      const rateValue =
+        (typeof traveler.premium === "number" && Number.isFinite(traveler.premium) && traveler.premium > 0
+          ? traveler.premium
+          : null) ??
+        (typeof traveler.policyPremium === "number" &&
+        Number.isFinite(traveler.policyPremium) &&
+        traveler.policyPremium > 0
+          ? traveler.policyPremium
+          : null) ??
+        (insuranceTravelers.length === 1 &&
+        typeof payload.insurance?.price === "number" &&
+        Number.isFinite(payload.insurance.price) &&
+        payload.insurance.price > 0
+          ? payload.insurance.price
+          : null);
+      const rateCurrency =
+        traveler.premiumCurrency ?? payload.insurance?.currency ?? payload.currency;
+      const travelerSubrisks =
+        Array.isArray(traveler.subrisks) && traveler.subrisks.length > 0
+          ? traveler.subrisks
+          : Array.isArray(payload.insurance?.subrisks)
+            ? payload.insurance.subrisks
+            : [];
+      const subriskSummary =
+        travelerSubrisks.length > 0
+          ? travelerSubrisks
+              .map((subrisk) => {
+                const normalized = subrisk.trim().toUpperCase();
+                return subriskLabels[normalized] ?? humanizeSubriskLabel(subrisk);
+              })
+              .join(", ")
+          : null;
+      const travelerLabel = resolveIndexedLabel(t.packageBuilder.checkout.insuranceTravelerLabel, index);
+      return [
+        `${travelerLabel}: ${travelerName}`,
+        matchedPolicy?.contractNumber
+          ? `${t.profile.bookings.labels.confirmation}: ${matchedPolicy.contractNumber}`
+          : null,
+        rateValue !== null
+          ? `${t.packageBuilder.checkout.labels.price}: ${formatDisplayPrice(rateValue, rateCurrency)}`
+          : null,
+        subriskSummary
+          ? `${t.packageBuilder.insurance.subrisksTitle}: ${subriskSummary}`
+          : null,
+      ].filter(Boolean) as string[];
+    });
+    const fallbackPolicyDetails =
+      insuranceTravelers.length === 0
+        ? storedInsurancePolicies
+            .map((policy) =>
+              policy.contractNumber
+                ? `${t.profile.bookings.labels.confirmation}: ${policy.contractNumber}`
+                : null
+            )
+            .filter((detail): detail is string => Boolean(detail))
+        : [];
     serviceCards.push({
       id: "insurance",
       title: t.packageBuilder.services.insurance,
@@ -461,6 +595,8 @@ export default async function VoucherPage({ params }: PageProps) {
       details: [
         payload.insurance.planName ?? payload.insurance.planId,
         payload.insurance.note ?? null,
+        ...travelerInsuranceDetails,
+        ...fallbackPolicyDetails,
       ].filter(Boolean) as string[],
     });
   }

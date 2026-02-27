@@ -66,6 +66,8 @@ type InsuranceTravelerForm = BookingInsuranceTraveler & {
 
 type InsuranceTravelerFieldErrors = {
   birthDate?: string;
+  passportIssueDate?: string;
+  passportExpiryDate?: string;
 };
 
 type TransferFlightDetailsForm = {
@@ -227,6 +229,7 @@ const formatDateInput = (date: Date) => {
 
 const MAX_INSURANCE_AGE_YEARS = 100;
 const MAX_INSURANCE_CHILD_AGE_YEARS = 18;
+const ISO_DATE_INPUT_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const addYearsToDateInput = (value: string, years: number) => {
   const [yearRaw, monthRaw, dayRaw] = value.split("-");
@@ -245,7 +248,9 @@ const addYearsToDateInput = (value: string, years: number) => {
 
 const parseDateInput = (value?: string | null) => {
   if (!value) return null;
-  const [yearRaw, monthRaw, dayRaw] = value.split("-");
+  const normalizedValue = value.trim();
+  if (!ISO_DATE_INPUT_REGEX.test(normalizedValue)) return null;
+  const [yearRaw, monthRaw, dayRaw] = normalizedValue.split("-");
   const year = Number(yearRaw);
   const month = Number(monthRaw);
   const day = Number(dayRaw);
@@ -261,6 +266,8 @@ const parseDateInput = (value?: string | null) => {
   }
   return date;
 };
+
+const getTodayDateInput = () => formatDateInput(new Date());
 
 const calculateAgeFromBirthDate = (birthDate?: string | null, referenceDate?: string | null) => {
   const birth = parseDateInput(birthDate);
@@ -1946,13 +1953,29 @@ export default function PackageCheckoutClient({
     updates: Partial<InsuranceTravelerForm>
   ) => {
     setInsuranceQuoteError(null);
+    const dateFieldsToReset: Array<keyof InsuranceTravelerFieldErrors> = [];
     if (Object.prototype.hasOwnProperty.call(updates, "birthDate")) {
+      dateFieldsToReset.push("birthDate");
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, "passportIssueDate")) {
+      dateFieldsToReset.push("passportIssueDate");
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, "passportExpiryDate")) {
+      dateFieldsToReset.push("passportExpiryDate");
+    }
+    if (dateFieldsToReset.length > 0) {
       setInsuranceTravelerFieldErrors((prev) => {
         const existing = prev[travelerId];
-        if (!existing?.birthDate) return prev;
-        const next = { ...prev };
+        if (!existing) return prev;
+        let changed = false;
         const nextErrors: InsuranceTravelerFieldErrors = { ...existing };
-        delete nextErrors.birthDate;
+        dateFieldsToReset.forEach((field) => {
+          if (!nextErrors[field]) return;
+          delete nextErrors[field];
+          changed = true;
+        });
+        if (!changed) return prev;
+        const next = { ...prev };
         if (Object.keys(nextErrors).length === 0) {
           delete next[travelerId];
         } else {
@@ -3052,9 +3075,92 @@ export default function PackageCheckoutClient({
         )
     );
 
+  const todayDateInput = useMemo(() => getTodayDateInput(), []);
+
+  const localInsuranceTravelerFieldErrors = useMemo<Record<string, InsuranceTravelerFieldErrors>>(() => {
+    if (!insuranceActive) return {};
+    const next: Record<string, InsuranceTravelerFieldErrors> = {};
+    const today = parseDateInput(todayDateInput);
+    const invalidDateMessage = t.packageBuilder.checkout.errors.invalidDateFormat;
+    const birthDateFutureMessage = t.packageBuilder.checkout.errors.birthDateFuture;
+    const issueDateFutureMessage = t.packageBuilder.checkout.errors.passportIssueDateFuture;
+    const expiryDateOrderMessage = t.packageBuilder.checkout.errors.passportExpiryBeforeIssueDate;
+
+    insuranceTravelers.forEach((traveler) => {
+      const errors: InsuranceTravelerFieldErrors = {};
+      const birthDate = normalizeOptional(traveler.birthDate);
+      const birthDateParsed = birthDate ? parseDateInput(birthDate) : null;
+      if (birthDate && !birthDateParsed) {
+        errors.birthDate = invalidDateMessage;
+      } else if (
+        birthDateParsed &&
+        today &&
+        birthDateParsed.getTime() > today.getTime()
+      ) {
+        errors.birthDate = birthDateFutureMessage;
+      }
+
+      const issueDate = normalizeOptional(traveler.passportIssueDate);
+      const issueDateParsed = issueDate ? parseDateInput(issueDate) : null;
+      if (issueDate && !issueDateParsed) {
+        errors.passportIssueDate = invalidDateMessage;
+      } else if (
+        issueDateParsed &&
+        today &&
+        issueDateParsed.getTime() > today.getTime()
+      ) {
+        errors.passportIssueDate = issueDateFutureMessage;
+      }
+
+      const expiryDate = normalizeOptional(traveler.passportExpiryDate);
+      const expiryDateParsed = expiryDate ? parseDateInput(expiryDate) : null;
+      if (expiryDate && !expiryDateParsed) {
+        errors.passportExpiryDate = invalidDateMessage;
+      } else if (
+        expiryDateParsed &&
+        issueDateParsed &&
+        expiryDateParsed.getTime() < issueDateParsed.getTime()
+      ) {
+        errors.passportExpiryDate = expiryDateOrderMessage;
+      }
+
+      if (Object.keys(errors).length > 0) {
+        next[traveler.id] = errors;
+      }
+    });
+
+    return next;
+  }, [
+    insuranceActive,
+    insuranceTravelers,
+    t.packageBuilder.checkout.errors.birthDateFuture,
+    t.packageBuilder.checkout.errors.invalidDateFormat,
+    t.packageBuilder.checkout.errors.passportExpiryBeforeIssueDate,
+    t.packageBuilder.checkout.errors.passportIssueDateFuture,
+    todayDateInput,
+  ]);
+
+  const mergedInsuranceTravelerFieldErrors = useMemo<Record<string, InsuranceTravelerFieldErrors>>(() => {
+    const ids = new Set([
+      ...Object.keys(insuranceTravelerFieldErrors),
+      ...Object.keys(localInsuranceTravelerFieldErrors),
+    ]);
+    const next: Record<string, InsuranceTravelerFieldErrors> = {};
+    ids.forEach((travelerId) => {
+      const merged = {
+        ...(localInsuranceTravelerFieldErrors[travelerId] ?? {}),
+        ...(insuranceTravelerFieldErrors[travelerId] ?? {}),
+      };
+      if (Object.keys(merged).length > 0) {
+        next[travelerId] = merged;
+      }
+    });
+    return next;
+  }, [insuranceTravelerFieldErrors, localInsuranceTravelerFieldErrors]);
+
   const insuranceDetailsValid = (() => {
     if (!insuranceActive) return true;
-    if (Object.keys(insuranceTravelerFieldErrors).length > 0) return false;
+    if (Object.keys(mergedInsuranceTravelerFieldErrors).length > 0) return false;
     if (!hotel?.checkInDate || !hotel?.checkOutDate) return false;
     const planId = insuranceSelection.planId ?? insuranceSelection.selectionId ?? null;
     if (
@@ -3615,6 +3721,8 @@ export default function PackageCheckoutClient({
                           ? MAX_INSURANCE_CHILD_AGE_YEARS
                           : MAX_INSURANCE_AGE_YEARS
                       );
+                      const birthDateMax =
+                        todayDateInput < birthDateRange.max ? todayDateInput : birthDateRange.max;
                       const citizenshipCode = resolveCountryAlpha2(traveler.citizenship) ?? "";
                       const citizenshipSelectValue =
                         citizenshipSelectOptions.find(
@@ -3626,8 +3734,13 @@ export default function PackageCheckoutClient({
                           : false;
                       const useRegionSelect = regionOptions.length > 0;
                       const useCitySelect = cityOptions.length > 0;
-                      const birthDateFieldError =
-                        insuranceTravelerFieldErrors[traveler.id]?.birthDate ?? null;
+                      const travelerFieldErrors =
+                        mergedInsuranceTravelerFieldErrors[traveler.id] ?? null;
+                      const birthDateFieldError = travelerFieldErrors?.birthDate ?? null;
+                      const passportIssueDateFieldError =
+                        travelerFieldErrors?.passportIssueDate ?? null;
+                      const passportExpiryDateFieldError =
+                        travelerFieldErrors?.passportExpiryDate ?? null;
                       const canCopyLeadTravelerContact = travelerIndex > 0;
 
                       return (
@@ -3768,7 +3881,7 @@ export default function PackageCheckoutClient({
                               type="date"
                               value={traveler.birthDate ?? ""}
                               min={birthDateRange.min}
-                              max={birthDateRange.max}
+                              max={birthDateMax}
                               onChange={(event) => {
                                 const birthDate = event.target.value;
                                 const resolvedAge =
@@ -3816,9 +3929,10 @@ export default function PackageCheckoutClient({
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.passportIssueDate}</span>
                             <input
-                              className="checkout-input"
+                              className={`checkout-input${passportIssueDateFieldError ? " error" : ""}`}
                               type="date"
                               value={traveler.passportIssueDate ?? ""}
+                              max={todayDateInput}
                               onChange={(event) => {
                                 const issueDate = event.target.value;
                                 if (traveler.type === "Adult") {
@@ -3835,18 +3949,29 @@ export default function PackageCheckoutClient({
                               }}
                               required
                             />
+                            {passportIssueDateFieldError ? (
+                              <span className="field-error" role="alert">
+                                {passportIssueDateFieldError}
+                              </span>
+                            ) : null}
                           </label>
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.passportExpiryDate}</span>
                             <input
-                              className="checkout-input"
+                              className={`checkout-input${passportExpiryDateFieldError ? " error" : ""}`}
                               type="date"
                               value={traveler.passportExpiryDate ?? ""}
+                              min={traveler.passportIssueDate ?? undefined}
                               onChange={(event) =>
                                 updateInsuranceTraveler(traveler.id, { passportExpiryDate: event.target.value })
                               }
                               required
                             />
+                            {passportExpiryDateFieldError ? (
+                              <span className="field-error" role="alert">
+                                {passportExpiryDateFieldError}
+                              </span>
+                            ) : null}
                           </label>
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.residency}</span>
@@ -4108,7 +4233,6 @@ export default function PackageCheckoutClient({
                                   address: { ...(traveler.address ?? {}), fullEn: event.target.value },
                                 })
                               }
-                              required
                             />
                           </label>
                         </div>

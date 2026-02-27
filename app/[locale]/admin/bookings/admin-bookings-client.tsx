@@ -44,7 +44,13 @@ type AdminBookingsClientProps = {
   initialBookings: AdminBookingRecord[];
 };
 
-type BookingPaymentAction = "cancel" | "refund";
+type BookingRowAction =
+  | "cancel"
+  | "refund"
+  | "update_guest_details"
+  | "update_local_services"
+  | "remove_local_services"
+  | "update_contact";
 
 type BookingActionResponse = {
   action?: string;
@@ -55,6 +61,15 @@ type BookingActionResponse = {
   } | null;
   refund?: {
     status?: string | null;
+  } | null;
+};
+
+type BookingManageResponse = {
+  message?: string;
+  payload?: AoryxBookingPayload | null;
+  contact?: {
+    name?: string | null;
+    email?: string | null;
   } | null;
 };
 
@@ -151,6 +166,28 @@ const REFUND_LABELS: Record<
   unknown: "Refund",
 };
 
+const buildGuestDetailsDraft = (payload: AoryxBookingPayload | null | undefined) => ({
+  rooms: (payload?.rooms ?? []).map((room) => ({
+    roomIdentifier: room.roomIdentifier,
+    guests: room.guests.map((guest) => ({
+      title: guest.title ?? "",
+      titleCode: guest.titleCode ?? "",
+      firstName: guest.firstName,
+      lastName: guest.lastName,
+      isLeadGuest: guest.isLeadGuest ?? false,
+      type: guest.type,
+      age: guest.age,
+    })),
+  })),
+  insuranceTravelers: payload?.insurance?.travelers ?? [],
+});
+
+const buildLocalServicesDraft = (payload: AoryxBookingPayload | null | undefined) => ({
+  transferSelection: payload?.transferSelection ?? null,
+  excursions: payload?.excursions ?? null,
+  airTickets: payload?.airTickets ?? null,
+});
+
 export default function AdminBookingsClient({
   adminUser,
   initialBookings,
@@ -166,13 +203,21 @@ export default function AdminBookingsClient({
   const [sortBy, setSortBy] = useState("newest");
   const [processingAction, setProcessingAction] = useState<{
     bookingId: string;
-    action: BookingPaymentAction;
+    action: BookingRowAction;
   } | null>(null);
   const [actionFeedback, setActionFeedback] = useState<Record<string, { ok: boolean; message: string }>>({});
   const [refundAmountByBookingId, setRefundAmountByBookingId] = useState<Record<string, string>>({});
   const [refundAmountManualByBookingId, setRefundAmountManualByBookingId] = useState<Record<string, boolean>>({});
   const [refundServicesByBookingId, setRefundServicesByBookingId] = useState<
     Record<string, RefundServiceKey[]>
+  >({});
+  const [guestDetailsDraftByBookingId, setGuestDetailsDraftByBookingId] = useState<Record<string, string>>({});
+  const [localServicesDraftByBookingId, setLocalServicesDraftByBookingId] = useState<Record<string, string>>({});
+  const [removeLocalServicesByBookingId, setRemoveLocalServicesByBookingId] = useState<
+    Record<string, RefundServiceKey[]>
+  >({});
+  const [contactDraftByBookingId, setContactDraftByBookingId] = useState<
+    Record<string, { name: string; email: string }>
   >({});
   const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
 
@@ -501,6 +546,306 @@ export default function AdminBookingsClient({
     }
   };
 
+  const applyManageResponse = (
+    bookingId: string,
+    response: BookingManageResponse,
+    fallbackPayload: AoryxBookingPayload | null | undefined
+  ) => {
+    const hasContactName =
+      Boolean(response.contact) && Object.prototype.hasOwnProperty.call(response.contact, "name");
+    const hasContactEmail =
+      Boolean(response.contact) && Object.prototype.hasOwnProperty.call(response.contact, "email");
+
+    setBookings((prev) =>
+      prev.map((entry) => {
+        if (entry.id !== bookingId) return entry;
+        return {
+          ...entry,
+          payload: response.payload ?? fallbackPayload ?? entry.payload,
+          userName: hasContactName ? (response.contact?.name ?? null) : entry.userName,
+          userEmail: hasContactEmail ? (response.contact?.email ?? null) : entry.userEmail,
+        };
+      })
+    );
+  };
+
+  const resolveGuestDetailsDraft = (bookingId: string, payload: AoryxBookingPayload | null | undefined) =>
+    guestDetailsDraftByBookingId[bookingId] ??
+    JSON.stringify(buildGuestDetailsDraft(payload), null, 2);
+
+  const resolveLocalServicesDraft = (bookingId: string, payload: AoryxBookingPayload | null | undefined) =>
+    localServicesDraftByBookingId[bookingId] ??
+    JSON.stringify(buildLocalServicesDraft(payload), null, 2);
+
+  const resolveContactDraft = (
+    bookingId: string,
+    userName: string | null | undefined,
+    userEmail: string | null | undefined
+  ) =>
+    contactDraftByBookingId[bookingId] ?? {
+      name: userName ?? "",
+      email: userEmail ?? "",
+    };
+
+  const handleSaveGuestDetails = async (
+    bookingId: string,
+    payload: AoryxBookingPayload | null | undefined
+  ) => {
+    if (!bookingId || processingAction) return;
+    const draft = resolveGuestDetailsDraft(bookingId, payload);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(draft);
+    } catch {
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: { ok: false, message: "Guest details JSON is invalid." },
+      }));
+      return;
+    }
+
+    setProcessingAction({ bookingId, action: "update_guest_details" });
+    clearActionFeedback(bookingId);
+
+    try {
+      const response = await postJson<BookingManageResponse>(
+        `/api/admin/bookings/${encodeURIComponent(bookingId)}/manage`,
+        {
+          action: "update_guest_details",
+          guestDetails: parsed,
+        }
+      );
+      applyManageResponse(bookingId, response, payload);
+      const nextPayload = response.payload ?? payload ?? null;
+      if (nextPayload) {
+        setGuestDetailsDraftByBookingId((prev) => ({
+          ...prev,
+          [bookingId]: JSON.stringify(buildGuestDetailsDraft(nextPayload), null, 2),
+        }));
+      }
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: {
+          ok: true,
+          message:
+            typeof response.message === "string" && response.message.trim().length > 0
+              ? response.message
+              : "Guest details saved locally.",
+        },
+      }));
+    } catch (error) {
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: {
+          ok: false,
+          message: resolveSafeErrorFromUnknown(error, "Failed to update guest details."),
+        },
+      }));
+    } finally {
+      setProcessingAction(null);
+    }
+  };
+
+  const handleSaveLocalServices = async (
+    bookingId: string,
+    payload: AoryxBookingPayload | null | undefined
+  ) => {
+    if (!bookingId || processingAction) return;
+    const draft = resolveLocalServicesDraft(bookingId, payload);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(draft);
+    } catch {
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: { ok: false, message: "Local services JSON is invalid." },
+      }));
+      return;
+    }
+
+    setProcessingAction({ bookingId, action: "update_local_services" });
+    clearActionFeedback(bookingId);
+
+    try {
+      const response = await postJson<BookingManageResponse>(
+        `/api/admin/bookings/${encodeURIComponent(bookingId)}/manage`,
+        {
+          action: "update_local_services",
+          services: parsed,
+        }
+      );
+      applyManageResponse(bookingId, response, payload);
+      const nextPayload = response.payload ?? payload ?? null;
+      if (nextPayload) {
+        setLocalServicesDraftByBookingId((prev) => ({
+          ...prev,
+          [bookingId]: JSON.stringify(buildLocalServicesDraft(nextPayload), null, 2),
+        }));
+      }
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: {
+          ok: true,
+          message:
+            typeof response.message === "string" && response.message.trim().length > 0
+              ? response.message
+              : "Local services saved in DB.",
+        },
+      }));
+    } catch (error) {
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: {
+          ok: false,
+          message: resolveSafeErrorFromUnknown(error, "Failed to update local services."),
+        },
+      }));
+    } finally {
+      setProcessingAction(null);
+    }
+  };
+
+  const handleToggleRemoveLocalService = (bookingId: string, serviceKey: RefundServiceKey) => {
+    setRemoveLocalServicesByBookingId((prev) => {
+      const current = prev[bookingId] ?? [];
+      const next = current.includes(serviceKey)
+        ? current.filter((item) => item !== serviceKey)
+        : [...current, serviceKey];
+      return {
+        ...prev,
+        [bookingId]: next,
+      };
+    });
+  };
+
+  const handleRemoveLocalServices = async (
+    bookingId: string,
+    payload: AoryxBookingPayload | null | undefined
+  ) => {
+    if (!bookingId || processingAction) return;
+    const selectedServices = removeLocalServicesByBookingId[bookingId] ?? [];
+    if (selectedServices.length === 0) {
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: { ok: false, message: "Select at least one local service to remove." },
+      }));
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm("Remove selected local services from this booking?");
+      if (!confirmed) return;
+    }
+
+    setProcessingAction({ bookingId, action: "remove_local_services" });
+    clearActionFeedback(bookingId);
+
+    try {
+      const response = await postJson<BookingManageResponse>(
+        `/api/admin/bookings/${encodeURIComponent(bookingId)}/manage`,
+        {
+          action: "remove_local_services",
+          serviceKeys: selectedServices,
+        }
+      );
+      applyManageResponse(bookingId, response, payload);
+      const nextPayload = response.payload ?? payload ?? null;
+      if (nextPayload) {
+        setLocalServicesDraftByBookingId((prev) => ({
+          ...prev,
+          [bookingId]: JSON.stringify(buildLocalServicesDraft(nextPayload), null, 2),
+        }));
+      }
+      setRemoveLocalServicesByBookingId((prev) => ({
+        ...prev,
+        [bookingId]: [],
+      }));
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: {
+          ok: true,
+          message:
+            typeof response.message === "string" && response.message.trim().length > 0
+              ? response.message
+              : "Selected local services were removed.",
+        },
+      }));
+    } catch (error) {
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: {
+          ok: false,
+          message: resolveSafeErrorFromUnknown(error, "Failed to remove local services."),
+        },
+      }));
+    } finally {
+      setProcessingAction(null);
+    }
+  };
+
+  const handleSaveContact = async (
+    bookingId: string,
+    payload: AoryxBookingPayload | null | undefined,
+    userName: string | null | undefined,
+    userEmail: string | null | undefined
+  ) => {
+    if (!bookingId || processingAction) return;
+    const contactDraft = resolveContactDraft(bookingId, userName, userEmail);
+
+    setProcessingAction({ bookingId, action: "update_contact" });
+    clearActionFeedback(bookingId);
+
+    try {
+      const response = await postJson<BookingManageResponse>(
+        `/api/admin/bookings/${encodeURIComponent(bookingId)}/manage`,
+        {
+          action: "update_contact",
+          contact: {
+            name: contactDraft.name,
+            email: contactDraft.email,
+          },
+        }
+      );
+      applyManageResponse(bookingId, response, payload);
+      const nextContact = {
+        name:
+          response.contact && Object.prototype.hasOwnProperty.call(response.contact, "name")
+            ? response.contact.name ?? ""
+            : contactDraft.name,
+        email:
+          response.contact && Object.prototype.hasOwnProperty.call(response.contact, "email")
+            ? response.contact.email ?? ""
+            : contactDraft.email,
+      };
+      setContactDraftByBookingId((prev) => ({
+        ...prev,
+        [bookingId]: nextContact,
+      }));
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: {
+          ok: true,
+          message:
+            typeof response.message === "string" && response.message.trim().length > 0
+              ? response.message
+              : "Contact details saved locally.",
+        },
+      }));
+    } catch (error) {
+      setActionFeedback((prev) => ({
+        ...prev,
+        [bookingId]: {
+          ok: false,
+          message: resolveSafeErrorFromUnknown(error, "Failed to update contact details."),
+        },
+      }));
+    } finally {
+      setProcessingAction(null);
+    }
+  };
+
   return (
     <>
       <section className="admin-hero">
@@ -627,6 +972,18 @@ export default function AdminBookingsClient({
                     processingAction?.bookingId === item.entry.id && processingAction.action === "cancel";
                   const isRefunding =
                     processingAction?.bookingId === item.entry.id && processingAction.action === "refund";
+                  const isManagingGuestDetails =
+                    processingAction?.bookingId === item.entry.id &&
+                    processingAction.action === "update_guest_details";
+                  const isManagingLocalServices =
+                    processingAction?.bookingId === item.entry.id &&
+                    processingAction.action === "update_local_services";
+                  const isRemovingLocalServices =
+                    processingAction?.bookingId === item.entry.id &&
+                    processingAction.action === "remove_local_services";
+                  const isUpdatingContact =
+                    processingAction?.bookingId === item.entry.id &&
+                    processingAction.action === "update_contact";
                   const isExpanded = expandedBookingId === item.entry.id;
                   const isVposSource = (item.entry.source ?? "").toLowerCase().includes("vpos");
                   const canCancel = item.statusKey === "confirmed" && isVposSource;
@@ -682,6 +1039,14 @@ export default function AdminBookingsClient({
                     item.entry.userEmail ??
                     item.entry.userIdString ??
                     "—";
+                  const guestDetailsDraft = resolveGuestDetailsDraft(item.entry.id, payload);
+                  const localServicesDraft = resolveLocalServicesDraft(item.entry.id, payload);
+                  const contactDraft = resolveContactDraft(
+                    item.entry.id,
+                    item.entry.userName,
+                    item.entry.userEmail
+                  );
+                  const selectedLocalServicesToRemove = removeLocalServicesByBookingId[item.entry.id] ?? [];
                   return (
                     <Fragment key={item.entry.id}>
                       <tr>
@@ -781,6 +1146,136 @@ export default function AdminBookingsClient({
                                   <pre>{JSON.stringify(booking, null, 2)}</pre>
                                 </div>
                               </div>
+                              <div className="admin-json-grid">
+                                <div>
+                                  <span>Guest Details (local only, no Aoryx/EFES sync)</span>
+                                  <textarea
+                                    rows={12}
+                                    value={guestDetailsDraft}
+                                    onChange={(event) =>
+                                      setGuestDetailsDraftByBookingId((prev) => ({
+                                        ...prev,
+                                        [item.entry.id]: event.target.value,
+                                      }))
+                                    }
+                                    disabled={Boolean(processingAction)}
+                                  />
+                                  <div className="admin-action-row">
+                                    <button
+                                      type="button"
+                                      className="admin-secondary"
+                                      onClick={() => handleSaveGuestDetails(item.entry.id, payload)}
+                                      disabled={Boolean(processingAction)}
+                                    >
+                                      {isManagingGuestDetails ? "Saving..." : "Save Guest Details"}
+                                    </button>
+                                  </div>
+                                </div>
+                                <div>
+                                  <span>Local Services (transfer/excursion/flight DB update only)</span>
+                                  <textarea
+                                    rows={12}
+                                    value={localServicesDraft}
+                                    onChange={(event) =>
+                                      setLocalServicesDraftByBookingId((prev) => ({
+                                        ...prev,
+                                        [item.entry.id]: event.target.value,
+                                      }))
+                                    }
+                                    disabled={Boolean(processingAction)}
+                                  />
+                                  <div className="admin-action-row">
+                                    <button
+                                      type="button"
+                                      className="admin-secondary"
+                                      onClick={() => handleSaveLocalServices(item.entry.id, payload)}
+                                      disabled={Boolean(processingAction)}
+                                    >
+                                      {isManagingLocalServices ? "Saving..." : "Save Local Services"}
+                                    </button>
+                                  </div>
+                                  <div className="admin-refund-services">
+                                    <span>Remove local services</span>
+                                    <div className="admin-refund-service-list">
+                                      {(["transfer", "excursion", "flight"] as RefundServiceKey[]).map((serviceKey) => (
+                                        <label key={serviceKey} className="admin-refund-service-item">
+                                          <input
+                                            type="checkbox"
+                                            checked={selectedLocalServicesToRemove.includes(serviceKey)}
+                                            onChange={() => handleToggleRemoveLocalService(item.entry.id, serviceKey)}
+                                            disabled={Boolean(processingAction)}
+                                          />
+                                          <span>{resolveServiceLabel(serviceKey)}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div className="admin-action-row">
+                                    <button
+                                      type="button"
+                                      className="admin-danger"
+                                      onClick={() => handleRemoveLocalServices(item.entry.id, payload)}
+                                      disabled={Boolean(processingAction)}
+                                    >
+                                      {isRemovingLocalServices ? "Removing..." : "Remove Selected Services"}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="admin-controls">
+                                <label className="admin-control">
+                                  <span>Customer Name (local profile)</span>
+                                  <input
+                                    type="text"
+                                    value={contactDraft.name}
+                                    onChange={(event) =>
+                                      setContactDraftByBookingId((prev) => ({
+                                        ...prev,
+                                        [item.entry.id]: {
+                                          ...contactDraft,
+                                          name: event.target.value,
+                                        },
+                                      }))
+                                    }
+                                    disabled={Boolean(processingAction)}
+                                  />
+                                </label>
+                                <label className="admin-control">
+                                  <span>Customer Email (local profile)</span>
+                                  <input
+                                    type="email"
+                                    value={contactDraft.email}
+                                    onChange={(event) =>
+                                      setContactDraftByBookingId((prev) => ({
+                                        ...prev,
+                                        [item.entry.id]: {
+                                          ...contactDraft,
+                                          email: event.target.value,
+                                        },
+                                      }))
+                                    }
+                                    disabled={Boolean(processingAction)}
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  className="admin-secondary"
+                                  onClick={() =>
+                                    handleSaveContact(
+                                      item.entry.id,
+                                      payload,
+                                      item.entry.userName,
+                                      item.entry.userEmail
+                                    )
+                                  }
+                                  disabled={Boolean(processingAction)}
+                                >
+                                  {isUpdatingContact ? "Saving..." : "Save Contact"}
+                                </button>
+                              </div>
+                              <p className="admin-hint">
+                                Support edits from this panel are stored locally only and are not sent to Aoryx or EFES.
+                              </p>
                               {payload?.hotelCode && (
                                 <Link className="profile-link" href={`/${locale}/hotels/${payload.hotelCode}`}>
                                   {t.profile.bookings.viewHotel}

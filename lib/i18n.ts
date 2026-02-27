@@ -303,6 +303,10 @@ export type Translation = {
         missingGuestDetails: string;
         insuranceDetailsRequired: string;
         insuranceQuoteFailed: string;
+        invalidDateFormat: string;
+        birthDateFuture: string;
+        passportIssueDateFuture: string;
+        passportExpiryBeforeIssueDate: string;
         cardUnavailable: string;
         prebookInvalid: string;
         prebookReturnToHotel: string;
@@ -1545,6 +1549,11 @@ const translations: Record<Locale, Translation> = {
           missingGuestDetails: "Խնդրում ենք լրացնել բոլոր հյուրերի տվյալները։",
           insuranceDetailsRequired: "Լրացրեք ապահովագրության բոլոր անհրաժեշտ տվյալները։",
           insuranceQuoteFailed: "Չհաջողվեց հաշվարկել ապահովագրության արժեքը։",
+          invalidDateFormat: "Խնդրում ենք մուտքագրել վավեր ամսաթիվ (Օր/Ամիս/Տարի)։",
+          birthDateFuture: "Ծննդյան ամսաթիվը չի կարող լինել ապագայում։",
+          passportIssueDateFuture: "Անձնագրի տրման ամսաթիվը չի կարող լինել ապագայում։",
+          passportExpiryBeforeIssueDate:
+            "Անձնագրի վավերականության ավարտի ամսաթիվը չի կարող լինել տրման ամսաթվից շուտ։",
           cardUnavailable: "Քարտով վճարումը դեռ հասանելի չէ։",
           prebookInvalid: "Ընտրված սակագինը այլևս հասանելի չէ։ Խնդրում ենք կրկին ընտրել սենյակը։",
           prebookReturnToHotel: "Վերադառնալ ընտրված հյուրանոցին",
@@ -3000,6 +3009,11 @@ const translations: Record<Locale, Translation> = {
           missingGuestDetails: "Please complete the guest details for all travelers.",
           insuranceDetailsRequired: "Please complete all required insurance details.",
           insuranceQuoteFailed: "Failed to calculate the insurance premium.",
+          invalidDateFormat: "Please enter a valid date (DD/MM/YYYY).",
+          birthDateFuture: "Birth date cannot be in the future.",
+          passportIssueDateFuture: "Passport issue date cannot be in the future.",
+          passportExpiryBeforeIssueDate:
+            "Passport expiry date cannot be earlier than the issue date.",
           cardUnavailable: "Card payments are not available yet.",
           prebookInvalid: "Your selected rate is no longer available. Please search again and reselect the room.",
           prebookReturnToHotel: "Back to selected hotel",
@@ -4462,6 +4476,11 @@ const translations: Record<Locale, Translation> = {
           missingGuestDetails: "Пожалуйста, заполните данные всех гостей.",
           insuranceDetailsRequired: "Пожалуйста, заполните все обязательные данные страховки.",
           insuranceQuoteFailed: "Не удалось рассчитать стоимость страховки.",
+          invalidDateFormat: "Введите корректную дату (День/Месяц/Год).",
+          birthDateFuture: "Дата рождения не может быть в будущем.",
+          passportIssueDateFuture: "Дата выдачи паспорта не может быть в будущем.",
+          passportExpiryBeforeIssueDate:
+            "Срок действия паспорта не может быть раньше даты выдачи.",
           cardUnavailable: "Оплата картой пока недоступна.",
           prebookInvalid: "Выбранный тариф больше недоступен. Повторите поиск и выберите номер заново.",
           prebookReturnToHotel: "Вернуться к выбранному отелю",

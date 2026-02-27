@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/db";
-import { book } from "@/lib/aoryx-client";
+import { AoryxClientError, book, bookingDetails } from "@/lib/aoryx-client";
 import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
 import { recordUserBooking, type AppliedBookingCoupon } from "@/lib/user-data";
 import { sendBookingConfirmationEmail } from "@/lib/email";
 import { incrementCouponSuccessfulOrders } from "@/lib/coupons";
+import { resolveBookingStatusKey } from "@/lib/booking-status";
 import {
   mergeBookingAddonPayload,
   parseBookingAddonServices,
@@ -66,6 +67,89 @@ const parseAmount = (value: string): number | null => {
 
 const formatAmount = (value: number) => value.toFixed(2);
 const resolveString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+const summarizeEfesInsurance = (payload: AoryxBookingPayload | undefined) => {
+  const insurance = payload?.insurance;
+  return {
+    hasInsurance: Boolean(insurance),
+    provider: insurance?.provider ?? null,
+    travelersCount: Array.isArray(insurance?.travelers) ? insurance.travelers.length : 0,
+    startDate: insurance?.startDate ?? payload?.checkInDate ?? null,
+    endDate: insurance?.endDate ?? payload?.checkOutDate ?? null,
+    territoryCode: insurance?.territoryCode ?? null,
+    riskAmount: insurance?.riskAmount ?? null,
+    riskCurrency: insurance?.riskCurrency ?? null,
+  };
+};
+
+const isBookingResultConfirmed = (result: AoryxBookingResult | null | undefined) =>
+  resolveBookingStatusKey(result?.status) === "confirmed" ||
+  Boolean(
+    result?.hotelConfirmationNumber ||
+    result?.supplierConfirmationNumber ||
+    result?.adsConfirmationNumber
+  );
+
+const shouldAttemptBookReconciliation = (error: unknown) => {
+  if (error instanceof AoryxClientError) {
+    const endpoint = resolveString(error.endpoint).toLowerCase();
+    const isBookEndpoint = endpoint === "book";
+    if (!isBookEndpoint) return false;
+    if (typeof error.statusCode !== "number") return true;
+    return error.statusCode >= 500;
+  }
+  if (error instanceof Error) {
+    const normalizedMessage = error.message.toLowerCase();
+    return (
+      normalizedMessage.includes("aborted") ||
+      normalizedMessage.includes("timeout") ||
+      normalizedMessage.includes("timed out")
+    );
+  }
+  return false;
+};
+
+const bookWithRecovery = async (
+  payload: AoryxBookingPayload,
+  context: { billNo: string }
+): Promise<AoryxBookingResult> => {
+  try {
+    return await book(payload);
+  } catch (error) {
+    if (!shouldAttemptBookReconciliation(error)) {
+      throw error;
+    }
+
+    console.warn("[Idram][result] Aoryx book failed, attempting BookingDetails recovery", {
+      billNo: context.billNo,
+      sessionId: payload.sessionId,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+
+    try {
+      const recovered = await bookingDetails(payload.sessionId);
+      if (isBookingResultConfirmed(recovered)) {
+        console.info("[Idram][result] BookingDetails recovery confirmed booking", {
+          billNo: context.billNo,
+          sessionId: payload.sessionId,
+          status: recovered.status,
+          hotelConfirmationNumber: recovered.hotelConfirmationNumber,
+          supplierConfirmationNumber: recovered.supplierConfirmationNumber,
+          adsConfirmationNumber: recovered.adsConfirmationNumber,
+        });
+        return recovered;
+      }
+    } catch (recoveryError) {
+      console.error("[Idram][result] BookingDetails recovery failed", {
+        billNo: context.billNo,
+        sessionId: payload.sessionId,
+        message: recoveryError instanceof Error ? recoveryError.message : "Unknown error",
+      });
+    }
+
+    throw error;
+  }
+};
 
 const checksumFor = (parts: string[]) =>
   createHash("md5").update(parts.join(":"), "utf8").digest("hex");
@@ -379,7 +463,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result: AoryxBookingResult = await book(payload);
+    const result: AoryxBookingResult = await bookWithRecovery(payload, { billNo });
     await collection.updateOne(
       { billNo },
       {
@@ -429,8 +513,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let insurancePolicies: unknown[] | null = null;
+    let insuranceError: string | null = null;
     try {
+      console.info("[EFES][idram-result] policy request", {
+        billNo,
+        flow: paymentFlow || "booking",
+        ...summarizeEfesInsurance(payload),
+      });
       const policies = await createEfesPoliciesFromBooking(payload);
+      insurancePolicies = policies;
+      console.info("[EFES][idram-result] policy response", {
+        billNo,
+        flow: paymentFlow || "booking",
+        policies,
+      });
       if (policies.length > 0) {
         await collection.updateOne(
           { billNo },
@@ -444,6 +541,8 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create EFES policies";
+      insurancePolicies = [];
+      insuranceError = message;
       await collection.updateOne(
         { billNo },
         {
@@ -465,6 +564,8 @@ export async function POST(request: NextRequest) {
           result,
           source: "aoryx-idram",
           coupon: appliedCoupon,
+          insurancePolicies,
+          insuranceError,
         });
       } catch (error) {
         console.error("[Idram][result] Failed to record user booking", error);

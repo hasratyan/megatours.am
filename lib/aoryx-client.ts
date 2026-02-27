@@ -859,6 +859,29 @@ type AoryxBookingRequest = {
   };
 };
 
+type AoryxBookingDetailsRequest = {
+  sessionId: string;
+};
+
+type AoryxBookingDetailsResponse = {
+  GeneralInfo?: { SessionId?: string | null } | null;
+  Status?: string | null;
+  BookingStatus?: string | number | null;
+  HotelConfirmationNumber?: string | null;
+  SupplierConfirmationNumber?: string | null;
+  CustomerRefNumber?: string | null;
+  ADSConfirmationNumber?: string | null;
+  AdsConfirmationNumber?: string | null;
+  adsConfirmationNumber?: string | null;
+  Rooms?: { Room?: unknown } | unknown;
+  ErrorInfo?: { Description?: string | null; Code?: string | null } | null;
+  IsSuccess?: boolean;
+  StatusCode?: number;
+  ExceptionMessage?: string | null;
+  Errors?: unknown;
+  [key: string]: unknown;
+};
+
 type AoryxBookingResponse = {
   GeneralInfo?: { SessionId?: string | null } | null;
   Status?: string | null;
@@ -1141,7 +1164,7 @@ export async function bookWithOptions(
   const response = await coreRequest<AoryxBookingRequest, AoryxBookingResponse>(
     DISTRIBUTION_ENDPOINTS.book,
     request,
-    { ...options, timeoutMs: 60000 }
+    { ...options, timeoutMs: 180000 }
   );
 
   if (response.IsSuccess === false) {
@@ -1172,6 +1195,66 @@ export async function bookWithOptions(
   return {
     sessionId,
     status: toStringValue(response.Status),
+    hotelConfirmationNumber: toStringValue(response.HotelConfirmationNumber),
+    adsConfirmationNumber: toStringValue(
+      response.ADSConfirmationNumber ?? response.AdsConfirmationNumber ?? response.adsConfirmationNumber
+    ),
+    supplierConfirmationNumber: toPrimarySupplierConfirmation(response.SupplierConfirmationNumber),
+    customerRefNumber: toStringValue(response.CustomerRefNumber),
+    rooms: roomsArray.map((room) => ({
+      roomIdentifier: toInteger((room as { RoomIdentifier?: unknown }).RoomIdentifier),
+      rateKey: toStringValue((room as { RateKey?: unknown }).RateKey),
+      status: toStringValue((room as { Status?: unknown }).Status),
+    })),
+  };
+}
+
+/**
+ * Get booking details by Aoryx session ID.
+ * Useful for post-timeout reconciliation when Book request may have succeeded supplier-side.
+ */
+export async function bookingDetails(
+  sessionId: string,
+  options: AoryxRequestOptions = {}
+): Promise<AoryxBookingResult> {
+  if (!sessionId) {
+    throw new AoryxServiceError("Session ID is required for booking details", "INVALID_PARAMS");
+  }
+
+  const request: AoryxBookingDetailsRequest = { sessionId };
+
+  const response = await coreRequest<AoryxBookingDetailsRequest, AoryxBookingDetailsResponse>(
+    DISTRIBUTION_ENDPOINTS.bookingDetails,
+    request,
+    { ...options, timeoutMs: 60000 }
+  );
+
+  if (response.IsSuccess === false) {
+    throw new AoryxServiceError(
+      response.ExceptionMessage ?? "BookingDetails request failed",
+      "BOOKING_DETAILS_ERROR",
+      response.StatusCode ?? undefined,
+      response.Errors
+    );
+  }
+
+  if (response.ErrorInfo?.Description) {
+    throw new AoryxServiceError(
+      response.ErrorInfo.Description,
+      response.ErrorInfo.Code ?? "BOOKING_DETAILS_ERROR"
+    );
+  }
+
+  const roomsContainer = (response.Rooms as { Room?: unknown } | null | undefined)?.Room ?? response.Rooms;
+  const roomsArray = Array.isArray(roomsContainer)
+    ? roomsContainer
+    : roomsContainer
+      ? [roomsContainer]
+      : [];
+
+  return {
+    sessionId: toStringValue(response.GeneralInfo?.SessionId) ?? sessionId,
+    status: toStringValue(response.Status) ?? toStringValue(response.BookingStatus),
     hotelConfirmationNumber: toStringValue(response.HotelConfirmationNumber),
     adsConfirmationNumber: toStringValue(
       response.ADSConfirmationNumber ?? response.AdsConfirmationNumber ?? response.adsConfirmationNumber
@@ -1364,6 +1447,7 @@ export const aoryxClient = {
   preBook,
   book,
   bookWithOptions,
+  bookingDetails,
   hotelsInfoByDestinationId,
   hotelInfo,
   normalizeParentDestinationId,
