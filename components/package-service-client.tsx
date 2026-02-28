@@ -412,6 +412,14 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   const [previewDestinationName, setPreviewDestinationName] = useState<string | null>(null);
   const [previewDestinationCode, setPreviewDestinationCode] = useState<string | null>(null);
   const [showInsuranceDatePicker, setShowInsuranceDatePicker] = useState(false);
+  const [insuranceDateDraft, setInsuranceDateDraft] = useState<{
+    startDate: string | null;
+    endDate: string | null;
+  } | null>(null);
+  const [insuranceDateFocusedRange, setInsuranceDateFocusedRange] = useState<[number, 0 | 1]>([
+    0,
+    0,
+  ]);
   const transferSyncRef = useRef<{
     selectionId: string;
     includeReturn: boolean;
@@ -457,6 +465,8 @@ export default function PackageServiceClient({ serviceKey }: Props) {
         !insuranceDatePickerRef.current.contains(event.target as Node)
       ) {
         setShowInsuranceDatePicker(false);
+        setInsuranceDateDraft(null);
+        setInsuranceDateFocusedRange([0, 0]);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -560,6 +570,8 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   useEffect(() => {
     if (insuranceSelection?.selected) return;
     setShowInsuranceDatePicker(false);
+    setInsuranceDateDraft(null);
+    setInsuranceDateFocusedRange([0, 0]);
   }, [insuranceSelection?.selected]);
   const transferMissingDestination =
     serviceKey === "transfer" && hasHotel && !destinationName && !destinationCode;
@@ -601,14 +613,20 @@ export default function PackageServiceClient({ serviceKey }: Props) {
     };
   }, [hasHotel, hotelCode, serviceKey]);
   const insuranceStartDateRaw =
-    insuranceSelection?.startDate ?? hotelSelection?.checkInDate ?? null;
+    insuranceDateDraft?.startDate ??
+    insuranceSelection?.startDate ??
+    hotelSelection?.checkInDate ??
+    null;
   const insuranceEndDateRaw =
-    insuranceSelection?.endDate ?? hotelSelection?.checkOutDate ?? null;
+    insuranceDateDraft?.endDate ??
+    insuranceSelection?.endDate ??
+    hotelSelection?.checkOutDate ??
+    null;
   const insuranceDateRange = useMemo<Range>(() => {
     const startDate = parseDateInput(insuranceStartDateRaw) ?? new Date();
     const endDate = parseDateInput(insuranceEndDateRaw) ?? startDate;
     return { startDate, endDate, key: "selection" };
-  }, [insuranceStartDateRaw, insuranceEndDateRaw]);
+  }, [insuranceEndDateRaw, insuranceStartDateRaw]);
 
   const airportOptions = useMemo(() => {
     const map = new Map<string, TransferAirportOption>();
@@ -2398,12 +2416,16 @@ export default function PackageServiceClient({ serviceKey }: Props) {
       if (!selection?.startDate || !selection.endDate) return;
       const startDate = formatDateLocal(selection.startDate);
       const endDate = formatDateLocal(selection.endDate);
+      setInsuranceDateDraft({ startDate, endDate });
+      if (insuranceDateFocusedRange[1] === 0) {
+        return;
+      }
       const currentStart = insuranceSelection.startDate ?? null;
       const currentEnd = insuranceSelection.endDate ?? null;
       if (currentStart === startDate && currentEnd === endDate) {
-        if (selection.startDate.getTime() !== selection.endDate.getTime()) {
-          setShowInsuranceDatePicker(false);
-        }
+        setInsuranceDateDraft(null);
+        setInsuranceDateFocusedRange([0, 0]);
+        setShowInsuranceDatePicker(false);
         return;
       }
       updateInsuranceSelection({
@@ -2422,11 +2444,12 @@ export default function PackageServiceClient({ serviceKey }: Props) {
         quoteDiscountedPriceCoveragesByGuest: null,
         quoteError: null,
       });
-      if (selection.startDate.getTime() !== selection.endDate.getTime()) {
-        setShowInsuranceDatePicker(false);
-      }
+      setInsuranceDateDraft(null);
+      setInsuranceDateFocusedRange([0, 0]);
+      setShowInsuranceDatePicker(false);
     },
     [
+      insuranceDateFocusedRange,
       insuranceSelection?.selected,
       insuranceSelection?.startDate,
       insuranceSelection?.endDate,
@@ -2453,6 +2476,12 @@ export default function PackageServiceClient({ serviceKey }: Props) {
       insurance: undefined,
       updatedAt: Date.now(),
     }));
+  }, []);
+
+  const handleToggleInsuranceDatePicker = useCallback(() => {
+    setInsuranceDateDraft(null);
+    setInsuranceDateFocusedRange([0, 0]);
+    setShowInsuranceDatePicker((prev) => !prev);
   }, []);
 
   const updateFlightField = useCallback((field: keyof FlightSearchForm, value: string) => {
@@ -3102,7 +3131,7 @@ export default function PackageServiceClient({ serviceKey }: Props) {
           <button
             type="button"
             className="date-picker"
-            onClick={() => setShowInsuranceDatePicker((prev) => !prev)}
+            onClick={handleToggleInsuranceDatePicker}
             disabled={!insuranceSelection?.selected}
           >
             <span className="material-symbols-rounded" aria-hidden="true">
@@ -3128,6 +3157,10 @@ export default function PackageServiceClient({ serviceKey }: Props) {
                 ranges={[insuranceDateRange]}
                 minDate={new Date()}
                 onChange={handleInsuranceDateChange}
+                focusedRange={insuranceDateFocusedRange}
+                onRangeFocusChange={(nextFocusedRange) =>
+                  setInsuranceDateFocusedRange(nextFocusedRange as [number, 0 | 1])
+                }
                 rangeColors={["#10b981"]}
                 moveRangeOnFirstSelection={false}
                 showMonthAndYearPickers
