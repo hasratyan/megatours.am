@@ -1726,7 +1726,7 @@ export default function HotelClient({
       }
       const query = params.toString();
       const nextHref = query ? `${pathname}?${query}` : pathname;
-      router.replace(nextHref);
+      router.replace(nextHref, { scroll: false });
     },
     [destinationCode, hotelCode, pathname, resolveDestinationCode, router]
   );

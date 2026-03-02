@@ -409,7 +409,9 @@ export default function SearchForm({
   onSubmitSearch,
 }: Props) {
   const defaults = useMemo(() => buildDefaultDates(), []);
-  const reactSelectId = useId();
+  const reactSelectId = useId().replace(/:/g, "");
+  const locationSelectInstanceId = `search-location-${reactSelectId}`;
+  const locationSelectInputId = `${locationSelectInstanceId}-input`;
   const router = useRouter();
   const { locale: appLocale } = useLanguage();
   const dateFnsLocale = dateFnsLocales[appLocale];
@@ -1182,6 +1184,8 @@ export default function SearchForm({
       {!hideLocationFields && (
         <div className="field">
           <Select<LocationOption>
+            instanceId={locationSelectInstanceId}
+            inputId={locationSelectInputId}
             options={combinedOptions}
             value={selectedLocation}
             onChange={(option: SingleValue<LocationOption>) => {

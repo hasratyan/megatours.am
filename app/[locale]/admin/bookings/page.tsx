@@ -27,6 +27,7 @@ type BookingRecord = {
   booking?: AoryxBookingResult | null;
   coupon?: AppliedBookingCoupon | null;
   cancellation?: {
+    [key: string]: unknown;
     refund?: {
       status?: string | null;
     } | null;
@@ -52,6 +53,7 @@ type AdminBookingRecord = {
   booking: AoryxBookingResult | null;
   coupon: AppliedBookingCoupon | null;
   refundState?: string | null;
+  cancellation?: Record<string, unknown> | null;
   displayTotal?: number | null;
   displayCurrency?: string | null;
   displayNet?: number | null;
@@ -121,6 +123,7 @@ const sanitizeAppliedCoupon = (coupon?: AppliedBookingCoupon | null): AppliedBoo
 const normalizeCurrency = (value: string | null | undefined) => (value ?? "").trim().toUpperCase();
 
 const toRoundedAmount = (value: number) => Number(value.toFixed(2));
+const sanitizeJson = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 
 const resolveServiceAmountAmd = (
   amount: number,
@@ -292,6 +295,7 @@ export default async function AdminBookingsPage({ params }: PageProps) {
       booking: sanitizeBookingResult(entry.booking ?? null),
       coupon: sanitizeAppliedCoupon(entry.coupon ?? null),
       refundState: entry.cancellation?.refund?.status ?? null,
+      cancellation: entry.cancellation ? sanitizeJson(entry.cancellation) : null,
     };
   });
   const [hotelMarkup, rates] = await Promise.all([

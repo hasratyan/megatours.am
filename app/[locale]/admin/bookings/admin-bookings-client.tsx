@@ -30,6 +30,7 @@ type AdminBookingRecord = {
   booking: AoryxBookingResult | null;
   coupon: AppliedBookingCoupon | null;
   refundState?: string | null;
+  cancellation?: Record<string, unknown> | null;
   displayTotal?: number | null;
   displayCurrency?: string | null;
   displayNet?: number | null;
@@ -56,6 +57,8 @@ type BookingActionResponse = {
   action?: string;
   message?: string;
   bookingStatus?: string | null;
+  cancellation?: Record<string, unknown> | null;
+  payload?: AoryxBookingPayload | null;
   payment?: {
     status?: string | null;
   } | null;
@@ -147,7 +150,8 @@ const resolveRefundStateKey = (value?: string | null) => {
   if (
     normalized.includes("in_progress") ||
     normalized.includes("requested") ||
-    normalized.includes("processing")
+    normalized.includes("processing") ||
+    normalized.includes("manual")
   ) {
     return "in_progress";
   }
@@ -187,6 +191,18 @@ const buildLocalServicesDraft = (payload: AoryxBookingPayload | null | undefined
   excursions: payload?.excursions ?? null,
   airTickets: payload?.airTickets ?? null,
 });
+
+const filterRefundServiceOptionsByPayload = (
+  options: RefundServiceOption[] | undefined,
+  payload: AoryxBookingPayload | null | undefined
+) => {
+  if (!options) return options;
+  return options.filter((option) => {
+    if (option.key === "transfer") return Boolean(payload?.transferSelection);
+    if (option.key === "excursion") return Boolean(payload?.excursions);
+    return Boolean(payload?.airTickets);
+  });
+};
 
 export default function AdminBookingsClient({
   adminUser,
@@ -424,8 +440,16 @@ export default function AdminBookingsClient({
       typeof response.refund?.status === "string" && response.refund.status.trim().length > 0
         ? response.refund.status
         : null;
+    const nextPayload =
+      response.payload && typeof response.payload === "object"
+        ? response.payload
+        : null;
+    const nextCancellation =
+      response.cancellation && typeof response.cancellation === "object"
+        ? response.cancellation
+        : null;
 
-    if (!bookingStatus && !refundState) return;
+    if (!bookingStatus && !refundState && !nextPayload && !nextCancellation) return;
 
     setBookings((prev) =>
       prev.map((entry) =>
@@ -439,11 +463,30 @@ export default function AdminBookingsClient({
                       status: bookingStatus,
                     }
                   : entry.booking,
+              payload: nextPayload ?? entry.payload,
+              refundServices: nextPayload
+                ? filterRefundServiceOptionsByPayload(entry.refundServices, nextPayload)
+                : entry.refundServices,
               refundState: refundState ?? entry.refundState ?? null,
+              cancellation: nextCancellation ?? entry.cancellation ?? null,
             }
           : entry
       )
     );
+
+    if (nextPayload) {
+      setRefundServicesByBookingId((prev) => {
+        const current = prev[bookingId] ?? [];
+        const allowed = new Set<RefundServiceKey>();
+        if (nextPayload.transferSelection) allowed.add("transfer");
+        if (nextPayload.excursions) allowed.add("excursion");
+        if (nextPayload.airTickets) allowed.add("flight");
+        return {
+          ...prev,
+          [bookingId]: current.filter((item) => allowed.has(item)),
+        };
+      });
+    }
   };
 
   const handleCancel = async (bookingId: string) => {
@@ -985,11 +1028,12 @@ export default function AdminBookingsClient({
                     processingAction?.bookingId === item.entry.id &&
                     processingAction.action === "update_contact";
                   const isExpanded = expandedBookingId === item.entry.id;
-                  const isVposSource = (item.entry.source ?? "").toLowerCase().includes("vpos");
-                  const canCancel = item.statusKey === "confirmed" && isVposSource;
+                  const isManagedPaymentSource = /(vpos|idram)/.test((item.entry.source ?? "").toLowerCase());
+                  const canCancel = item.statusKey === "confirmed" && isManagedPaymentSource;
                   const refundServiceOptions = item.entry.refundServices ?? [];
-                  const canRefundConfirmed = item.statusKey === "confirmed" && isVposSource && refundServiceOptions.length > 0;
-                  const canRefundFailed = item.statusKey === "failed" && isVposSource;
+                  const canRefundConfirmed =
+                    item.statusKey === "confirmed" && isManagedPaymentSource && refundServiceOptions.length > 0;
+                  const canRefundFailed = item.statusKey === "failed" && isManagedPaymentSource;
                   const canRefund = canRefundConfirmed || canRefundFailed;
                   const actionFeedbackEntry = actionFeedback[item.entry.id] ?? null;
                   const refundStateKey = resolveRefundStateKey(item.entry.refundState);
@@ -1144,6 +1188,12 @@ export default function AdminBookingsClient({
                                 <div>
                                   <span>{t.admin.details.booking}</span>
                                   <pre>{JSON.stringify(booking, null, 2)}</pre>
+                                </div>
+                              </div>
+                              <div className="admin-json-grid">
+                                <div>
+                                  <span>Cancellation / Payment</span>
+                                  <pre>{JSON.stringify(item.entry.cancellation ?? null, null, 2)}</pre>
                                 </div>
                               </div>
                               <div className="admin-json-grid">

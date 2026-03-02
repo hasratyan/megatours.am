@@ -136,7 +136,8 @@ const resolveRefundStateKey = (value?: string | null): VoucherRefundStateKey | n
   if (
     normalized.includes("in_progress") ||
     normalized.includes("requested") ||
-    normalized.includes("processing")
+    normalized.includes("processing") ||
+    normalized.includes("manual")
   ) {
     return "in_progress";
   }
