@@ -7,6 +7,7 @@ import { getDb } from "@/lib/db";
 import { getPrebookState, getSessionFromCookie, type StoredPrebookState } from "@/app/api/aoryx/_shared";
 import { parseBookingPayload, validatePrebookState } from "@/lib/aoryx-booking";
 import { calculateBookingTotal } from "@/lib/booking-total";
+import { isBookingModificationClosed } from "@/lib/booking-modification";
 import { applyMarkup } from "@/lib/pricing-utils";
 import { getAmdRateForCurrency, getAmdRates, getAoryxHotelPlatformFee } from "@/lib/pricing";
 import {
@@ -739,6 +740,15 @@ const tryHandleBookingAddonCheckout = async (params: {
       {
         error: "Canceled bookings can not receive additional services.",
         code: "booking_canceled",
+      },
+      { status: 409 }
+    );
+  }
+  if (isBookingModificationClosed(userBooking.payload.checkOutDate)) {
+    return NextResponse.json(
+      {
+        error: "This booking can no longer be modified because the hotel stay has already ended.",
+        code: "booking_modification_closed",
       },
       { status: 409 }
     );

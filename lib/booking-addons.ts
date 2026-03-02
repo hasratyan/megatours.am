@@ -11,6 +11,23 @@ export type BookingAddonServicesPayload = {
   airTickets?: NonNullable<AoryxBookingPayload["airTickets"]>;
 };
 
+export type BookingAddonHotelContext = {
+  hotelCode: string;
+  hotelName: string | null;
+  destinationCode: string | null;
+  destinationName: string | null;
+  checkInDate: string | null;
+  checkOutDate: string | null;
+  countryCode: string;
+  nationality: string;
+  currency: string;
+  rooms: Array<{
+    roomIdentifier: number;
+    adults: number;
+    childrenAges: number[];
+  }>;
+};
+
 export type BookingAddonCheckoutRequest = {
   bookingId: string;
   services: BookingAddonServicesPayload;
@@ -287,6 +304,43 @@ export const resolveExistingBookingAddonServiceKeys = (
   if (payload.insurance) keys.push("insurance");
   if (payload.airTickets) keys.push("flight");
   return keys;
+};
+
+export const resolveBookingAddonHotelContext = (
+  payload: AoryxBookingPayload | null | undefined
+): BookingAddonHotelContext | null => {
+  if (!payload) return null;
+  const hotelCode = resolveString(payload.hotelCode);
+  if (!hotelCode) return null;
+
+  const rooms = Array.isArray(payload.rooms)
+    ? payload.rooms.map((room, index) => ({
+        roomIdentifier:
+          typeof room.roomIdentifier === "number" && Number.isFinite(room.roomIdentifier)
+            ? room.roomIdentifier
+            : index + 1,
+        adults:
+          typeof room.adults === "number" && Number.isFinite(room.adults) && room.adults > 0
+            ? room.adults
+            : 1,
+        childrenAges: Array.isArray(room.childrenAges)
+          ? room.childrenAges.filter((age) => Number.isFinite(age))
+          : [],
+      }))
+    : [];
+
+  return {
+    hotelCode,
+    hotelName: resolveString(payload.hotelName) || null,
+    destinationCode: resolveString(payload.destinationCode) || null,
+    destinationName: resolveString(payload.transferSelection?.destination?.name) || null,
+    checkInDate: resolveString(payload.checkInDate) || null,
+    checkOutDate: resolveString(payload.checkOutDate) || null,
+    countryCode: resolveString(payload.countryCode) || "AE",
+    nationality: resolveString(payload.nationality) || "AM",
+    currency: resolveString(payload.currency) || "USD",
+    rooms,
+  };
 };
 
 export const parseBookingAddonCheckoutRequest = (value: unknown): BookingAddonCheckoutRequest | null => {

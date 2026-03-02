@@ -12,6 +12,7 @@ import { getAmdRates, getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { resolveBookingStatusKey } from "@/lib/booking-status";
+import { isBookingModificationClosed } from "@/lib/booking-modification";
 import { getServiceFlags } from "@/lib/service-flags";
 import { DEFAULT_SERVICE_FLAGS } from "@/lib/package-builder-state";
 import { resolveExistingBookingAddonServiceKeys } from "@/lib/booking-addons";
@@ -377,6 +378,7 @@ export default async function VoucherPage({ params }: PageProps) {
 
   const serviceFlags = await getServiceFlags().catch(() => DEFAULT_SERVICE_FLAGS);
   const existingAddonServices = new Set(resolveExistingBookingAddonServiceKeys(payload));
+  const addonModificationClosed = isBookingModificationClosed(payload.checkOutDate);
   const missingAddonServices = [
     { key: "transfer", enabled: serviceFlags.transfer !== false, label: t.packageBuilder.services.transfer },
     { key: "excursion", enabled: serviceFlags.excursion !== false, label: t.packageBuilder.services.excursion },
@@ -388,7 +390,16 @@ export default async function VoucherPage({ params }: PageProps) {
       !existingAddonServices.has(service.key as "transfer" | "excursion" | "insurance" | "flight")
     )
     .map((service) => service.label);
-  const canManageAddons = statusKey === "confirmed" && !bookingCanceledByAdmin && missingAddonServices.length > 0;
+  const canManageAddons =
+    statusKey === "confirmed" &&
+    !bookingCanceledByAdmin &&
+    !addonModificationClosed &&
+    missingAddonServices.length > 0;
+  const showAddonModificationClosed =
+    statusKey === "confirmed" &&
+    !bookingCanceledByAdmin &&
+    addonModificationClosed &&
+    missingAddonServices.length > 0;
   const manageAddonsHref = `/${resolvedLocale}/profile/voucher/${encodeURIComponent(bookingId)}/add-services`;
 
   const serviceCards: ServiceCard[] = [
@@ -700,6 +711,13 @@ export default async function VoucherPage({ params }: PageProps) {
             <Link href={manageAddonsHref} className="service-builder__cta">
               {t.packageBuilder.checkoutButton}
             </Link>
+          </section>
+        ) : null}
+        {showAddonModificationClosed ? (
+          <section className="voucher-card voucher-card--addons">
+            <h2>{t.profile.voucher.sections.services}</h2>
+            <p>{missingAddonServices.join(", ")}</p>
+            <p>{t.profile.voucher.modificationClosed}</p>
           </section>
         ) : null}
 

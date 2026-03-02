@@ -459,6 +459,7 @@ export type Translation = {
       backToProfile: string;
       issuedOn: string;
       paymentNote: string;
+      modificationClosed: string;
       sections: {
         stay: string;
         payment: string;
@@ -1888,6 +1889,7 @@ const translations: Record<Locale, Translation> = {
         backToProfile: "Վերադառնալ պրոֆիլ",
         issuedOn: "Տրված է",
         paymentNote: "Այս վաուչերը հաստատում է ձեր ամրագրումը։",
+        modificationClosed: "Այս ամրագրումն այլևս հնարավոր չէ փոփոխել, քանի որ հյուրանոցային կեցությունն արդեն ավարտվել է։",
         sections: {
           stay: "Հյուրանոցային տվյալներ",
           payment: "Վճարման ամփոփում",
@@ -3352,6 +3354,7 @@ const translations: Record<Locale, Translation> = {
         backToProfile: "Back to profile",
         issuedOn: "Issued on",
         paymentNote: "This voucher confirms your booking details.",
+        modificationClosed: "This booking can no longer be modified because the hotel stay has already ended.",
         sections: {
           stay: "Hotel stay",
           payment: "Payment summary",
@@ -4819,6 +4822,7 @@ const translations: Record<Locale, Translation> = {
         backToProfile: "Назад в профиль",
         issuedOn: "Дата выдачи",
         paymentNote: "Этот ваучер подтверждает детали вашего бронирования.",
+        modificationClosed: "Это бронирование больше нельзя изменить, потому что проживание в отеле уже завершилось.",
         sections: {
           stay: "Данные проживания",
           payment: "Сводка оплаты",

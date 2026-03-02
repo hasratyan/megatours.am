@@ -39,8 +39,42 @@ const parseErrorData = async (response: Response): Promise<ErrorResponseData | n
 };
 
 const SERVER_ERROR_FALLBACK = "Service is temporarily unavailable. Please try again.";
+const SERVER_ERROR_FALLBACKS = {
+  en: SERVER_ERROR_FALLBACK,
+  hy: "Ծառայությունը ժամանակավորապես հասանելի չէ։ Խնդրում ենք փորձել կրկին։",
+  ru: "Сервис временно недоступен. Пожалуйста, попробуйте еще раз.",
+} as const;
+
+const normalizeLocale = (value: string | null | undefined): keyof typeof SERVER_ERROR_FALLBACKS => {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (normalized.startsWith("hy")) return "hy";
+  if (normalized.startsWith("ru")) return "ru";
+  return "en";
+};
+
+const resolveRuntimeLocale = (): keyof typeof SERVER_ERROR_FALLBACKS => {
+  if (typeof document !== "undefined") {
+    const documentLocale = normalizeLocale(document.documentElement.lang);
+    if (documentLocale !== "en" || document.documentElement.lang.trim()) {
+      return documentLocale;
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    const pathLocale = normalizeLocale(window.location.pathname.split("/").filter(Boolean)[0] ?? null);
+    if (pathLocale !== "en" || /^\/en(\/|$)/.test(window.location.pathname)) {
+      return pathLocale;
+    }
+    return normalizeLocale(window.navigator.language);
+  }
+
+  return "en";
+};
+
 const buildFallbackMessage = (status: number) =>
-  status >= 500 ? SERVER_ERROR_FALLBACK : DEFAULT_USER_ERROR_MESSAGE;
+  status >= 500
+    ? SERVER_ERROR_FALLBACKS[resolveRuntimeLocale()]
+    : DEFAULT_USER_ERROR_MESSAGE;
 
 const extractErrorMessage = (data: ErrorResponseData | null, status: number) =>
   resolveSafeErrorMessage(

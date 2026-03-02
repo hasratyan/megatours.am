@@ -165,7 +165,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (error instanceof AoryxClientError) {
-      return NextResponse.json({ error: error.message }, { status: 502 });
+      return NextResponse.json(
+        { error: error.message, code: "AORYX_UNAVAILABLE" },
+        { status: 502 }
+      );
     }
 
     return NextResponse.json(

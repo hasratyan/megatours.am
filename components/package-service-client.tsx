@@ -26,6 +26,7 @@ import type {
 import type { FlydubaiFlightOffer, FlydubaiSearchResponse } from "@/types/flydubai";
 import type { EfesQuoteResult } from "@/types/efes";
 import {
+  PACKAGE_BUILDER_SESSION_MS,
   PackageBuilderService,
   PackageBuilderState,
   openPackageBuilder,
@@ -34,9 +35,15 @@ import {
   updatePackageBuilderState,
 } from "@/lib/package-builder-state";
 import { useAmdRates } from "@/lib/use-amd-rates";
+import type { BookingAddonHotelContext, BookingAddonServiceKey } from "@/lib/booking-addons";
 
 type Props = {
   serviceKey: PackageBuilderService;
+  bookingAddonContext?: {
+    bookingId: string;
+    hotelContext: BookingAddonHotelContext;
+    existingServices: BookingAddonServiceKey[];
+  } | null;
 };
 
 const intlLocales: Record<AppLocale, string> = {
@@ -352,7 +359,35 @@ type FlightSearchForm = {
   notes: string;
 };
 
-export default function PackageServiceClient({ serviceKey }: Props) {
+const buildHotelSelectionFromAddonContext = (
+  bookingId: string,
+  hotelContext: BookingAddonHotelContext
+): PackageBuilderState["hotel"] => {
+  const roomCount = hotelContext.rooms.length;
+  const guestCount = hotelContext.rooms.reduce(
+    (sum, room) => sum + room.adults + room.childrenAges.length,
+    0
+  );
+
+  return {
+    selected: true,
+    hotelCode: hotelContext.hotelCode,
+    hotelName: hotelContext.hotelName,
+    destinationCode: hotelContext.destinationCode,
+    destinationName: hotelContext.destinationName,
+    checkInDate: hotelContext.checkInDate,
+    checkOutDate: hotelContext.checkOutDate,
+    countryCode: hotelContext.countryCode,
+    nationality: hotelContext.nationality,
+    currency: hotelContext.currency,
+    rooms: hotelContext.rooms,
+    roomCount,
+    guestCount,
+    selectionKey: `booking-addon:${bookingId}`,
+  };
+};
+
+export default function PackageServiceClient({ serviceKey, bookingAddonContext = null }: Props) {
   const { locale, t } = useLanguage();
   const intlLocale = intlLocales[locale] ?? "en-GB";
   const dateFnsLocale = dateFnsLocales[locale] ?? enGB;
@@ -378,7 +413,23 @@ export default function PackageServiceClient({ serviceKey }: Props) {
     [intlLocale]
   );
   const { rates: amdRates } = useAmdRates();
-  const [builderState, setBuilderState] = useState<PackageBuilderState>({});
+  const addonHotelSelection = useMemo(
+    () =>
+      bookingAddonContext?.hotelContext
+        ? buildHotelSelectionFromAddonContext(
+            bookingAddonContext.bookingId,
+            bookingAddonContext.hotelContext
+          )
+        : null,
+    [bookingAddonContext]
+  );
+  const addonExistingServiceSet = useMemo(
+    () => new Set(bookingAddonContext?.existingServices ?? []),
+    [bookingAddonContext]
+  );
+  const [builderState, setBuilderState] = useState<PackageBuilderState>(() =>
+    addonHotelSelection ? { hotel: addonHotelSelection } : {}
+  );
   const [transferOptions, setTransferOptions] = useState<AoryxTransferRate[]>([]);
   const [transferLoading, setTransferLoading] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
@@ -432,6 +483,60 @@ export default function PackageServiceClient({ serviceKey }: Props) {
   const insuranceQuoteKeyRef = useRef<string | null>(null);
   const insuranceQuoteRequestIdRef = useRef(0);
   const insuranceQuoteTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!addonHotelSelection) return;
+
+    updatePackageBuilderState((prev) => {
+      const sameBookingContext =
+        prev.hotel?.selected === true &&
+        prev.hotel.selectionKey === addonHotelSelection.selectionKey &&
+        prev.hotel.hotelCode === addonHotelSelection.hotelCode &&
+        prev.hotel.checkInDate === addonHotelSelection.checkInDate &&
+        prev.hotel.checkOutDate === addonHotelSelection.checkOutDate &&
+        (prev.hotel.destinationCode ?? null) === (addonHotelSelection.destinationCode ?? null);
+
+      let nextState: PackageBuilderState = sameBookingContext
+        ? {
+            ...prev,
+            hotel: {
+              ...prev.hotel,
+              ...addonHotelSelection,
+            },
+          }
+        : {
+            hotel: addonHotelSelection,
+          };
+
+      if (addonExistingServiceSet.has("transfer") && nextState.transfer) {
+        const next = { ...nextState };
+        delete next.transfer;
+        nextState = next;
+      }
+      if (addonExistingServiceSet.has("excursion") && nextState.excursion) {
+        const next = { ...nextState };
+        delete next.excursion;
+        nextState = next;
+      }
+      if (addonExistingServiceSet.has("flight") && nextState.flight) {
+        const next = { ...nextState };
+        delete next.flight;
+        nextState = next;
+      }
+      if (addonExistingServiceSet.has("insurance") && nextState.insurance) {
+        const next = { ...nextState };
+        delete next.insurance;
+        nextState = next;
+      }
+
+      return {
+        ...nextState,
+        sessionExpiresAt: Date.now() + PACKAGE_BUILDER_SESSION_MS,
+        updatedAt: Date.now(),
+      };
+    });
+  }, [addonExistingServiceSet, addonHotelSelection]);
+
   useEffect(() => {
     const syncState = () => {
       const next = readPackageBuilderState();

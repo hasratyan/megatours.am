@@ -7,6 +7,7 @@ import { buildSearchQuery } from "@/lib/search-query";
 import type { AoryxBookingPayload, AoryxBookingResult, AoryxSearchParams } from "@/types/aoryx";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import type { Locale } from "@/lib/i18n";
+import { isBookingModificationClosed } from "@/lib/booking-modification";
 import { resolveBookingStatusKey } from "@/lib/booking-status";
 
 type BookingRecord = {
@@ -412,6 +413,7 @@ export default function ProfileView({
                   const hasExcursion = Boolean(payload?.excursions);
                   const hasInsurance = Boolean(payload?.insurance);
                   const hasFlight = Boolean(payload?.airTickets);
+                  const modificationClosed = isBookingModificationClosed(payload?.checkOutDate);
                   const hasMissingAddonService = !(hasTransfer && hasExcursion && hasInsurance && hasFlight);
                   return (
                     <li key={`${payload?.customerRefNumber ?? "booking"}-${index}`} className="profile-item">
@@ -451,14 +453,17 @@ export default function ProfileView({
                               {t.profile.bookings.downloadVoucher}
                             </Link>
                           )}
-                          {payload?.customerRefNumber && statusKey === "confirmed" && hasMissingAddonService && (
+                          {payload?.customerRefNumber &&
+                          statusKey === "confirmed" &&
+                          hasMissingAddonService &&
+                          !modificationClosed ? (
                             <Link
                               className="profile-link"
                               href={`/${locale}/profile/voucher/${payload.customerRefNumber}/add-services`}
                             >
                               {t.packageBuilder.checkoutButton}
                             </Link>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                       <div className="profile-item-grid">
