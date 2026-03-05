@@ -137,6 +137,7 @@ const createNdjsonStreamResponse = (input: {
           locale: input.locale,
           messages: input.messages,
           context: input.context,
+          sessionId: input.sessionId,
           userId: input.userId,
           onProgress: async (event) => {
             push({
@@ -166,6 +167,7 @@ const createNdjsonStreamResponse = (input: {
           model: result.meta.model,
           toolCalls: result.meta.toolCalls,
           priceAudit: result.meta.priceAudit,
+          responseId: result.meta.responseId,
         });
 
         push({
@@ -250,6 +252,7 @@ export async function POST(request: NextRequest) {
       locale,
       messages,
       context,
+      sessionId,
       userId,
     });
 
@@ -263,6 +266,7 @@ export async function POST(request: NextRequest) {
       model: result.meta.model,
       toolCalls: result.meta.toolCalls,
       priceAudit: result.meta.priceAudit,
+      responseId: result.meta.responseId,
     });
 
     return NextResponse.json<PackageAssistantResponse>({

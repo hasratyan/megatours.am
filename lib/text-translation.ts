@@ -189,6 +189,7 @@ const translateChunkWithOpenAi = async (
       },
       body: JSON.stringify({
         model,
+        reasoning_effort: "none",
         temperature: 0,
         response_format: { type: "json_object" },
         messages: [

@@ -34,10 +34,15 @@ import type {
 
 const OPENAI_API_KEY =
   typeof process.env.OPENAI_API_KEY === "string" ? process.env.OPENAI_API_KEY.trim() : "";
+const normalizeOpenAiResponsesUrl = (value: string | undefined) => {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (!trimmed) return "https://api.openai.com/v1/responses";
+  return trimmed.replace(/\/chat\/completions\/?$/u, "/responses");
+};
 const OPENAI_BASE_URL =
   typeof process.env.OPENAI_API_URL === "string" && process.env.OPENAI_API_URL.trim().length > 0
-    ? process.env.OPENAI_API_URL.trim()
-    : "https://api.openai.com/v1/chat/completions";
+    ? normalizeOpenAiResponsesUrl(process.env.OPENAI_API_URL)
+    : "https://api.openai.com/v1/responses";
 const OPENAI_PACKAGE_MODEL_PRIMARY =
   typeof process.env.OPENAI_PACKAGE_ASSISTANT_MODEL === "string" &&
   process.env.OPENAI_PACKAGE_ASSISTANT_MODEL.trim().length > 0
@@ -71,22 +76,58 @@ const OPENAI_PACKAGE_ASSISTANT_FULL_CONTEXT_ENABLED =
 
 type OpenAiToolCall = {
   id: string;
-  type: "function";
-  function: { name: string; arguments: string };
+  call_id: string;
+  type: "function_call";
+  name: string;
+  arguments: string;
 };
 
-type OpenAiMessage = {
-  role: "system" | "user" | "assistant" | "tool";
-  content?: string | null;
-  name?: string;
-  tool_call_id?: string;
-  tool_calls?: OpenAiToolCall[];
+type OpenAiResponseInputMessage = {
+  role: "user" | "assistant";
+  content: string;
 };
 
-type OpenAiCompletionPayload = {
-  choices?: Array<{
-    message?: OpenAiMessage | null;
-  }>;
+type OpenAiFunctionCallOutputItem = {
+  type: "function_call_output";
+  call_id: string;
+  output: string;
+};
+
+type OpenAiResponseOutputText = {
+  type: "output_text";
+  text?: string | null;
+};
+
+type OpenAiResponseOutputMessage = {
+  id: string;
+  type: "message";
+  role?: "assistant" | "user" | string;
+  content?: OpenAiResponseOutputText[];
+};
+
+type OpenAiResponseOutputItem =
+  | OpenAiToolCall
+  | OpenAiResponseOutputMessage
+  | {
+      type: string;
+      [key: string]: unknown;
+    };
+
+type OpenAiResponsePayload = {
+  id: string;
+  output?: OpenAiResponseOutputItem[];
+};
+
+type OpenAiResponseRequest = {
+  instructions: string;
+  input: string | Array<OpenAiResponseInputMessage | OpenAiFunctionCallOutputItem>;
+  previousResponseId?: string | null;
+};
+
+type AssistantSessionState = {
+  responseId: string | null;
+  lastAssistantMessage: string | null;
+  lastModel: string | null;
 };
 
 type ToolExecutionContext = {
@@ -105,6 +146,7 @@ type AssistantGenerationInput = {
   locale: Locale;
   messages: PackageAssistantApiMessage[];
   context?: PackageAssistantContext | null;
+  sessionId?: string | null;
   userId?: string | null;
   onProgress?: (event: PackageAssistantProgressEvent) => void | Promise<void>;
 };
@@ -115,6 +157,7 @@ export type AssistantGenerationOutput = {
     model: string;
     toolCalls: number;
     priceAudit: PackageAssistantPriceAudit;
+    responseId: string | null;
   };
 };
 
@@ -128,6 +171,7 @@ type AssistantPersistenceInput = {
   model: string;
   toolCalls: number;
   priceAudit: PackageAssistantPriceAudit;
+  responseId?: string | null;
 };
 
 type HotelPriceEvidence = {
@@ -1177,145 +1221,169 @@ const applyHotelFirstPolicyToReply = (
 const toolDefinitions = [
   {
     type: "function",
-    function: {
-      name: "lookup_destinations",
-      description: "Find UAE destination codes by name before a hotel search.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string" },
-          countryCode: { type: "string", description: "ISO-2 country code, for example AE." },
-          limit: { type: "integer", minimum: 1, maximum: 30 },
-        },
-        additionalProperties: false,
+    name: "lookup_destinations",
+    description: "Find UAE destination codes by name before a hotel search.",
+    strict: false,
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        countryCode: { type: "string", description: "ISO-2 country code, for example AE." },
+        limit: { type: "integer", minimum: 1, maximum: 30 },
       },
+      additionalProperties: false,
     },
   },
   {
     type: "function",
-    function: {
-      name: "search_hotels",
-      description:
-        "Search UAE hotel inventory with dates/occupancy. Use this before proposing concrete hotel options.",
-      parameters: {
-        type: "object",
-        properties: {
-          destinationCode: { type: "string" },
-          hotelCode: { type: "string" },
-          checkInDate: { type: "string", description: "YYYY-MM-DD" },
-          checkOutDate: { type: "string", description: "YYYY-MM-DD" },
-          roomCount: { type: "integer", minimum: 1, maximum: 4 },
-          adults: { type: "integer", minimum: 1, maximum: 12 },
-          children: { type: "integer", minimum: 0, maximum: 8 },
-          countryCode: { type: "string" },
-          nationality: { type: "string" },
-          currency: { type: "string" },
-        },
-        additionalProperties: false,
+    name: "search_hotels",
+    description:
+      "Search UAE hotel inventory with dates/occupancy. Use this before proposing concrete hotel options.",
+    strict: false,
+    parameters: {
+      type: "object",
+      properties: {
+        destinationCode: { type: "string" },
+        hotelCode: { type: "string" },
+        checkInDate: { type: "string", description: "YYYY-MM-DD" },
+        checkOutDate: { type: "string", description: "YYYY-MM-DD" },
+        roomCount: { type: "integer", minimum: 1, maximum: 4 },
+        adults: { type: "integer", minimum: 1, maximum: 12 },
+        children: { type: "integer", minimum: 0, maximum: 8 },
+        countryCode: { type: "string" },
+        nationality: { type: "string" },
+        currency: { type: "string" },
       },
+      additionalProperties: false,
     },
   },
   {
     type: "function",
-    function: {
-      name: "search_transfers",
-      description: "Find UAE transfer options by destination name/code and passenger count.",
-      parameters: {
-        type: "object",
-        properties: {
-          destinationLocationCode: { type: "string" },
-          destinationName: { type: "string" },
-          transferType: { type: "string", enum: ["INDIVIDUAL", "GROUP"] },
-          paxCount: { type: "integer", minimum: 1, maximum: 20 },
-          travelDate: { type: "string" },
-        },
-        additionalProperties: false,
+    name: "search_transfers",
+    description: "Find UAE transfer options by destination name/code and passenger count.",
+    strict: false,
+    parameters: {
+      type: "object",
+      properties: {
+        destinationLocationCode: { type: "string" },
+        destinationName: { type: "string" },
+        transferType: { type: "string", enum: ["INDIVIDUAL", "GROUP"] },
+        paxCount: { type: "integer", minimum: 1, maximum: 20 },
+        travelDate: { type: "string" },
       },
+      additionalProperties: false,
     },
   },
   {
     type: "function",
-    function: {
-      name: "search_excursions",
-      description: "Load excursion options and optionally filter by keyword or max price.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string" },
-          limit: { type: "integer", minimum: 1, maximum: 30 },
-          maxPrice: { type: "number" },
-        },
-        additionalProperties: false,
+    name: "search_excursions",
+    description: "Load excursion options and optionally filter by keyword or max price.",
+    strict: false,
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        limit: { type: "integer", minimum: 1, maximum: 30 },
+        maxPrice: { type: "number" },
       },
+      additionalProperties: false,
     },
   },
   {
     type: "function",
-    function: {
-      name: "search_flights",
-      description: "Search flydubai flight offers by origin/destination/date.",
-      parameters: {
-        type: "object",
-        properties: {
-          origin: { type: "string" },
-          destination: { type: "string" },
-          departureDate: { type: "string", description: "YYYY-MM-DD" },
-          returnDate: { type: "string", description: "YYYY-MM-DD" },
-          cabinClass: { type: "string" },
-          adults: { type: "integer", minimum: 1, maximum: 9 },
-          children: { type: "integer", minimum: 0, maximum: 6 },
-          currency: { type: "string" },
-        },
-        required: ["origin", "destination", "departureDate"],
-        additionalProperties: false,
+    name: "search_flights",
+    description: "Search flydubai flight offers by origin/destination/date.",
+    strict: false,
+    parameters: {
+      type: "object",
+      properties: {
+        origin: { type: "string" },
+        destination: { type: "string" },
+        departureDate: { type: "string", description: "YYYY-MM-DD" },
+        returnDate: { type: "string", description: "YYYY-MM-DD" },
+        cabinClass: { type: "string" },
+        adults: { type: "integer", minimum: 1, maximum: 9 },
+        children: { type: "integer", minimum: 0, maximum: 6 },
+        currency: { type: "string" },
       },
+      required: ["origin", "destination", "departureDate"],
+      additionalProperties: false,
     },
   },
   {
     type: "function",
-    function: {
-      name: "quote_insurance",
-      description:
-        "Calculate live EFES insurance premium for travelers. Use when proposing insurance price.",
-      parameters: {
-        type: "object",
-        properties: {
-          startDate: { type: "string", description: "YYYY-MM-DD" },
-          endDate: { type: "string", description: "YYYY-MM-DD" },
-          days: { type: "integer", minimum: 1, maximum: 365 },
-          territoryCode: { type: "string" },
-          riskAmount: { type: "number" },
-          riskCurrency: { type: "string" },
-          riskLabel: { type: "string" },
-          promoCode: { type: "string" },
-          subrisks: {
-            type: "array",
-            items: { type: "string" },
-          },
-          travelers: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                id: { type: "string" },
-                age: { type: "integer" },
-                passportNumber: { type: "string" },
-                socialCard: { type: "string" },
-                subrisks: {
-                  type: "array",
-                  items: { type: "string" },
-                },
+    name: "quote_insurance",
+    description:
+      "Calculate live EFES insurance premium for travelers. Use when proposing insurance price.",
+    strict: false,
+    parameters: {
+      type: "object",
+      properties: {
+        startDate: { type: "string", description: "YYYY-MM-DD" },
+        endDate: { type: "string", description: "YYYY-MM-DD" },
+        days: { type: "integer", minimum: 1, maximum: 365 },
+        territoryCode: { type: "string" },
+        riskAmount: { type: "number" },
+        riskCurrency: { type: "string" },
+        riskLabel: { type: "string" },
+        promoCode: { type: "string" },
+        subrisks: {
+          type: "array",
+          items: { type: "string" },
+        },
+        travelers: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              age: { type: "integer" },
+              passportNumber: { type: "string" },
+              socialCard: { type: "string" },
+              subrisks: {
+                type: "array",
+                items: { type: "string" },
               },
-              required: ["age"],
-              additionalProperties: false,
             },
+            required: ["age"],
+            additionalProperties: false,
           },
         },
-        additionalProperties: false,
       },
+      additionalProperties: false,
     },
   },
 ] as const;
+
+const packageAssistantResponseFormat = {
+  type: "json_schema",
+  name: "package_assistant_reply",
+  strict: false,
+  schema: {
+    type: "object",
+    properties: {
+      message: { type: "string" },
+      stage: { type: "string", enum: ["collecting", "proposing", "ready"] },
+      missing: {
+        type: "array",
+        items: { type: "string" },
+      },
+      followUps: {
+        type: "array",
+        items: { type: "string" },
+      },
+      packageOptions: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+    required: ["message", "stage", "missing", "followUps", "packageOptions"],
+    additionalProperties: true,
+  },
+} as const;
 
 const buildSystemPrompt = (
   locale: Locale,
@@ -1384,6 +1452,91 @@ const sanitizeConversation = (messages: PackageAssistantApiMessage[]): PackageAs
     }))
     .filter((message) => message.content.length > 0)
     .slice(-MAX_CONVERSATION_MESSAGES);
+
+const buildResponseInputMessages = (
+  messages: PackageAssistantApiMessage[]
+): OpenAiResponseInputMessage[] =>
+  messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+  }));
+
+const extractToolCallsFromResponse = (payload: OpenAiResponsePayload): OpenAiToolCall[] =>
+  Array.isArray(payload.output)
+    ? payload.output.filter((item): item is OpenAiToolCall => item.type === "function_call")
+    : [];
+
+const extractTextFromResponse = (payload: OpenAiResponsePayload) => {
+  if (!Array.isArray(payload.output)) return "";
+  const fragments: string[] = [];
+  payload.output.forEach((item) => {
+    if (item.type !== "message" || item.role !== "assistant" || !Array.isArray(item.content)) {
+      return;
+    }
+    item.content.forEach((part) => {
+      if (part.type === "output_text" && typeof part.text === "string" && part.text.trim().length > 0) {
+        fragments.push(part.text);
+      }
+    });
+  });
+  return fragments.join("\n").trim();
+};
+
+const buildFunctionCallOutputItems = (
+  toolCalls: OpenAiToolCall[],
+  toolResults: ToolExecutionResult[]
+): OpenAiFunctionCallOutputItem[] =>
+  toolResults
+    .map((toolResult, index) => {
+      const toolCall = toolCalls[index];
+      if (!toolCall) return null;
+      return {
+        type: "function_call_output" as const,
+        call_id: toolCall.call_id,
+        output: JSON.stringify(toolResult),
+      };
+    })
+    .filter((entry): entry is OpenAiFunctionCallOutputItem => Boolean(entry));
+
+const resolveInitialResponseRequest = (
+  messages: PackageAssistantApiMessage[],
+  sessionState: AssistantSessionState | null
+): {
+  input: string | Array<OpenAiResponseInputMessage | OpenAiFunctionCallOutputItem>;
+  previousResponseId: string | null;
+  preferredModel: string | null;
+} => {
+  const fullInput = buildResponseInputMessages(messages);
+  if (!sessionState?.responseId) {
+    return {
+      input: fullInput,
+      previousResponseId: null,
+      preferredModel: null,
+    };
+  }
+
+  const lastMessage = messages[messages.length - 1];
+  const previousMessage = messages[messages.length - 2];
+  const canContinueStatefully =
+    lastMessage?.role === "user" &&
+    (messages.length === 1 ||
+      (previousMessage?.role === "assistant" &&
+        previousMessage.content === sessionState.lastAssistantMessage));
+
+  if (!canContinueStatefully) {
+    return {
+      input: fullInput,
+      previousResponseId: null,
+      preferredModel: null,
+    };
+  }
+
+  return {
+    input: lastMessage.content,
+    previousResponseId: sessionState.responseId,
+    preferredModel: sessionState.lastModel,
+  };
+};
 
 const parseJsonLike = (raw: string): unknown => {
   const trimmed = raw.trim();
@@ -2162,8 +2315,8 @@ const executeToolCall = async (
   toolCall: OpenAiToolCall,
   context: ToolExecutionContext
 ): Promise<ToolExecutionResult> => {
-  const args = parseToolArgs(toolCall.function.arguments);
-  switch (toolCall.function.name) {
+  const args = parseToolArgs(toolCall.arguments);
+  switch (toolCall.name) {
     case "lookup_destinations":
       return executeLookupDestinations(args);
     case "search_hotels":
@@ -2179,8 +2332,8 @@ const executeToolCall = async (
     default:
       return {
         ok: false,
-        tool: toolCall.function.name,
-        error: `Unknown tool: ${toolCall.function.name}`,
+        tool: toolCall.name,
+        error: `Unknown tool: ${toolCall.name}`,
       };
   }
 };
@@ -2285,10 +2438,43 @@ const appendToolPriceEvidence = (
   }
 };
 
-const runOpenAiCompletion = async (
+const loadAssistantSessionState = async (
+  sessionId: string | null | undefined
+): Promise<AssistantSessionState | null> => {
+  const normalizedSessionId = toTrimmedString(sessionId);
+  if (!normalizedSessionId) return null;
+
+  try {
+    const db = await getDb();
+    const sessionCollection = db.collection<{ _id: string; [key: string]: unknown }>(
+      "package_assistant_sessions"
+    );
+    const session = await sessionCollection.findOne(
+      { _id: normalizedSessionId },
+      {
+        projection: {
+          lastOpenAiResponseId: 1,
+          lastAssistantMessage: 1,
+          lastModel: 1,
+        },
+      }
+    );
+    if (!session) return null;
+    return {
+      responseId: toTrimmedString(session.lastOpenAiResponseId) ?? null,
+      lastAssistantMessage: toTrimmedString(session.lastAssistantMessage) ?? null,
+      lastModel: toTrimmedString(session.lastModel) ?? null,
+    };
+  } catch (error) {
+    console.error("[PackageAssistant] Failed to load session state", error);
+    return null;
+  }
+};
+
+const runOpenAiResponse = async (
   model: string,
-  messages: OpenAiMessage[]
-): Promise<OpenAiCompletionPayload> => {
+  request: OpenAiResponseRequest
+): Promise<OpenAiResponsePayload> => {
   if (!OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is missing");
   }
@@ -2299,12 +2485,21 @@ const runOpenAiCompletion = async (
   try {
     const body: Record<string, unknown> = {
       model,
+      instructions: request.instructions,
+      input: request.input,
+      previous_response_id: request.previousResponseId ?? undefined,
+      store: true,
+      reasoning: {
+        effort: "none",
+      },
       temperature: 0.35,
       top_p: 0.95,
-      messages,
+      text: {
+        verbosity: "medium",
+        format: packageAssistantResponseFormat,
+      },
       tools: toolDefinitions,
       tool_choice: "auto",
-      response_format: { type: "json_object" },
     };
     const response = await fetch(OPENAI_BASE_URL, {
       method: "POST",
@@ -2321,23 +2516,28 @@ const runOpenAiCompletion = async (
       throw new Error(`OpenAI error ${response.status}: ${errorBody}`);
     }
 
-    return (await response.json()) as OpenAiCompletionPayload;
+    return (await response.json()) as OpenAiResponsePayload;
   } finally {
     clearTimeout(timeoutId);
   }
 };
 
 const runOpenAiWithFallback = async (
-  messages: OpenAiMessage[]
-): Promise<{ payload: OpenAiCompletionPayload; model: string }> => {
+  request: OpenAiResponseRequest,
+  preferredModel?: string | null
+): Promise<{ payload: OpenAiResponsePayload; model: string }> => {
   const candidates = Array.from(
-    new Set([OPENAI_PACKAGE_MODEL_PRIMARY, OPENAI_PACKAGE_MODEL_FALLBACK].filter(Boolean))
+    new Set(
+      [preferredModel, OPENAI_PACKAGE_MODEL_PRIMARY, OPENAI_PACKAGE_MODEL_FALLBACK].filter(
+        (value): value is string => Boolean(value)
+      )
+    )
   );
   let lastError: unknown = null;
 
   for (const model of candidates) {
     try {
-      const payload = await runOpenAiCompletion(model, messages);
+      const payload = await runOpenAiResponse(model, request);
       return { payload, model };
     } catch (error) {
       lastError = error;
@@ -2351,6 +2551,7 @@ export async function generatePackageAssistantReply(
 ): Promise<AssistantGenerationOutput> {
   const locale = input.locale;
   const context = input.context ?? null;
+  const sessionId = toTrimmedString(input.sessionId) ?? null;
   const userId = toTrimmedString(input.userId) ?? null;
   const onProgress = input.onProgress;
   const sanitizedMessages = sanitizeConversation(input.messages);
@@ -2360,7 +2561,10 @@ export async function generatePackageAssistantReply(
     issues: [],
     checkedAt: new Date().toISOString(),
   };
-  const projectContext = await loadAssistantProjectContext(userId);
+  const [projectContext, sessionState] = await Promise.all([
+    loadAssistantProjectContext(userId),
+    loadAssistantSessionState(sessionId),
+  ]);
 
   if (sanitizedMessages.length === 0) {
     return {
@@ -2372,7 +2576,7 @@ export async function generatePackageAssistantReply(
         ),
         locale
       ),
-      meta: { model: "fallback", toolCalls: 0, priceAudit: emptyAudit },
+      meta: { model: "fallback", toolCalls: 0, priceAudit: emptyAudit, responseId: null },
     };
   }
 
@@ -2395,22 +2599,18 @@ export async function generatePackageAssistantReply(
     );
     return {
       reply: unavailableReply,
-      meta: { model: "unconfigured", toolCalls: 0, priceAudit: emptyAudit },
+      meta: { model: "unconfigured", toolCalls: 0, priceAudit: emptyAudit, responseId: null },
     };
   }
 
-  const openAiMessages: OpenAiMessage[] = [
-    {
-      role: "system",
-      content: buildSystemPrompt(locale, context, projectContext),
-    },
-    ...sanitizedMessages.map((message) => ({
-      role: message.role,
-      content: message.content,
-    })),
-  ];
-
-  let usedModel = OPENAI_PACKAGE_MODEL_PRIMARY;
+  const instructions = buildSystemPrompt(locale, context, projectContext);
+  const fullConversationInput = buildResponseInputMessages(sanitizedMessages);
+  const initialRequest = resolveInitialResponseRequest(sanitizedMessages, sessionState);
+  let responseInput = initialRequest.input;
+  let previousResponseId = initialRequest.previousResponseId;
+  let preferredModel = initialRequest.preferredModel;
+  let allowStatelessBootstrapRetry = Boolean(previousResponseId);
+  let usedModel = preferredModel ?? OPENAI_PACKAGE_MODEL_PRIMARY;
   let toolCallsCount = 0;
   const priceEvidence = createToolPriceEvidence();
 
@@ -2423,25 +2623,43 @@ export async function generatePackageAssistantReply(
       });
     }
 
-    const completion = await runOpenAiWithFallback(openAiMessages);
+    let completion: { payload: OpenAiResponsePayload; model: string };
+    try {
+      completion = await runOpenAiWithFallback(
+        {
+          instructions,
+          input: responseInput,
+          previousResponseId,
+        },
+        preferredModel
+      );
+    } catch (error) {
+      if (round === 0 && allowStatelessBootstrapRetry) {
+        allowStatelessBootstrapRetry = false;
+        responseInput = fullConversationInput;
+        previousResponseId = null;
+        preferredModel = null;
+        usedModel = OPENAI_PACKAGE_MODEL_PRIMARY;
+        round -= 1;
+        continue;
+      }
+      throw error;
+    }
+
     usedModel = completion.model;
-    const nextMessage = completion.payload.choices?.[0]?.message;
-    if (!nextMessage) {
+    preferredModel = completion.model;
+    const responseId = completion.payload.id;
+    if (!responseId) {
       break;
     }
 
-    const toolCalls = Array.isArray(nextMessage.tool_calls) ? nextMessage.tool_calls : [];
+    const toolCalls = extractToolCallsFromResponse(completion.payload);
     if (toolCalls.length > 0) {
-      openAiMessages.push({
-        role: "assistant",
-        content: nextMessage.content ?? "",
-        tool_calls: toolCalls,
-      });
       if (onProgress) {
         for (const toolCall of toolCalls) {
           await onProgress({
             type: "tool_call",
-            tool: toolCall.function.name,
+            tool: toolCall.name,
           });
         }
       }
@@ -2464,14 +2682,9 @@ export async function generatePackageAssistantReply(
             ok: toolResult.ok,
           });
         }
-        const toolCall = toolCalls[index];
-        if (!toolCall) continue;
-        openAiMessages.push({
-          role: "tool",
-          tool_call_id: toolCall.id,
-          content: JSON.stringify(toolResult),
-        });
       }
+      responseInput = buildFunctionCallOutputItems(toolCalls, toolResults);
+      previousResponseId = responseId;
       continue;
     }
 
@@ -2480,7 +2693,7 @@ export async function generatePackageAssistantReply(
         type: "finalizing",
       });
     }
-    const normalized = normalizeReplyFromModel(nextMessage.content ?? "", locale);
+    const normalized = normalizeReplyFromModel(extractTextFromResponse(completion.payload), locale);
     const restricted = applyHotelFirstPolicyToReply(
       applyServiceAvailabilityToReply(
         normalized,
@@ -2496,6 +2709,7 @@ export async function generatePackageAssistantReply(
         model: usedModel,
         toolCalls: toolCallsCount,
         priceAudit: audited.audit,
+        responseId,
       },
     };
   }
@@ -2515,6 +2729,7 @@ export async function generatePackageAssistantReply(
       model: usedModel,
       toolCalls: toolCallsCount,
       priceAudit: auditedFallback.audit,
+      responseId: null,
     },
   };
 }
@@ -2540,6 +2755,9 @@ export async function persistPackageAssistantTurn(input: AssistantPersistenceInp
           context: input.context ?? null,
           updatedAt: now,
           lastModel: input.model,
+          lastOpenAiResponseId: input.responseId ?? null,
+          lastAssistantMessage: input.reply.message,
+          lastUserMessage: input.userMessage ?? null,
           lastToolCalls: input.toolCalls,
           lastStage: input.reply.stage,
           lastMissing: input.reply.missing,
@@ -2573,6 +2791,7 @@ export async function persistPackageAssistantTurn(input: AssistantPersistenceInp
       followUps: input.reply.followUps,
       packageOptions: input.reply.packageOptions,
       model: input.model,
+      openAiResponseId: input.responseId ?? null,
       toolCalls: input.toolCalls,
       priceAudit: input.priceAudit,
       createdAt: now,
