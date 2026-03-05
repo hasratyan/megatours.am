@@ -1,5 +1,5 @@
 import { Children, type ReactNode } from "react";
-import PartnerCarouselClient from "@/components/partner-carousel-client";
+import DeferredPartnerCarouselClient from "@/components/deferred-partner-carousel-client";
 
 type PartnerCarouselProps = {
   children: ReactNode;
@@ -14,7 +14,7 @@ export default function PartnerCarousel({
 }: PartnerCarouselProps) {
   return (
     <section className="embla">
-      <PartnerCarouselClient loop={loop} autoplayDelay={autoplayDelay} />
+      <DeferredPartnerCarouselClient loop={loop} autoplayDelay={autoplayDelay} />
       <div className="embla__viewport">
         <div className="embla__container">
           {Children.map(children, (child, index) => (

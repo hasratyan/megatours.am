@@ -3,13 +3,6 @@
 import { FormEvent, useState, useMemo, useCallback, useEffect, useRef, useId } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import Select, { StylesConfig, CSSObjectWithLabel, components as selectComponents } from "react-select";
-import type { SingleValue } from "react-select";
-import { DateRange, type Range, type RangeKeyDict } from "react-date-range";
-import "react-date-range/dist/styles.css";
-import "react-date-range/dist/theme/default.css";
-import type { Locale as DateFnsLocale } from "date-fns";
-import { enGB, hy, ru } from "date-fns/locale";
 import { useLanguage } from "@/components/language-provider";
 import StarBorder from '@/components/StarBorder'
 import { postJson } from "@/lib/api-helpers";
@@ -18,6 +11,8 @@ import { sanitizeLeadingZeroNumberInput } from "@/lib/number-input";
 import type { AoryxSearchParams, HotelInfo } from "@/types/aoryx";
 import type { Locale as AppLocale } from "@/lib/i18n";
 import type { HotelMapPickerProps } from "./hotel-map-picker";
+import type { SearchFormDateRange, SearchFormDateRangePickerProps } from "./search-form-date-range-picker";
+import type { SearchFormLocationSelectProps } from "./search-form-location-select";
 
 const MapPickerLoading = () => {
   const { t } = useLanguage();
@@ -29,12 +24,42 @@ const MapPickerLoading = () => {
   );
 };
 
+const AsyncControlLoading = ({ icon }: { icon: string }) => (
+  <div className="search-form__async-control" aria-hidden="true">
+    <span className="material-symbols-rounded">{icon}</span>
+    <span className="search-form__async-control-skeleton" />
+  </div>
+);
+
+const LocationSelectLoading = () => <AsyncControlLoading icon="travel_explore" />;
+
+const DateRangePickerLoading = () => (
+  <div className="search-form__calendar-loading" aria-hidden="true">
+    <span className="material-symbols-rounded">calendar_month</span>
+  </div>
+);
+
 // Dynamically import the Map Picker to avoid SSR issues with Leaflet
 const HotelMapPicker = dynamic<HotelMapPickerProps>(
   () => import("./hotel-map-picker"),
   {
     ssr: false,
     loading: () => <MapPickerLoading />,
+  }
+);
+
+const SearchFormLocationSelect = dynamic<SearchFormLocationSelectProps>(
+  () => import("./search-form-location-select"),
+  {
+    ssr: false,
+    loading: () => <LocationSelectLoading />,
+  }
+);
+
+const SearchFormDateRangePicker = dynamic<SearchFormDateRangePickerProps>(
+  () => import("./search-form-date-range-picker"),
+  {
+    loading: () => <DateRangePickerLoading />,
   }
 );
 
@@ -289,85 +314,10 @@ const matchesLocationSearch = (searchableValue: string, userInput: string) => {
   return primaryMatched && matchedTokens >= minimumMatchedTokens;
 };
 
-const dateFnsLocales: Record<AppLocale, DateFnsLocale> = {
-  hy,
-  en: enGB,
-  ru,
-};
-
 const intlLocales: Record<AppLocale, string> = {
   hy: "hy-AM",
   en: "en-GB",
   ru: "ru-RU",
-};
-
-// Custom styles for react-select
-const selectStyles: StylesConfig<LocationOption, false> = {
-  container: (base: CSSObjectWithLabel) => ({
-    ...base,
-    height: "100%",
-  }),
-  control: (base: CSSObjectWithLabel) => ({
-    ...base,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderColor: "rgba(255, 255, 255, 0.3)",
-    padding: ".25em .8em",
-    height: "100%",
-    color: "#fff",
-    minHeight: "50px",
-    borderRadius: "1em",
-    "&:hover": {
-      borderColor: "rgba(255, 255, 255, 0.5)",
-    },
-  }),
-  menu: (base: CSSObjectWithLabel) => ({
-    ...base,
-    backgroundColor: "#1a1a2e",
-    border: "1px solid rgba(255, 255, 255, 0.2)",
-    borderRadius: "1em",
-    padding: "0.5em",
-  }),
-  option: (base: CSSObjectWithLabel, state) => ({
-    ...base,
-    borderRadius: "0.5em",
-    backgroundColor: state.isSelected
-      ? "#10b981"
-      : state.isFocused
-      ? "rgba(16, 185, 129, 0.2)"
-      : "transparent",
-    color: "#fff",
-    "&:active": {
-      backgroundColor: "#10b981",
-    },
-  }),
-  singleValue: (base: CSSObjectWithLabel) => ({
-    ...base,
-    color: "#fff",
-    fontWeight: 700,
-  }),
-  input: (base: CSSObjectWithLabel) => ({
-    ...base,
-    color: "#fff",
-    fontWeight: 700,
-  }),
-  placeholder: (base: CSSObjectWithLabel) => ({
-    ...base,
-    color: "rgba(255, 255, 255, 0.5)",
-  }),
-  indicatorsContainer: (base: CSSObjectWithLabel) => ({
-    ...base,
-    gap: "0.5em",
-  }),
-  dropdownIndicator: (base: CSSObjectWithLabel) => ({
-    ...base,
-    padding: "0",
-    color: "#fff"
-  }),
-  clearIndicator: (base: CSSObjectWithLabel) => ({
-    ...base,
-    padding: "0",
-    color: "#fff"
-  })
 };
 
 type Props = {
@@ -414,7 +364,6 @@ export default function SearchForm({
   const locationSelectInputId = `${locationSelectInstanceId}-input`;
   const router = useRouter();
   const { locale: appLocale } = useLanguage();
-  const dateFnsLocale = dateFnsLocales[appLocale];
   const intlLocale = intlLocales[appLocale];
 
   const presetDestinationOption: LocationOption | null = presetDestination
@@ -453,7 +402,7 @@ export default function SearchForm({
         checkOut: new Date(initialDateRange.endDate),
       }
     : defaults;
-  const [dateRange, setDateRange] = useState<Range>(() => ({
+  const [dateRange, setDateRange] = useState<SearchFormDateRange>(() => ({
     startDate: resolvedDates.checkIn,
     endDate: resolvedDates.checkOut,
     key: "selection",
@@ -1156,8 +1105,8 @@ export default function SearchForm({
     return merged;
   }, [destinations, hotels, selectedLocation]);
 
-  const filterLocationOption = useCallback((option: { label: string; value: string; data: LocationOption }, input: string) => {
-    const searchableValue = `${option.label} ${option.data.value}`;
+  const matchesLocationOption = useCallback((option: LocationOption, input: string) => {
+    const searchableValue = `${option.label} ${option.value}`;
     return matchesLocationSearch(searchableValue, input);
   }, []);
 
@@ -1183,12 +1132,12 @@ export default function SearchForm({
       ) : null}
       {!hideLocationFields && (
         <div className="field">
-          <Select<LocationOption>
+          <SearchFormLocationSelect
             instanceId={locationSelectInstanceId}
             inputId={locationSelectInputId}
             options={combinedOptions}
             value={selectedLocation}
-            onChange={(option: SingleValue<LocationOption>) => {
+            onChange={(option) => {
               if (option?.type === "destination") {
                 loadHotelsForDestination(option);
                 return;
@@ -1201,55 +1150,11 @@ export default function SearchForm({
               void executeSearchForLocation(option);
             }}
             placeholder={destinationsLoading ? copy.loadingDestinations : copy.wherePlaceholder}
-            styles={selectStyles}
-            isClearable
-            isSearchable
             isLoading={destinationsLoading || hotelsLoading}
             isDisabled={isFormDisabled}
-            noOptionsMessage={() =>
-              destinationsLoading || hotelsLoading
-                ? copy.loadingDestinations
-                : copy.noLocations
-            }
-            filterOption={filterLocationOption}
-            components={{
-              IndicatorSeparator: () => null,
-              Control: (props) => {
-                const current = props.getValue()[0] as LocationOption | undefined;
-                const icon =
-                  current?.type === "hotel"
-                    ? "hotel"
-                    : current?.type === "destination"
-                    ? "location_city"
-                    : "travel_explore";
-                return (
-                  <selectComponents.Control {...props}>
-                    <span className="material-symbols-rounded">
-                      {icon}
-                    </span>
-                    {props.children}
-                  </selectComponents.Control>
-                );
-              },
-              Option: (optionProps) => {
-                const data = optionProps.data as LocationOption;
-                const icon = data.type === "destination" ? "location_city" : "hotel";
-                return (
-                  <selectComponents.Option {...optionProps}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span className="material-symbols-rounded" style={{ margin: 0 }}>
-                        {icon}
-                      </span>
-                      {data.type === "destination" ? (
-                        <strong>{data.label}</strong>
-                      ) : (
-                        <span>{data.label}</span>
-                      )}
-                    </div>
-                  </selectComponents.Option>
-                );
-              },
-            }}
+            loadingMessage={copy.loadingDestinations}
+            emptyMessage={copy.noLocations}
+            matchesOption={matchesLocationOption}
           />
           {!hideLocationFields && hotels.length > 0 && (
             <button
@@ -1328,27 +1233,15 @@ export default function SearchForm({
           </button>
           {showDatePicker && !isFormDisabled && (
             <div>
-              <DateRange
-                ranges={[dateRange]}
-                minDate={new Date()}
-                onChange={(ranges: RangeKeyDict) => {
-                  const selection = ranges.selection;
+              <SearchFormDateRangePicker
+                locale={appLocale}
+                value={dateRange}
+                onChange={(selection, hasRange) => {
                   setDateRange(selection);
-
-                  // Close only after both dates are chosen and they differ
-                  const hasRange =
-                    selection.startDate &&
-                    selection.endDate &&
-                    selection.startDate.getTime() !== selection.endDate.getTime();
                   if (hasRange) {
                     setShowDatePicker(false);
                   }
                 }}
-                rangeColors={["#10b981"]}
-                moveRangeOnFirstSelection={false}
-                showMonthAndYearPickers
-                direction="vertical"
-                locale={dateFnsLocale}
               />
             </div>
           )}

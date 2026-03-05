@@ -198,7 +198,8 @@ button{
     --bg-fade-size: 200.0px;
   }
 
-  video{
+  video,
+  img{
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -220,6 +221,11 @@ button{
     /* helps GPU compositing on video */
     transform: translateZ(0);
     will-change: transform;
+  }
+
+  .videoWrap__video{
+    position: absolute;
+    inset: 0;
   }
 }
 
@@ -758,12 +764,44 @@ main {
         }
       }
 
+      .search-form__async-control{
+        width: 100%;
+        min-height: 50px;
+        height: 100%;
+        font-size: inherit;
+        border-radius: 1em;
+        display: flex;
+        gap: 0.75em;
+        align-items: center;
+        justify-content: flex-start;
+        padding: .25em 1em 0.25em 0.8em;
+        background-color: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: rgba(255, 255, 255, 0.8);
+      }
+
+      .search-form__async-control-skeleton{
+        flex: 1;
+        height: 0.95em;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.16));
+      }
+
+      .search-form__calendar-loading{
+        min-height: 240px;
+        display: grid;
+        place-items: center;
+        padding: 2.5em 1.5em;
+        color: #fff;
+        background: #0f172a;
+      }
+
       .field:first-of-type{
         min-width: 300px;
         position: relative;
 
         &:has(.map-picker){
-          .css-1cxnmry-control, .css-882nl4-control{
+          .search-form-select__control{
             border-bottom-left-radius: 0!important;
           }
         }

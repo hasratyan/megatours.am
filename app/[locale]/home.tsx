@@ -2,7 +2,8 @@ import Link from "next/link";
 import Image from "next/image";
 import HotelCard from "@/components/hotel-card";
 import SearchForm from "@/components/search-form";
-import CurvedLoop from "@/components/CurvedLoop";
+import DeferredCurvedLoop from "@/components/deferred-curved-loop";
+import HeroMedia from "@/components/hero-media";
 import ShinyText from "@/components/ShinyText";
 import { Marquee } from "@/components/ui/marquee";
 import PartnerCarousel from "@/components/partner-carousel";
@@ -43,9 +44,7 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
 
   return (
     <>
-      <div className="videoWrap">
-        <video src="/videos/uae.mp4"preload="none" autoPlay muted loop playsInline />
-      </div>
+      <HeroMedia />
       <main role="main" id="main-content">
         <div className="container">
           <div id="hero">
@@ -61,7 +60,7 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
           </div>
         </div>
 
-        <CurvedLoop
+        <DeferredCurvedLoop
           marqueeText={t.hero.marquee}
           speed={0.4}
           curveAmount={-200}
