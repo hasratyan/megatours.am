@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId, type Collection, type Document } from "mongodb";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { getPrebookState, getSessionFromCookie, type StoredPrebookState } from "@/app/api/aoryx/_shared";

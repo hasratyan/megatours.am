@@ -161,6 +161,7 @@ const calculateTripDays = (checkIn?: string | null, checkOut?: string | null) =>
 const DEFAULT_INSURANCE_ADULT_AGE = 30;
 const DEFAULT_INSURANCE_CHILD_AGE = 8;
 const DEFAULT_INSURANCE_SUBRISKS: string[] = [];
+const INSURANCE_RISK_AMOUNTS = [15000, 30000, 50000] as const;
 
 const serializeGuestExcursions = (value: Record<string, string[]>) => {
   const keys = Object.keys(value).sort();
@@ -877,17 +878,16 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
   ]);
 
   const insurancePlans = useMemo<InsurancePlan[]>(
-    () => [
-      {
-        id: "elite",
+    () =>
+      INSURANCE_RISK_AMOUNTS.map((riskAmount) => ({
+        id: riskAmount === 15000 ? "elite" : `elite-${riskAmount}`,
         title: t.packageBuilder.insurance.plans.elite.title,
         description: t.packageBuilder.insurance.plans.elite.description,
         coverages: t.packageBuilder.insurance.plans.elite.coverages,
-        riskAmount: 15000,
+        riskAmount,
         riskCurrency: "EUR",
         riskLabel: "STANDARD",
-      },
-    ],
+      })),
     [t.packageBuilder.insurance.plans.elite]
   );
 
@@ -1008,6 +1008,27 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
     [insuranceSelection?.subrisks, insuranceSelection?.subrisksByGuest]
   );
 
+  const resolveGuestRiskAmount = useCallback(
+    (guestId: string | null) => {
+      const map = insuranceSelection?.riskByGuest ?? null;
+      if (guestId && map) {
+        const value = map[guestId];
+        if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+          return value;
+        }
+      }
+      if (
+        typeof insuranceSelection?.riskAmount === "number" &&
+        Number.isFinite(insuranceSelection.riskAmount) &&
+        insuranceSelection.riskAmount > 0
+      ) {
+        return insuranceSelection.riskAmount;
+      }
+      return null;
+    },
+    [insuranceSelection?.riskAmount, insuranceSelection?.riskByGuest]
+  );
+
   const insuranceSubrisks = useMemo<InsuranceSubriskOption[]>(
     () => [
       {
@@ -1055,7 +1076,16 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
 
   const buildInsuranceQuoteTravelers = useCallback(() => {
     const rooms = hotelSelection?.rooms ?? [];
-    const travelers: Array<{ id: string; age: number; subrisks?: string[] | null }> = [];
+    const travelers: Array<{
+      id: string;
+      age: number;
+      riskAmount?: number | null;
+      riskCurrency?: string | null;
+      riskLabel?: string | null;
+      subrisks?: string[] | null;
+    }> = [];
+    const defaultRiskCurrency = normalizeOptional(insuranceSelection?.riskCurrency);
+    const defaultRiskLabel = normalizeOptional(insuranceSelection?.riskLabel);
     if (rooms.length === 0) {
       const total =
         typeof hotelSelection?.guestCount === "number" ? hotelSelection.guestCount : 0;
@@ -1064,6 +1094,9 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
         travelers.push({
           id,
           age: DEFAULT_INSURANCE_ADULT_AGE,
+          riskAmount: resolveGuestRiskAmount(id),
+          riskCurrency: defaultRiskCurrency,
+          riskLabel: defaultRiskLabel,
           subrisks: resolveGuestSubrisks(id),
         });
       }
@@ -1077,6 +1110,9 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
           travelers.push({
             id,
             age: DEFAULT_INSURANCE_ADULT_AGE,
+            riskAmount: resolveGuestRiskAmount(id),
+            riskCurrency: defaultRiskCurrency,
+            riskLabel: defaultRiskLabel,
             subrisks: resolveGuestSubrisks(id),
           });
         }
@@ -1086,6 +1122,9 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
           travelers.push({
             id,
             age: Number.isFinite(age) ? age : DEFAULT_INSURANCE_CHILD_AGE,
+            riskAmount: resolveGuestRiskAmount(id),
+            riskCurrency: defaultRiskCurrency,
+            riskLabel: defaultRiskLabel,
             subrisks: resolveGuestSubrisks(id),
           });
         });
@@ -1096,6 +1135,9 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
   }, [
     hotelSelection?.guestCount,
     hotelSelection?.rooms,
+    insuranceSelection?.riskCurrency,
+    insuranceSelection?.riskLabel,
+    resolveGuestRiskAmount,
     resolveGuestSubrisks,
     selectedInsuranceGuestIdSet,
   ]);
@@ -2354,15 +2396,39 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
         return;
       }
       setSelectionWarning((prev) => (prev ? null : prev));
+      const targetGuestId = activeInsuranceGuestId ?? insuranceGuestIds[0] ?? null;
+      const currentTargetRiskAmount = resolveGuestRiskAmount(targetGuestId);
       if (
         insuranceSelection?.selected &&
-        insuranceSelection.planId === plan.id &&
-        insuranceSelection.riskAmount === plan.riskAmount &&
+        currentTargetRiskAmount === plan.riskAmount &&
         insuranceSelection.riskCurrency === plan.riskCurrency &&
         insuranceSelection.riskLabel === plan.riskLabel
       ) {
         return;
       }
+      const availableGuestIds = new Set(insuranceGuestIds);
+      const existingRiskByGuest = insuranceSelection?.riskByGuest ?? {};
+      const nextRiskByGuest = Object.entries(existingRiskByGuest).reduce<Record<string, number>>(
+        (acc, [guestId, riskAmount]) => {
+          if (!availableGuestIds.has(guestId)) return acc;
+          if (typeof riskAmount !== "number" || !Number.isFinite(riskAmount) || riskAmount <= 0) {
+            return acc;
+          }
+          acc[guestId] = riskAmount;
+          return acc;
+        },
+        {}
+      );
+      const isFirstRiskSelection = Object.keys(nextRiskByGuest).length === 0;
+      const targetGuestIds =
+        isFirstRiskSelection
+          ? insuranceGuestIds
+          : targetGuestId
+            ? [targetGuestId]
+            : insuranceGuestIds;
+      targetGuestIds.forEach((guestId) => {
+        nextRiskByGuest[guestId] = plan.riskAmount;
+      });
       const territory = insuranceTerritories[0];
       updateInsuranceSelection({
         label: plan.title,
@@ -2371,6 +2437,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
         riskAmount: plan.riskAmount,
         riskCurrency: plan.riskCurrency,
         riskLabel: plan.riskLabel,
+        riskByGuest: Object.keys(nextRiskByGuest).length > 0 ? nextRiskByGuest : null,
         price: null,
         currency: null,
         quoteSum: null,
@@ -2402,14 +2469,15 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
       openPackageBuilder();
     },
     [
+      activeInsuranceGuestId,
+      resolveGuestRiskAmount,
       insuranceGuestIds,
       hasHotel,
       insuranceSelection?.territoryCode,
       insuranceSelection?.territoryLabel,
       insuranceSelection?.territoryPolicyLabel,
       insuranceSelection?.insuredGuestIds,
-      insuranceSelection?.planId,
-      insuranceSelection?.riskAmount,
+      insuranceSelection?.riskByGuest,
       insuranceSelection?.riskCurrency,
       insuranceSelection?.riskLabel,
       insuranceSelection?.selected,
@@ -3112,7 +3180,8 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
 
   const renderInsurancePlans = () => {
     if (serviceKey !== "insurance") return null;
-    const selectedPlanId = insuranceSelection?.planId ?? null;
+    const targetGuestId = activeInsuranceGuestId ?? insuranceGuestIds[0] ?? null;
+    const selectedRiskAmount = resolveGuestRiskAmount(targetGuestId);
     return (
       <>
       <div className="videoWrap">
@@ -3120,7 +3189,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
       </div>
       <div className="service-types insurance">
         {insurancePlans.map((plan) => {
-          const isSelected = plan.id === selectedPlanId;
+          const isSelected = selectedRiskAmount === plan.riskAmount;
           const coverage = formatCoverageAmount(plan.riskAmount, plan.riskCurrency);
           return (
             <button
@@ -3766,9 +3835,12 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
 
   const renderInsurancePanel = () => {
     const selectedPlanId = insuranceSelection?.planId ?? null;
+    const activeGuestForPlan = activeInsuranceGuestId ?? insuranceGuests[0]?.id ?? null;
+    const selectedRiskAmount = resolveGuestRiskAmount(activeGuestForPlan);
     const selectedTerritory =
       insuranceSelection?.territoryCode ?? insuranceTerritories[0]?.code ?? "";
     const selectedPlan =
+      insurancePlans.find((plan) => plan.riskAmount === selectedRiskAmount) ??
       insurancePlans.find((plan) => plan.id === selectedPlanId) ?? null;
     const selectedTerritoryLabel =
       insuranceTerritories.find((territory) => territory.code === selectedTerritory)?.label ?? "";
@@ -3933,7 +4005,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
                       <span className="material-symbols-rounded" aria-hidden="true">
                         public
                       </span>
-                      {t.packageBuilder.insurance.territoryLabel} {selectedTerritoryLabel}
+                      {t.packageBuilder.insurance.territoryLabel}: {selectedTerritoryLabel}
                     </div>
                   ) : null}
                   {showInsuranceDetails && travelCountries ? (
@@ -3941,7 +4013,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
                       <span className="material-symbols-rounded" aria-hidden="true">
                         flag
                       </span>
-                      {t.packageBuilder.insurance.travelCountriesLabel} {travelCountries}
+                      {t.packageBuilder.insurance.travelCountriesLabel}: {travelCountries}
                     </div>
                   ) : null}
                   {showInsuranceDetails && insuranceDaysLabel ? (

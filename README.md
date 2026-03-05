@@ -1,11 +1,11 @@
 # AORYX Stays — B2C hotel booking
 
-Next.js 16 + Tailwind CSS landing for AORYX hotel bookings with Google sign-in via NextAuth. The homepage highlights B2C-ready inventory, perks, and a booking flow with a live-style search bar.
+Next.js 16 + Tailwind CSS landing for AORYX hotel bookings with Google sign-in via Better Auth. The homepage highlights B2C-ready inventory, perks, and a booking flow with a live-style search bar.
 
 ## Stack
 - Next.js 16 / App Router / React 19
 - Tailwind CSS v4 (postcss plugin)
-- NextAuth (Google provider) for authentication
+- Better Auth (Google provider) for authentication
 
 ## Run locally
 1) Install deps  
@@ -14,6 +14,8 @@ Next.js 16 + Tailwind CSS landing for AORYX hotel bookings with Google sign-in v
 2) Create a `.env.local` from the sample  
 Set:
 ```
+BETTER_AUTH_SECRET=generated-secret
+BETTER_AUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=generated-secret
 NEXTAUTH_URL=http://localhost:3000
 VPOS_PUBLIC_ORIGIN=http://localhost:3000
@@ -83,4 +85,4 @@ NEXT_PUBLIC_ZOHO_SALESIQ_FALLBACK_URL=https://your-support-page-or-salesiq-link
 
 ## Notes
 - Remote images are allowed from Unsplash and Google profile images (`lh3.googleusercontent.com`).
-- Authentication UI is in `components/auth-actions.tsx`; NextAuth config lives at `app/api/auth/[...nextauth]/route.ts` with options in `lib/auth.ts`.
+- Authentication UI is in `components/auth-actions.tsx`; Better Auth config lives in `lib/auth.ts` and API route wiring in `app/api/auth/[...nextauth]/route.ts`.

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { signIn, signOut, useSession } from "@/lib/auth-compat/react";
 import { useLanguage } from "@/components/language-provider";
 
 const initials = (name?: string | null, fallback = "Guest") =>

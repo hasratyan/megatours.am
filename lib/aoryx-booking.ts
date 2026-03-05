@@ -326,6 +326,9 @@ const parseInsurance = (
         premium: toNumber(traveler.premium),
         premiumCurrency: sanitizeString(traveler.premiumCurrency),
         policyPremium: toNumber(traveler.policyPremium),
+        riskAmount: toNumber(traveler.riskAmount),
+        riskCurrency: sanitizeString(traveler.riskCurrency),
+        riskLabel: sanitizeString(traveler.riskLabel),
         subrisks,
       };
       validateInsuranceTravelerDates(normalizedTraveler, index, todayUtc);
@@ -376,6 +379,14 @@ const parseInsurance = (
           .map((entry) => sanitizeString(entry))
           .filter((entry): entry is string => Boolean(entry))
       : undefined,
+    riskByGuest:
+      record.riskByGuest && typeof record.riskByGuest === "object"
+        ? Object.fromEntries(
+            Object.entries(record.riskByGuest as Record<string, unknown>)
+              .map(([guestId, value]) => [guestId, toNumber(value)])
+              .filter(([, value]) => typeof value === "number" && value > 0)
+          )
+        : undefined,
     travelers,
   };
 };

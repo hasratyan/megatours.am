@@ -34,12 +34,21 @@ const parseTravelers = (value: unknown): EfesQuoteTraveler[] => {
     const id = parseString(record.id);
     const passportNumber = parseString(record.passportNumber);
     const socialCard = parseString(record.socialCard);
+    const travelerRiskAmount = parseNumber(record.riskAmount);
+    const travelerRiskCurrency = parseString(record.riskCurrency);
+    const travelerRiskLabel = parseString(record.riskLabel);
 
     travelers.push({
       id: id || undefined,
       age,
       passportNumber: passportNumber || null,
       socialCard: socialCard || null,
+      riskAmount:
+        typeof travelerRiskAmount === "number" && travelerRiskAmount > 0
+          ? travelerRiskAmount
+          : undefined,
+      riskCurrency: travelerRiskCurrency || undefined,
+      riskLabel: travelerRiskLabel || undefined,
       subrisks,
     });
   }

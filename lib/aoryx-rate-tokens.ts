@@ -27,7 +27,9 @@ export type RateTokenContext = {
 const resolveSecret = (): string => {
   const candidates = [
     process.env.AORYX_RATE_TOKEN_SECRET,
+    process.env.BETTER_AUTH_SECRET,
     process.env.NEXTAUTH_SECRET,
+    process.env.AUTH_SECRET,
     process.env.AORYX_API_KEY,
   ];
   for (const value of candidates) {

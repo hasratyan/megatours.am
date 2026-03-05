@@ -1,6 +1,6 @@
 "use client";
 
-import { signIn } from "next-auth/react";
+import { signIn } from "@/lib/auth-compat/react";
 import { useTranslations } from "@/components/language-provider";
 
 type ProfileSignInProps = {

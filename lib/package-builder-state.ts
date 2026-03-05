@@ -182,6 +182,7 @@ export type PackageBuilderInsuranceSelection = PackageBuilderServiceSelection & 
   quoteError?: string | null;
   insuredGuestIds?: string[] | null;
   subrisksByGuest?: Record<string, string[]> | null;
+  riskByGuest?: Record<string, number> | null;
   territoryCode?: string | null;
   territoryLabel?: string | null;
   territoryPolicyLabel?: string | null;

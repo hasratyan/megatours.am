@@ -5,6 +5,9 @@ export type EfesQuoteTraveler = {
   age: number;
   passportNumber?: string | null;
   socialCard?: string | null;
+  riskAmount?: number | null;
+  riskCurrency?: string | null;
+  riskLabel?: string | null;
   subrisks?: string[] | null;
 };
 

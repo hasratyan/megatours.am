@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth-compat/server";
 import ProfileSignIn from "@/components/profile-signin";
 import VoucherActions from "@/components/voucher-actions";
 import { authOptions } from "@/lib/auth";

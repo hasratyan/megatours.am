@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { signIn, useSession } from "next-auth/react";
+import { signIn, useSession } from "@/lib/auth-compat/react";
 import SearchForm from "@/components/search-form";
 import Loader from "@/components/loader";
 import { ApiError, postJson } from "@/lib/api-helpers";

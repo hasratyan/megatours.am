@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin";
 import { getDb } from "@/lib/db";

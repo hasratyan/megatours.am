@@ -67,6 +67,9 @@ const parseTraveler = (value: unknown): BookingInsuranceTraveler | null => {
     premium: parseNumber(record.premium),
     premiumCurrency: parseString(record.premiumCurrency) || null,
     policyPremium: parseNumber(record.policyPremium),
+    riskAmount: parseNumber(record.riskAmount),
+    riskCurrency: parseString(record.riskCurrency) || null,
+    riskLabel: parseString(record.riskLabel) || null,
     subrisks: parseStringList(record.subrisks),
   };
 };
@@ -137,6 +140,14 @@ export async function POST(request: NextRequest) {
       riskAmount: parseNumber(insuranceRecord.riskAmount),
       riskCurrency: parseString(insuranceRecord.riskCurrency) || null,
       riskLabel: parseString(insuranceRecord.riskLabel) || null,
+      riskByGuest:
+        insuranceRecord.riskByGuest && typeof insuranceRecord.riskByGuest === "object"
+          ? Object.fromEntries(
+              Object.entries(insuranceRecord.riskByGuest as Record<string, unknown>)
+                .map(([guestId, value]) => [guestId, parseNumber(value)])
+                .filter(([, value]) => typeof value === "number" && value > 0)
+            )
+          : null,
       territoryCode: parseString(insuranceRecord.territoryCode) || null,
       territoryLabel: parseString(insuranceRecord.territoryLabel) || null,
       territoryPolicyLabel: parseString(insuranceRecord.territoryPolicyLabel) || null,

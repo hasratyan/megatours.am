@@ -4,7 +4,7 @@ import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env"
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
 import type { AoryxSearchParams, AoryxRoomSearch } from "@/types/aoryx";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { recordUserSearch } from "@/lib/user-data";
 

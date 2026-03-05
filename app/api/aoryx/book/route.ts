@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { book, AoryxServiceError, AoryxClientError } from "@/lib/aoryx-client";
 import type { AoryxBookingPayload } from "@/types/aoryx";
 import { clearPrebookCookie, getPrebookState, getSessionFromCookie } from "../_shared";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { recordUserBooking } from "@/lib/user-data";
 import { sendBookingConfirmationEmail } from "@/lib/email";

@@ -1,6 +1,6 @@
 import ResultsClient from "./results-client";
 import { cookies, headers } from "next/headers";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth-compat/server";
 import { parseSearchParams } from "@/lib/search-query";
 import { authOptions } from "@/lib/auth";
 import { getTranslations, type Locale } from "@/lib/i18n";

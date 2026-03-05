@@ -3,7 +3,7 @@
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/auth-compat/react";
 import Select, {
   type CSSObjectWithLabel,
   type SingleValue,
@@ -201,13 +201,19 @@ const checkoutAddressSelectStyles: StylesConfig<AddressSelectOption, false> = {
   }),
 };
 
-const formatDateRange = (checkIn?: string | null, checkOut?: string | null, locale?: string) => {
+const formatDateDeterministic = (value: Date) => {
+  const day = String(value.getDate()).padStart(2, "0");
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const year = value.getFullYear();
+  return `${day}.${month}.${year}`;
+};
+
+const formatDateRange = (checkIn?: string | null, checkOut?: string | null) => {
   if (!checkIn || !checkOut) return null;
   const checkInDate = new Date(`${checkIn}T00:00:00`);
   const checkOutDate = new Date(`${checkOut}T00:00:00`);
   if (Number.isNaN(checkInDate.getTime()) || Number.isNaN(checkOutDate.getTime())) return null;
-  const formatter = new Intl.DateTimeFormat(locale ?? "en-GB", { month: "short", day: "numeric" });
-  return `${formatter.format(checkInDate)} - ${formatter.format(checkOutDate)}`;
+  return `${formatDateDeterministic(checkInDate)} - ${formatDateDeterministic(checkOutDate)}`;
 };
 
 const calculateTripDays = (checkIn?: string | null, checkOut?: string | null) => {
@@ -472,6 +478,9 @@ const serializeInsuranceTraveler = (
     traveler.premium ?? null,
     traveler.premiumCurrency ?? "",
     traveler.policyPremium ?? null,
+    traveler.riskAmount ?? null,
+    traveler.riskCurrency ?? "",
+    traveler.riskLabel ?? "",
     age,
     type,
   ];
@@ -1115,6 +1124,44 @@ export default function PackageCheckoutClient({
     },
     [insuranceSelection?.subrisks, insuranceSelection?.subrisksByGuest]
   );
+  const resolveGuestRiskAmount = useCallback(
+    (guestId: string | null) => {
+      const map = insuranceSelection?.riskByGuest ?? null;
+      if (guestId && map) {
+        const value = map[guestId];
+        if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+          return value;
+        }
+      }
+      if (
+        typeof insuranceSelection?.riskAmount === "number" &&
+        Number.isFinite(insuranceSelection.riskAmount) &&
+        insuranceSelection.riskAmount > 0
+      ) {
+        return insuranceSelection.riskAmount;
+      }
+      return null;
+    },
+    [insuranceSelection?.riskAmount, insuranceSelection?.riskByGuest]
+  );
+  const resolveGuestRiskCurrency = useCallback(
+    () => {
+      const value = insuranceSelection?.riskCurrency;
+      if (typeof value !== "string") return null;
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    },
+    [insuranceSelection?.riskCurrency]
+  );
+  const resolveGuestRiskLabel = useCallback(
+    () => {
+      const value = insuranceSelection?.riskLabel;
+      if (typeof value !== "string") return null;
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    },
+    [insuranceSelection?.riskLabel]
+  );
   const insuranceSubriskLabelMap = useMemo<Record<string, string>>(
     () => ({
       amateur_sport_expences: t.packageBuilder.insurance.subrisks.amateurSport.label,
@@ -1398,6 +1445,9 @@ export default function PackageCheckoutClient({
               premium: existing?.premium ?? null,
               premiumCurrency: existing?.premiumCurrency ?? null,
               policyPremium: existing?.policyPremium ?? null,
+              riskAmount: existing?.riskAmount ?? null,
+              riskCurrency: existing?.riskCurrency ?? insuranceSelection?.riskCurrency ?? null,
+              riskLabel: existing?.riskLabel ?? insuranceSelection?.riskLabel ?? null,
             };
           })
       );
@@ -1416,6 +1466,8 @@ export default function PackageCheckoutClient({
     efesCountryById,
     efesCountryIdByAlpha2,
     insuranceSelection?.startDate,
+    insuranceSelection?.riskCurrency,
+    insuranceSelection?.riskLabel,
     selectedInsuranceGuestIds,
     insuranceSelection?.selected,
     insuranceSelection?.travelers,
@@ -1664,11 +1716,18 @@ export default function PackageCheckoutClient({
     const endDate = insuranceSelection.endDate ?? hotel?.checkOutDate ?? null;
     if (!startDate || !endDate) return null;
     const territoryCode = normalizeOptional(insuranceSelection.territoryCode) ?? "";
-    const riskAmount = insuranceSelection.riskAmount ?? null;
-    const riskCurrency = normalizeOptional(insuranceSelection.riskCurrency) ?? "";
+    const defaultRiskAmount =
+      typeof insuranceSelection.riskAmount === "number" &&
+      Number.isFinite(insuranceSelection.riskAmount) &&
+      insuranceSelection.riskAmount > 0
+        ? insuranceSelection.riskAmount
+        : null;
+    const riskAmount = defaultRiskAmount ?? resolveGuestRiskAmount(insuranceTravelers[0]?.id ?? null);
+    const riskCurrency = resolveGuestRiskCurrency() ?? "";
     if (!territoryCode || !riskAmount || !riskCurrency) return null;
     if (insuranceTravelers.length === 0) return null;
     const referenceDate = startDate ?? null;
+    const riskLabel = resolveGuestRiskLabel() ?? undefined;
 
     const travelers = insuranceTravelers
       .map((traveler) => {
@@ -1678,9 +1737,25 @@ export default function PackageCheckoutClient({
           referenceDate
         );
         if (typeof resolvedAge !== "number" || !Number.isFinite(resolvedAge)) return null;
+        const travelerRiskAmount =
+          resolveGuestRiskAmount(traveler.id) ??
+          (typeof traveler.riskAmount === "number" &&
+          Number.isFinite(traveler.riskAmount) &&
+          traveler.riskAmount > 0
+            ? traveler.riskAmount
+            : null);
+        if (travelerRiskAmount === null) return null;
+        const travelerRiskCurrency =
+          resolveGuestRiskCurrency() ?? normalizeOptional(traveler.riskCurrency);
+        if (!travelerRiskCurrency) return null;
+        const travelerRiskLabel =
+          resolveGuestRiskLabel() ?? normalizeOptional(traveler.riskLabel) ?? undefined;
         return {
           id: traveler.id,
           age: resolvedAge,
+          riskAmount: travelerRiskAmount,
+          riskCurrency: travelerRiskCurrency,
+          riskLabel: travelerRiskLabel,
           subrisks: resolveGuestSubrisks(traveler.id),
         };
       })
@@ -1694,7 +1769,7 @@ export default function PackageCheckoutClient({
       territoryCode,
       riskAmount,
       riskCurrency,
-      riskLabel: insuranceSelection.riskLabel ?? undefined,
+      riskLabel,
       days: calculateTripDays(startDate, endDate) ?? insuranceSelection.days ?? undefined,
       subrisks: insuranceSelection.subrisks ?? undefined,
       travelers,
@@ -1703,11 +1778,12 @@ export default function PackageCheckoutClient({
     insuranceActive,
     insuranceSelection?.days,
     insuranceSelection?.riskAmount,
-    insuranceSelection?.riskCurrency,
-    insuranceSelection?.riskLabel,
     insuranceSelection?.startDate,
     insuranceSelection?.endDate,
     insuranceSelection?.subrisks,
+    resolveGuestRiskAmount,
+    resolveGuestRiskCurrency,
+    resolveGuestRiskLabel,
     resolveGuestSubrisks,
     insuranceSelection?.territoryCode,
     hotel?.checkInDate,
@@ -1917,36 +1993,52 @@ export default function PackageCheckoutClient({
   }, [applyInsuranceQuote, insuranceQuoteRequest, insuranceSelection?.selected, runInsuranceQuote]);
 
   const buildInsuranceTravelersPayload = (travelers: InsuranceTravelerForm[]) =>
-    travelers.map((traveler) => ({
-      id: traveler.id,
-      firstName: traveler.firstName,
-      lastName: traveler.lastName,
-      firstNameEn: normalizeOptional(traveler.firstNameEn) ?? traveler.firstName,
-      lastNameEn: normalizeOptional(traveler.lastNameEn) ?? traveler.lastName,
-      gender: traveler.gender ?? null,
-      birthDate: normalizeOptional(traveler.birthDate),
-      residency: traveler.residency ?? null,
-      socialCard: normalizeOptional(traveler.socialCard),
-      passportNumber: normalizeOptional(traveler.passportNumber),
-      passportAuthority: normalizeOptional(traveler.passportAuthority),
-      passportIssueDate: normalizeOptional(traveler.passportIssueDate),
-      passportExpiryDate: normalizeOptional(traveler.passportExpiryDate),
-      mobilePhone: normalizeOptional(traveler.mobilePhone),
-      email: normalizeOptional(traveler.email),
-      address: {
-        full: normalizeOptional(traveler.address?.full),
-        fullEn: normalizeOptional(traveler.address?.fullEn),
-        country: normalizeOptional(traveler.address?.country),
-        countryId: normalizeOptional(traveler.address?.countryId),
-        region: normalizeOptional(traveler.address?.region),
-        city: normalizeOptional(traveler.address?.city),
-      },
-      citizenship: normalizeOptional(traveler.citizenship),
-      premium: traveler.premium ?? null,
-      premiumCurrency: normalizeOptional(traveler.premiumCurrency),
-      policyPremium: traveler.policyPremium ?? null,
-      subrisks: resolveGuestSubrisks(traveler.id),
-    }));
+    travelers.map((traveler) => {
+      const travelerRiskAmount =
+        resolveGuestRiskAmount(traveler.id) ??
+        (typeof traveler.riskAmount === "number" &&
+        Number.isFinite(traveler.riskAmount) &&
+        traveler.riskAmount > 0
+          ? traveler.riskAmount
+          : null);
+      const travelerRiskCurrency =
+        resolveGuestRiskCurrency() ?? normalizeOptional(traveler.riskCurrency);
+      const travelerRiskLabel =
+        resolveGuestRiskLabel() ?? normalizeOptional(traveler.riskLabel);
+      return {
+        id: traveler.id,
+        firstName: traveler.firstName,
+        lastName: traveler.lastName,
+        firstNameEn: normalizeOptional(traveler.firstNameEn) ?? traveler.firstName,
+        lastNameEn: normalizeOptional(traveler.lastNameEn) ?? traveler.lastName,
+        gender: traveler.gender ?? null,
+        birthDate: normalizeOptional(traveler.birthDate),
+        residency: traveler.residency ?? null,
+        socialCard: normalizeOptional(traveler.socialCard),
+        passportNumber: normalizeOptional(traveler.passportNumber),
+        passportAuthority: normalizeOptional(traveler.passportAuthority),
+        passportIssueDate: normalizeOptional(traveler.passportIssueDate),
+        passportExpiryDate: normalizeOptional(traveler.passportExpiryDate),
+        mobilePhone: normalizeOptional(traveler.mobilePhone),
+        email: normalizeOptional(traveler.email),
+        address: {
+          full: normalizeOptional(traveler.address?.full),
+          fullEn: normalizeOptional(traveler.address?.fullEn),
+          country: normalizeOptional(traveler.address?.country),
+          countryId: normalizeOptional(traveler.address?.countryId),
+          region: normalizeOptional(traveler.address?.region),
+          city: normalizeOptional(traveler.address?.city),
+        },
+        citizenship: normalizeOptional(traveler.citizenship),
+        premium: traveler.premium ?? null,
+        premiumCurrency: normalizeOptional(traveler.premiumCurrency),
+        policyPremium: traveler.policyPremium ?? null,
+        riskAmount: travelerRiskAmount ?? null,
+        riskCurrency: travelerRiskCurrency,
+        riskLabel: travelerRiskLabel,
+        subrisks: resolveGuestSubrisks(traveler.id),
+      };
+    });
 
   const updateInsuranceTraveler = (
     travelerId: string,
@@ -2453,6 +2545,7 @@ export default function PackageCheckoutClient({
                 riskAmount: insuranceSelection.riskAmount ?? null,
                 riskCurrency: insuranceSelection.riskCurrency ?? null,
                 riskLabel: insuranceSelection.riskLabel ?? null,
+                riskByGuest: insuranceSelection.riskByGuest ?? null,
                 territoryCode: insuranceSelection.territoryCode ?? null,
                 territoryLabel: insuranceSelection.territoryLabel ?? null,
                 territoryPolicyLabel: insuranceSelection.territoryPolicyLabel ?? null,
@@ -2580,6 +2673,7 @@ export default function PackageCheckoutClient({
           riskAmount: insuranceSelection.riskAmount ?? null,
           riskCurrency: insuranceSelection.riskCurrency ?? null,
           riskLabel: insuranceSelection.riskLabel ?? null,
+          riskByGuest: insuranceSelection.riskByGuest ?? null,
           territoryCode: insuranceSelection.territoryCode ?? null,
           territoryLabel: insuranceSelection.territoryLabel ?? null,
           territoryPolicyLabel: insuranceSelection.territoryPolicyLabel ?? null,
@@ -2653,7 +2747,7 @@ export default function PackageCheckoutClient({
       hotel?.destinationName ?? null
     );
     if (destinationLine) hotelDetails.push(destinationLine);
-    const dateRange = formatDateRange(hotel?.checkInDate, hotel?.checkOutDate, intlLocale);
+    const dateRange = formatDateRange(hotel?.checkInDate, hotel?.checkOutDate);
     const dateLine = buildDetailLine(t.packageBuilder.checkout.labels.dates, dateRange);
     if (dateLine) hotelDetails.push(dateLine);
     const roomLine = buildDetailLine(
@@ -2864,7 +2958,12 @@ export default function PackageCheckoutClient({
       insuranceSelection?.planLabel ??
       insuranceSelection?.label ??
       null;
-    if (insurancePlanLabel) insuranceDetails.push(insurancePlanLabel);
+    const insuranceProgramTitle = t.packageBuilder.insurance.programTitle.trim();
+    const insuranceProgramLabel =
+      insurancePlanLabel && insuranceProgramTitle
+        ? `${insuranceProgramTitle} ${insurancePlanLabel}`
+        : insurancePlanLabel;
+    if (insuranceProgramLabel) insuranceDetails.push(insuranceProgramLabel);
     const insuranceTerritoryLabel =
       insuranceSelection?.territoryCode === "whole_world_exc_uk_sch_us_ca_au_jp"
         ? t.packageBuilder.insurance.territories.worldwideExcluding
@@ -3163,9 +3262,16 @@ export default function PackageCheckoutClient({
     if (Object.keys(mergedInsuranceTravelerFieldErrors).length > 0) return false;
     if (!hotel?.checkInDate || !hotel?.checkOutDate) return false;
     const planId = insuranceSelection.planId ?? insuranceSelection.selectionId ?? null;
+    const hasGlobalRiskAmount =
+      typeof insuranceSelection.riskAmount === "number" &&
+      Number.isFinite(insuranceSelection.riskAmount) &&
+      insuranceSelection.riskAmount > 0;
+    const hasRiskByGuest = Object.values(insuranceSelection.riskByGuest ?? {}).some(
+      (value) => typeof value === "number" && Number.isFinite(value) && value > 0
+    );
     if (
       !planId ||
-      !insuranceSelection.riskAmount ||
+      (!hasGlobalRiskAmount && !hasRiskByGuest) ||
       !insuranceSelection.riskCurrency ||
       !normalizeOptional(insuranceSelection.territoryCode) ||
       !normalizeOptional(insuranceSelection.travelCountries)
@@ -3252,6 +3358,46 @@ export default function PackageCheckoutClient({
       t.packageBuilder.checkout.guestAdultLabel,
       t.packageBuilder.checkout.guestChildLabel,
       t.packageBuilder.checkout.insuranceTravelerLabel,
+    ]
+  );
+  const formatInsuranceCoverageAmount = useCallback(
+    (amount: number, currency: string) => {
+      try {
+        return new Intl.NumberFormat(intlLocale, {
+          style: "currency",
+          currency,
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        }).format(amount);
+      } catch {
+        return `${new Intl.NumberFormat(intlLocale).format(amount)} ${currency}`;
+      }
+    },
+    [intlLocale]
+  );
+  const resolveTravelerCoverageLabel = useCallback(
+    (traveler: InsuranceTravelerForm) => {
+      const riskAmount =
+        resolveGuestRiskAmount(traveler.id) ??
+        (typeof traveler.riskAmount === "number" &&
+        Number.isFinite(traveler.riskAmount) &&
+        traveler.riskAmount > 0
+          ? traveler.riskAmount
+          : null);
+      const riskCurrency =
+        resolveGuestRiskCurrency() ??
+        normalizeOptional(traveler.riskCurrency) ??
+        normalizeOptional(insuranceSelection?.riskCurrency);
+      if (riskAmount === null || !riskCurrency) return null;
+      const formattedCoverage = formatInsuranceCoverageAmount(riskAmount, riskCurrency);
+      return t.packageBuilder.insurance.coverageLabel.replace("{amount}", formattedCoverage);
+    },
+    [
+      formatInsuranceCoverageAmount,
+      insuranceSelection?.riskCurrency,
+      resolveGuestRiskAmount,
+      resolveGuestRiskCurrency,
+      t.packageBuilder.insurance.coverageLabel,
     ]
   );
   const resolveTravelerRateLabel = useCallback(
@@ -3650,6 +3796,7 @@ export default function PackageCheckoutClient({
                         {insuranceTravelers.map((traveler, index) => {
                           const isActive = traveler.id === activeInsuranceTravelerId;
                           const { label, meta } = resolveInsuranceTravelerTabLabels(traveler, index);
+                          const coverageLabel = resolveTravelerCoverageLabel(traveler);
                           const rateLabel = resolveTravelerRateLabel(traveler);
                           const tabId = `insurance-traveler-tab-${traveler.id}`;
                           const panelId = `insurance-traveler-panel-${traveler.id}`;
@@ -3666,6 +3813,9 @@ export default function PackageCheckoutClient({
                             >
                               <span className="insurance-traveler-tab__label">{label}</span>
                               <span className="insurance-traveler-tab__meta">{meta}</span>
+                              {coverageLabel ? (
+                                <span className="insurance-traveler-tab__coverage">{coverageLabel}</span>
+                              ) : null}
                               {rateLabel ? (
                                 <span className="insurance-traveler-tab__rate">{rateLabel}</span>
                               ) : null}
@@ -3742,6 +3892,7 @@ export default function PackageCheckoutClient({
                       const passportExpiryDateFieldError =
                         travelerFieldErrors?.passportExpiryDate ?? null;
                       const canCopyLeadTravelerContact = travelerIndex > 0;
+                      const coverageLabel = resolveTravelerCoverageLabel(traveler);
 
                       return (
                         <div

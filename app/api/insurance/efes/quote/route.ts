@@ -50,6 +50,9 @@ export async function POST(request: NextRequest) {
         const record = traveler as Record<string, unknown>;
         const age = parseNumber(record.age);
         if (age === null) return null;
+        const travelerRiskAmount = parseNumber(record.riskAmount);
+        const travelerRiskCurrency = parseString(record.riskCurrency);
+        const travelerRiskLabel = parseString(record.riskLabel);
         const travelerSubrisks = Array.isArray(record.subrisks)
           ? record.subrisks
               .map((entry) => parseString(entry))
@@ -60,6 +63,12 @@ export async function POST(request: NextRequest) {
           age,
           passportNumber: parseString(record.passportNumber) || null,
           socialCard: parseString(record.socialCard) || null,
+          riskAmount:
+            typeof travelerRiskAmount === "number" && travelerRiskAmount > 0
+              ? travelerRiskAmount
+              : undefined,
+          riskCurrency: travelerRiskCurrency || undefined,
+          riskLabel: travelerRiskLabel || undefined,
           subrisks: travelerSubrisks,
         };
       })
@@ -92,7 +101,8 @@ export async function POST(request: NextRequest) {
     };
 
     const result = await quoteEfesTravelCost(payload);
-    const { raw: _raw, ...safe } = result;
+    const safe = { ...result };
+    delete safe.raw;
     return NextResponse.json(safe);
   } catch (error) {
     if (error instanceof EfesClientError || error instanceof EfesServiceError) {

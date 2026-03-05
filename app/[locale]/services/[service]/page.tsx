@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth-compat/server";
 import PackageServiceClient from "@/components/package-service-client";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db";

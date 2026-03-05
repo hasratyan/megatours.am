@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth-compat/server";
 import BookingAddonsClient from "@/components/booking-addons-client";
 import ProfileSignIn from "@/components/profile-signin";
 import { authOptions } from "@/lib/auth";

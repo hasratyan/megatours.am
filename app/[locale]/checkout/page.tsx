@@ -1,4 +1,4 @@
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth-compat/server";
 import PackageCheckoutClient from "@/components/package-checkout-client";
 import ProfileSignIn from "@/components/profile-signin";
 import { authOptions } from "@/lib/auth";

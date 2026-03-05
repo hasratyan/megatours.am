@@ -1,6 +1,6 @@
 import AdminB2bBookingsClient from "./admin-b2b-bookings-client";
 import ProfileSignIn from "@/components/profile-signin";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { getB2bDb } from "@/lib/db";
 import { hasAdminConfig, isAdminUser } from "@/lib/admin";

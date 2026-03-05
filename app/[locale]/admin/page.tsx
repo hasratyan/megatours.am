@@ -1,6 +1,6 @@
 import Link from "next/link";
 import ProfileSignIn from "@/components/profile-signin";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { hasAdminConfig, isAdminUser } from "@/lib/admin";
 import { buildLocalizedMetadata } from "@/lib/metadata";

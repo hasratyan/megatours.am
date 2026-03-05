@@ -203,6 +203,9 @@ const parseInsurance = (
             premium: toNumber(entry.premium),
             premiumCurrency: resolveString(entry.premiumCurrency) || null,
             policyPremium: toNumber(entry.policyPremium),
+            riskAmount: toNumber(entry.riskAmount),
+            riskCurrency: resolveString(entry.riskCurrency) || null,
+            riskLabel: resolveString(entry.riskLabel) || null,
             subrisks: Array.isArray(entry.subrisks)
               ? entry.subrisks
                   .map((subrisk) => resolveString(subrisk))
@@ -246,6 +249,13 @@ const parseInsurance = (
       ? value.subrisks
           .map((entry) => resolveString(entry))
           .filter((entry): entry is string => Boolean(entry))
+      : null,
+    riskByGuest: isRecord(value.riskByGuest)
+      ? Object.fromEntries(
+          Object.entries(value.riskByGuest)
+            .map(([guestId, amount]) => [guestId, toNumber(amount)])
+            .filter(([, amount]) => typeof amount === "number" && amount > 0)
+        )
       : null,
     travelers: travelers.length > 0 ? travelers : null,
   } as NonNullable<AoryxBookingPayload["insurance"]>);

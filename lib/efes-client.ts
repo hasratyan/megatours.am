@@ -610,18 +610,32 @@ export async function quoteEfesTravelCost(request: EfesQuoteRequest): Promise<Ef
         traveler.subrisks ?? request.subrisks,
         DEFAULT_SUBRISKS
       );
+      const travelerRiskAmount =
+        typeof traveler.riskAmount === "number" &&
+        Number.isFinite(traveler.riskAmount) &&
+        traveler.riskAmount > 0
+          ? traveler.riskAmount
+          : request.riskAmount;
+      const travelerRiskCurrency =
+        traveler.riskCurrency && traveler.riskCurrency.trim().length > 0
+          ? traveler.riskCurrency
+          : request.riskCurrency;
+      const travelerRiskLabel =
+        traveler.riskLabel && traveler.riskLabel.trim().length > 0
+          ? traveler.riskLabel
+          : request.riskLabel ?? DEFAULT_RISK_LABEL;
       const payload = {
         script_name: "calc_travel_cost",
         dyn_object: {
           insurance_type: "travel",
-          risk_label: request.riskLabel ?? DEFAULT_RISK_LABEL,
+          risk_label: travelerRiskLabel,
           age: String(traveler.age),
           number_of_days: String(days),
           start_date: formatEfesDate(request.startDate),
           end_date: formatEfesDate(request.endDate),
           country_territory: request.territoryCode,
-          risk_amount: String(request.riskAmount),
-          risk_currency: request.riskCurrency,
+          risk_amount: String(travelerRiskAmount),
+          risk_currency: travelerRiskCurrency,
           promo_code: request.promoCode ?? "",
           insured_passport: traveler.passportNumber ?? "",
           insured_social_card: traveler.socialCard ?? "",
@@ -1025,14 +1039,28 @@ export async function createEfesPoliciesFromBooking(payload: AoryxBookingPayload
         throw new EfesClientError("Missing premium for EFES policy traveler");
       }
       const premiumCurrency = normalizePremiumCurrency(traveler, insurance);
+      const travelerRiskAmount =
+        typeof traveler.riskAmount === "number" &&
+        Number.isFinite(traveler.riskAmount) &&
+        traveler.riskAmount > 0
+          ? traveler.riskAmount
+          : riskAmount;
+      const travelerRiskCurrency =
+        traveler.riskCurrency && traveler.riskCurrency.trim().length > 0
+          ? traveler.riskCurrency
+          : riskCurrency;
+      const travelerRiskLabel =
+        traveler.riskLabel && traveler.riskLabel.trim().length > 0
+          ? traveler.riskLabel
+          : riskLabel;
       const policyRequest: EfesPolicyRequest = {
         traveler,
         insuredTraveler,
         premium,
         premiumCurrency,
-        riskAmount,
-        riskCurrency,
-        riskLabel,
+        riskAmount: travelerRiskAmount,
+        riskCurrency: travelerRiskCurrency,
+        riskLabel: travelerRiskLabel,
         territoryLabel,
         travelCountries,
         startDate,

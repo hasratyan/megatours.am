@@ -509,6 +509,7 @@ export interface BookingInsuranceSelection {
   endDate?: string | null;
   days?: number | null;
   subrisks?: string[] | null;
+  riskByGuest?: Record<string, number> | null;
   travelers?: BookingInsuranceTraveler[] | null;
 }
 
@@ -541,6 +542,9 @@ export type BookingInsuranceTraveler = {
   premium?: number | null;
   premiumCurrency?: string | null;
   policyPremium?: number | null;
+  riskAmount?: number | null;
+  riskCurrency?: string | null;
+  riskLabel?: string | null;
   subrisks?: string[] | null;
 };
 
