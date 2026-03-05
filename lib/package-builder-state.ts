@@ -179,6 +179,7 @@ export type PackageBuilderInsuranceSelection = PackageBuilderServiceSelection & 
   quotePriceCoveragesByGuest?: Record<string, Record<string, number>> | null;
   quoteDiscountedPriceCoveragesByGuest?: Record<string, Record<string, number>> | null;
   quotePremiumsByGuest?: Record<string, number> | null;
+  quoteLoading?: boolean | null;
   quoteError?: string | null;
   insuredGuestIds?: string[] | null;
   subrisksByGuest?: Record<string, string[]> | null;

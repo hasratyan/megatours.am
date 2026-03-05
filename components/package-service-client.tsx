@@ -1192,6 +1192,19 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
     if (!insuranceSelection?.selected) {
       setInsuranceQuoteError(null);
       setInsuranceQuoteLoading(false);
+      if (insuranceSelection?.quoteLoading === true) {
+        updatePackageBuilderState((prev) => {
+          if (!prev.insurance) return prev;
+          return {
+            ...prev,
+            insurance: {
+              ...prev.insurance,
+              quoteLoading: false,
+            },
+            updatedAt: Date.now(),
+          };
+        });
+      }
       insuranceQuoteKeyRef.current = null;
       if (insuranceQuoteTimerRef.current !== null) {
         window.clearTimeout(insuranceQuoteTimerRef.current);
@@ -1199,8 +1212,38 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
       }
       return;
     }
-    if (!insuranceQuoteRequest) return;
+    if (!insuranceQuoteRequest) {
+      setInsuranceQuoteLoading(false);
+      if (insuranceSelection?.quoteLoading === true) {
+        updatePackageBuilderState((prev) => {
+          if (!prev.insurance) return prev;
+          return {
+            ...prev,
+            insurance: {
+              ...prev.insurance,
+              quoteLoading: false,
+            },
+            updatedAt: Date.now(),
+          };
+        });
+      }
+      return;
+    }
     if (insuranceQuoteRequest.key === insuranceQuoteKeyRef.current) return;
+    if (insuranceSelection?.quoteLoading !== true || insuranceSelection?.quoteError !== null) {
+      updatePackageBuilderState((prev) => {
+        if (!prev.insurance?.selected) return prev;
+        return {
+          ...prev,
+          insurance: {
+            ...prev.insurance,
+            quoteLoading: true,
+            quoteError: null,
+          },
+          updatedAt: Date.now(),
+        };
+      });
+    }
     if (insuranceQuoteTimerRef.current !== null) {
       window.clearTimeout(insuranceQuoteTimerRef.current);
     }
@@ -1247,6 +1290,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
               quoteDiscountedPriceCoveragesByGuest:
                 quote.discountedPriceCoveragesByTraveler ?? null,
               quotePremiumsByGuest,
+              quoteLoading: false,
               quoteError: null,
               startDate: insuranceQuoteRequest.startDate,
               endDate: insuranceQuoteRequest.endDate,
@@ -1287,6 +1331,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
               quotePriceCoveragesByGuest: null,
               quoteDiscountedPriceCoveragesByGuest: null,
               quotePremiumsByGuest: null,
+              quoteLoading: false,
               quoteError: mappedMessage,
             },
             updatedAt: Date.now(),

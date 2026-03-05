@@ -3067,9 +3067,12 @@ export default function PackageCheckoutClient({
 
   const estimatedTotal = (() => {
     let missingPrice = false;
+    let missingSelectionCount = 0;
+    let insurancePriceMissing = false;
     const totals: { amount: number; currency: string }[] = [];
     let selectedCount = 0;
     const addSelection = (
+      id: PackageBuilderService,
       selected: boolean,
       amount: number | null | undefined,
       currency: string | null | undefined,
@@ -3080,22 +3083,46 @@ export default function PackageCheckoutClient({
       const normalized = normalizeAmount(amount ?? null, currency ?? null, rates);
       if (!normalized) {
         missingPrice = true;
+        missingSelectionCount += 1;
+        if (id === "insurance") {
+          insurancePriceMissing = true;
+        }
         return;
       }
       totals.push({ amount: normalized.amount, currency: normalized.currency });
     };
 
     addSelection(
+      "hotel",
       hotel?.selected === true,
       hotel?.price ?? null,
       hotel?.currency ?? null,
       hotelRates
     );
-    addSelection(transfer?.selected === true, transfer?.price ?? null, transfer?.currency ?? null, baseRates);
-    addSelection(excursion?.selected === true, excursion?.price ?? null, excursion?.currency ?? null, baseRates);
-    addSelection(builderState.flight?.selected === true, builderState.flight?.price ?? null, builderState.flight?.currency ?? null, baseRates);
+    addSelection(
+      "transfer",
+      transfer?.selected === true,
+      transfer?.price ?? null,
+      transfer?.currency ?? null,
+      baseRates
+    );
+    addSelection(
+      "excursion",
+      excursion?.selected === true,
+      excursion?.price ?? null,
+      excursion?.currency ?? null,
+      baseRates
+    );
+    addSelection(
+      "flight",
+      builderState.flight?.selected === true,
+      builderState.flight?.price ?? null,
+      builderState.flight?.currency ?? null,
+      baseRates
+    );
     if (builderState.insurance?.selected) {
       addSelection(
+        "insurance",
         true,
         builderState.insurance?.price ?? null,
         builderState.insurance?.currency ?? null,
@@ -3111,7 +3138,20 @@ export default function PackageCheckoutClient({
         contactForRates: false,
       };
     }
+    const shouldShowInsuranceQuoteLoading =
+      insuranceQuoteLoading &&
+      builderState.insurance?.selected === true &&
+      insurancePriceMissing &&
+      missingSelectionCount === 1;
     if (totals.length === 0 || missingPrice) {
+      if (shouldShowInsuranceQuoteLoading) {
+        return {
+          label: t.packageBuilder.insurance.quoteLoading,
+          amount: null as number | null,
+          currency: null as string | null,
+          contactForRates: false,
+        };
+      }
       return {
         label: t.common.contactForRates,
         amount: null as number | null,

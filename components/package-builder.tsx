@@ -385,9 +385,12 @@ export default function PackageBuilder() {
 
   const checkoutTotal = (() => {
     let missingPrice = false;
+    let missingSelectionCount = 0;
+    let insurancePriceMissing = false;
     const totals: { amount: number; currency: string }[] = [];
     let selectedCount = 0;
     const addSelection = (
+      id: PackageBuilderService,
       selected: boolean,
       price: number | null | undefined,
       currency: string | null | undefined,
@@ -398,6 +401,10 @@ export default function PackageBuilder() {
       const normalized = normalizeAmount(price, currency, rates);
       if (!normalized) {
         missingPrice = true;
+        missingSelectionCount += 1;
+        if (id === "insurance") {
+          insurancePriceMissing = true;
+        }
         return;
       }
       totals.push({
@@ -407,24 +414,28 @@ export default function PackageBuilder() {
     };
 
     addSelection(
+      "hotel",
       builderState.hotel?.selected === true,
       builderState.hotel?.price ?? null,
       builderState.hotel?.currency ?? null,
       hotelRates
     );
     addSelection(
+      "transfer",
       builderState.transfer?.selected === true,
       builderState.transfer?.price ?? null,
       builderState.transfer?.currency ?? null,
       baseRates
     );
     addSelection(
+      "flight",
       builderState.flight?.selected === true,
       builderState.flight?.price ?? null,
       builderState.flight?.currency ?? null,
       baseRates
     );
     addSelection(
+      "excursion",
       builderState.excursion?.selected === true,
       builderState.excursion?.price ?? null,
       builderState.excursion?.currency ?? null,
@@ -432,6 +443,7 @@ export default function PackageBuilder() {
     );
     if (builderState.insurance?.selected === true && !builderState.insurance?.quoteError) {
       addSelection(
+        "insurance",
         true,
         builderState.insurance?.price ?? null,
         builderState.insurance?.currency ?? null,
@@ -443,7 +455,15 @@ export default function PackageBuilder() {
       return { label: null, isExact: false };
     }
 
+    const shouldShowInsuranceQuoteLoading =
+      builderState.insurance?.quoteLoading === true &&
+      builderState.insurance?.selected === true &&
+      insurancePriceMissing &&
+      missingSelectionCount === 1;
     if (totals.length === 0 || missingPrice) {
+      if (shouldShowInsuranceQuoteLoading) {
+        return { label: t.packageBuilder.insurance.quoteLoading, isExact: false };
+      }
       return { label: t.common.contactForRates, isExact: false };
     }
 
@@ -689,6 +709,8 @@ export default function PackageBuilder() {
                 const isDisabled = serviceFlags[service.id] === false;
                 const isInsuranceQuoteError =
                   service.id === "insurance" && Boolean(builderState.insurance?.quoteError);
+                const isInsuranceQuoteLoading =
+                  service.id === "insurance" && builderState.insurance?.quoteLoading === true;
                 const serviceRates = service.id === "hotel" ? hotelRates : baseRates;
                 const serviceAmount = serviceSelection?.price ?? null;
                 const normalizedPrice =
@@ -704,7 +726,10 @@ export default function PackageBuilder() {
                   : null;
                 const priceLabel =
                   isSelected && !isInsuranceQuoteError
-                    ? formattedPrice ?? t.common.contactForRates
+                    ? formattedPrice ??
+                      (isInsuranceQuoteLoading
+                        ? t.packageBuilder.insurance.quoteLoading
+                        : t.common.contactForRates)
                     : null;
                 const statusLabel = isDisabled
                   ? t.packageBuilder.disabledTag
