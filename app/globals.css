@@ -8674,6 +8674,8 @@ select:focus-visible {
 .checkout-payment{
   display: grid;
   gap: 0.8rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #94a3b833;
 }
 
 .checkout-radio{

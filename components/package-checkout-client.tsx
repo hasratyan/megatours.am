@@ -3932,7 +3932,13 @@ export default function PackageCheckoutClient({
                       const passportExpiryDateFieldError =
                         travelerFieldErrors?.passportExpiryDate ?? null;
                       const canCopyLeadTravelerContact = travelerIndex > 0;
-                      const coverageLabel = resolveTravelerCoverageLabel(traveler);
+                      const rawSubrisks = resolveGuestSubrisks(traveler.id);
+                      const normalizedSubrisks = Array.isArray(rawSubrisks)
+                        ? rawSubrisks
+                            .map((value) => value.trim())
+                            .filter((value) => value.length > 0)
+                        : [];
+                      const subriskLabels = normalizedSubrisks.map(resolveSubriskLabel);
 
                       return (
                         <div
@@ -3952,33 +3958,21 @@ export default function PackageCheckoutClient({
                               : t.packageBuilder.checkout.guestChildLabel}
                           </span>
                         </div>
-                        <div className="checkout-guest-card__subrisks">
-                          <span>{t.packageBuilder.insurance.subrisksTitle}</span>
-                          {(() => {
-                            const rawSubrisks = resolveGuestSubrisks(traveler.id);
-                            const normalizedSubrisks = Array.isArray(rawSubrisks)
-                              ? rawSubrisks
-                                  .map((value) => value.trim())
-                                  .filter((value) => value.length > 0)
-                              : [];
-                            const labels = normalizedSubrisks.map(resolveSubriskLabel);
-                            if (labels.length === 0) {
-                              return <span className="checkout-guest-card__subrisk-empty">—</span>;
-                            }
-                            return (
-                              <div className="checkout-guest-card__subrisk-list">
-                                {labels.map((label, labelIndex) => (
-                                  <span
-                                    key={`${traveler.id}-subrisk-${labelIndex}`}
-                                    className="checkout-guest-card__subrisk"
-                                  >
-                                    {label}
-                                  </span>
-                                ))}
-                              </div>
-                            );
-                          })()}
-                        </div>
+                        {subriskLabels.length > 0 ? (
+                          <div className="checkout-guest-card__subrisks">
+                            <span>{t.packageBuilder.insurance.subrisksTitle}</span>
+                            <div className="checkout-guest-card__subrisk-list">
+                              {subriskLabels.map((label, labelIndex) => (
+                                <span
+                                  key={`${traveler.id}-subrisk-${labelIndex}`}
+                                  className="checkout-guest-card__subrisk"
+                                >
+                                  {label}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                         <div className="checkout-field-grid">
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.firstNameEn} {t.packageBuilder.checkout.latinHint}</span>
