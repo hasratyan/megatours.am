@@ -117,6 +117,13 @@ const normalizeEfesPhone = (value: string | null | undefined) => {
 const resolveEfesCountry = (value: string | null | undefined) =>
   toCountryAlpha3(value);
 
+const isArmenianEfesCitizenship = (value: string | null | undefined) => {
+  const resolved = resolveEfesCountry(value);
+  if (resolved) return resolved === "ARM";
+  const normalized = value?.trim().toUpperCase() ?? "";
+  return normalized === "ARM" || normalized === "AM";
+};
+
 const maskSensitive = (value: unknown) =>
   typeof value === "string" && value.trim().length > 0 ? "<masked>" : value;
 
@@ -813,6 +820,9 @@ const buildPolicyPayload = (request: EfesPolicyRequest) => {
     resolveEfesCountry(insuredTraveler.citizenship) ??
     insuredTraveler.citizenship ??
     "ARM";
+  const insuredSocialCard = isArmenianEfesCitizenship(insuredCitizenship)
+    ? insuredTraveler.socialCard ?? ""
+    : "";
   const insuredMobilePhone = normalizeEfesPhone(
     insuredTraveler.mobilePhone ?? insuredTraveler.phone
   );
@@ -831,6 +841,9 @@ const buildPolicyPayload = (request: EfesPolicyRequest) => {
     resolveEfesCountry(traveler.citizenship) ??
     traveler.citizenship ??
     "ARM";
+  const travelSocialCard = isArmenianEfesCitizenship(travelCitizenship)
+    ? traveler.socialCard ?? ""
+    : "";
   const travelMobilePhone = normalizeEfesPhone(traveler.mobilePhone ?? traveler.phone);
   const travelResidency = traveler.residency === false ? "0" : "1";
   const policyCreationDate = formatEfesDate(request.policyCreationDate);
@@ -852,7 +865,7 @@ const buildPolicyPayload = (request: EfesPolicyRequest) => {
     INSURED_LAST_NAME: insuredTraveler.lastName,
     INSURED_LAST_NAME_EN: insuredTraveler.lastNameEn ?? insuredTraveler.lastName,
     INSURED_RESIDENCY: insuredResidency,
-    INSURED_SOCIAL_CARD: insuredTraveler.socialCard ?? "",
+    INSURED_SOCIAL_CARD: insuredSocialCard,
     INSURED_PASSPORT_NUMBER: insuredTraveler.passportNumber ?? "",
     INSURED_PASSPORT_AUTHORITY: insuredTraveler.passportAuthority ?? "",
     INSURED_PASSPORT_ISSUE_DATE: insuredTraveler.passportIssueDate
@@ -893,7 +906,7 @@ const buildPolicyPayload = (request: EfesPolicyRequest) => {
     TRAVEL_BIRTHDAY: traveler.birthDate ? formatEfesDate(traveler.birthDate) : "",
     TRAVEL_GENDER: traveler.gender ?? "",
     TRAVEL_RESIDENCY: travelResidency,
-    TRAVEL_SOCIAL_CARD: traveler.socialCard ?? "",
+    TRAVEL_SOCIAL_CARD: travelSocialCard,
     TRAVEL_PASSPORT_NUMBER: traveler.passportNumber ?? "",
     TRAVEL_PASSPORT_AUTHORITY: traveler.passportAuthority ?? "",
     TRAVEL_PASSPORT_ISSUE_DATE: traveler.passportIssueDate

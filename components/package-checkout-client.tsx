@@ -442,6 +442,9 @@ const resolveNonEmptyString = (
   return value.trim().length > 0 ? value : fallback;
 };
 
+const isArmenianCitizenship = (value: string | null | undefined) =>
+  resolveCountryAlpha2(value) === "AM";
+
 const serializeInsuranceTraveler = (
   traveler: Partial<InsuranceTravelerForm> | BookingInsuranceTraveler | null | undefined
 ) => {
@@ -2005,6 +2008,10 @@ export default function PackageCheckoutClient({
         resolveGuestRiskCurrency() ?? normalizeOptional(traveler.riskCurrency);
       const travelerRiskLabel =
         resolveGuestRiskLabel() ?? normalizeOptional(traveler.riskLabel);
+      const citizenship = normalizeOptional(traveler.citizenship);
+      const socialCard = isArmenianCitizenship(citizenship)
+        ? normalizeOptional(traveler.socialCard)
+        : null;
       return {
         id: traveler.id,
         firstName: traveler.firstName,
@@ -2014,7 +2021,7 @@ export default function PackageCheckoutClient({
         gender: traveler.gender ?? null,
         birthDate: normalizeOptional(traveler.birthDate),
         residency: traveler.residency ?? null,
-        socialCard: normalizeOptional(traveler.socialCard),
+        socialCard,
         passportNumber: normalizeOptional(traveler.passportNumber),
         passportAuthority: normalizeOptional(traveler.passportAuthority),
         passportIssueDate: normalizeOptional(traveler.passportIssueDate),
@@ -2029,7 +2036,7 @@ export default function PackageCheckoutClient({
           region: normalizeOptional(traveler.address?.region),
           city: normalizeOptional(traveler.address?.city),
         },
-        citizenship: normalizeOptional(traveler.citizenship),
+        citizenship,
         premium: traveler.premium ?? null,
         premiumCurrency: normalizeOptional(traveler.premiumCurrency),
         policyPremium: traveler.policyPremium ?? null,
@@ -2045,14 +2052,21 @@ export default function PackageCheckoutClient({
     updates: Partial<InsuranceTravelerForm>
   ) => {
     setInsuranceQuoteError(null);
+    const normalizedUpdates: Partial<InsuranceTravelerForm> = { ...updates };
+    if (
+      Object.prototype.hasOwnProperty.call(normalizedUpdates, "citizenship") &&
+      !isArmenianCitizenship(normalizedUpdates.citizenship ?? null)
+    ) {
+      normalizedUpdates.socialCard = "";
+    }
     const dateFieldsToReset: Array<keyof InsuranceTravelerFieldErrors> = [];
-    if (Object.prototype.hasOwnProperty.call(updates, "birthDate")) {
+    if (Object.prototype.hasOwnProperty.call(normalizedUpdates, "birthDate")) {
       dateFieldsToReset.push("birthDate");
     }
-    if (Object.prototype.hasOwnProperty.call(updates, "passportIssueDate")) {
+    if (Object.prototype.hasOwnProperty.call(normalizedUpdates, "passportIssueDate")) {
       dateFieldsToReset.push("passportIssueDate");
     }
-    if (Object.prototype.hasOwnProperty.call(updates, "passportExpiryDate")) {
+    if (Object.prototype.hasOwnProperty.call(normalizedUpdates, "passportExpiryDate")) {
       dateFieldsToReset.push("passportExpiryDate");
     }
     if (dateFieldsToReset.length > 0) {
@@ -2078,7 +2092,7 @@ export default function PackageCheckoutClient({
     }
     setInsuranceTravelers((prev) =>
       prev.map((traveler) =>
-        traveler.id === travelerId ? { ...traveler, ...updates } : traveler
+        traveler.id === travelerId ? { ...traveler, ...normalizedUpdates } : traveler
       )
     );
   };
@@ -3336,7 +3350,9 @@ export default function PackageCheckoutClient({
         Boolean(normalizeOptional(traveler.passportAuthority)) &&
         Boolean(normalizeOptional(traveler.passportIssueDate)) &&
         Boolean(normalizeOptional(traveler.passportExpiryDate)) &&
-        (traveler.type !== "Adult" || Boolean(normalizeOptional(traveler.socialCard))) &&
+        (traveler.type !== "Adult" ||
+          !isArmenianCitizenship(traveler.citizenship) ||
+          Boolean(normalizeOptional(traveler.socialCard))) &&
         Boolean(normalizeOptional(traveler.citizenship)) &&
         traveler.residency !== null &&
         traveler.residency !== undefined &&
@@ -3931,6 +3947,9 @@ export default function PackageCheckoutClient({
                         travelerFieldErrors?.passportIssueDate ?? null;
                       const passportExpiryDateFieldError =
                         travelerFieldErrors?.passportExpiryDate ?? null;
+                      const isArmenianInsuranceTraveler = isArmenianCitizenship(
+                        traveler.citizenship
+                      );
                       const canCopyLeadTravelerContact = travelerIndex > 0;
                       const rawSubrisks = resolveGuestSubrisks(traveler.id);
                       const normalizedSubrisks = Array.isArray(rawSubrisks)
@@ -4185,11 +4204,15 @@ export default function PackageCheckoutClient({
                             <Select<AddressSelectOption>
                               options={citizenshipSelectOptions}
                               value={citizenshipSelectValue}
-                              onChange={(selected: SingleValue<AddressSelectOption>) =>
+                              onChange={(selected: SingleValue<AddressSelectOption>) => {
+                                const citizenship = selected?.value ?? "";
                                 updateInsuranceTraveler(traveler.id, {
-                                  citizenship: selected?.value ?? "",
-                                })
-                              }
+                                  citizenship,
+                                  ...(isArmenianCitizenship(citizenship)
+                                    ? {}
+                                    : { socialCard: "" }),
+                                });
+                              }}
                               styles={checkoutAddressSelectStyles}
                               placeholder={t.packageBuilder.checkout.countryPlaceholder}
                               isClearable={false}
@@ -4201,24 +4224,28 @@ export default function PackageCheckoutClient({
                               noOptionsMessage={() => t.packageBuilder.checkout.countryPlaceholder}
                             />
                           </label>
-                          <label className="checkout-field">
-                            <span>{t.packageBuilder.checkout.insuranceFields.socialCard}</span>
-                            <input
-                              className="checkout-input"
-                              type="text"
-                              maxLength={10}
-                              value={traveler.socialCard ?? ""}
-                              placeholder={
-                                traveler.type === "Adult"
-                                  ? undefined
-                                  : t.packageBuilder.checkout.insuranceFields.optionalPlaceholder
-                              }
-                              onChange={(event) =>
-                                updateInsuranceTraveler(traveler.id, { socialCard: event.target.value })
-                              }
-                              required={traveler.type === "Adult"}
-                            />
-                          </label>
+                          {isArmenianInsuranceTraveler ? (
+                            <label className="checkout-field">
+                              <span>{t.packageBuilder.checkout.insuranceFields.socialCard}</span>
+                              <input
+                                className="checkout-input"
+                                type="text"
+                                maxLength={10}
+                                value={traveler.socialCard ?? ""}
+                                placeholder={
+                                  traveler.type === "Adult"
+                                    ? undefined
+                                    : t.packageBuilder.checkout.insuranceFields.optionalPlaceholder
+                                }
+                                onChange={(event) =>
+                                  updateInsuranceTraveler(traveler.id, {
+                                    socialCard: event.target.value,
+                                  })
+                                }
+                                required={traveler.type === "Adult" && isArmenianInsuranceTraveler}
+                              />
+                            </label>
+                          ) : null}
                         </div>
                         <h3>{t.packageBuilder.checkout.contactTitle}</h3>
                         {canCopyLeadTravelerContact ? (
