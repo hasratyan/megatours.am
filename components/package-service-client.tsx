@@ -162,6 +162,7 @@ const DEFAULT_INSURANCE_ADULT_AGE = 30;
 const DEFAULT_INSURANCE_CHILD_AGE = 8;
 const DEFAULT_INSURANCE_SUBRISKS: string[] = [];
 const INSURANCE_RISK_AMOUNTS = [15000, 30000, 50000] as const;
+const MIN_INSURANCE_DAYS = 3;
 
 const serializeGuestExcursions = (value: Record<string, string[]>) => {
   const keys = Object.keys(value).sort();
@@ -460,6 +461,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
   const [flightMocked, setFlightMocked] = useState(false);
   const [insuranceQuoteLoading, setInsuranceQuoteLoading] = useState(false);
   const [insuranceQuoteError, setInsuranceQuoteError] = useState<string | null>(null);
+  const [insuranceDateValidationError, setInsuranceDateValidationError] = useState<string | null>(null);
   const [selectionWarning, setSelectionWarning] = useState<string | null>(null);
   const [previewDestinationName, setPreviewDestinationName] = useState<string | null>(null);
   const [previewDestinationCode, setPreviewDestinationCode] = useState<string | null>(null);
@@ -573,6 +575,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
         setShowInsuranceDatePicker(false);
         setInsuranceDateDraft(null);
         setInsuranceDateFocusedRange([0, 0]);
+        setInsuranceDateValidationError(null);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -678,6 +681,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
     setShowInsuranceDatePicker(false);
     setInsuranceDateDraft(null);
     setInsuranceDateFocusedRange([0, 0]);
+    setInsuranceDateValidationError(null);
   }, [insuranceSelection?.selected]);
   const transferMissingDestination =
     serviceKey === "transfer" && hasHotel && !destinationName && !destinationCode;
@@ -733,6 +737,23 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
     const endDate = parseDateInput(insuranceEndDateRaw) ?? startDate;
     return { startDate, endDate, key: "selection" };
   }, [insuranceEndDateRaw, insuranceStartDateRaw]);
+  const resolveInsuranceMinimumDaysError = useCallback(
+    (startDate?: string | null, endDate?: string | null) => {
+      const days = calculateTripDays(startDate, endDate);
+      if (typeof days === "number" && days < MIN_INSURANCE_DAYS) {
+        return t.packageBuilder.insurance.errors.minimumDays;
+      }
+      return null;
+    },
+    [t.packageBuilder.insurance.errors.minimumDays]
+  );
+  const insuranceSelectionDateError = insuranceSelection?.selected
+    ? resolveInsuranceMinimumDaysError(
+        insuranceSelection.startDate ?? hotelSelection?.checkInDate ?? null,
+        insuranceSelection.endDate ?? hotelSelection?.checkOutDate ?? null
+      )
+    : null;
+  const insuranceDateErrorLabel = insuranceDateValidationError ?? insuranceSelectionDateError;
 
   const airportOptions = useMemo(() => {
     const map = new Map<string, TransferAirportOption>();
@@ -1155,6 +1176,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
     if (travelers.length === 0) return null;
     const days =
       calculateTripDays(startDate, endDate) ?? insuranceSelection.days ?? undefined;
+    if (typeof days === "number" && days < MIN_INSURANCE_DAYS) return null;
     const payload = {
       startDate,
       endDate,
@@ -1351,6 +1373,8 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
     };
   }, [
     insuranceQuoteRequest,
+    insuranceSelection?.quoteError,
+    insuranceSelection?.quoteLoading,
     insuranceSelection?.selected,
     t.packageBuilder.checkout.errors.insuranceQuoteFailed,
     t.packageBuilder.insurance.errors,
@@ -2295,6 +2319,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
     excursionTotals.currency,
     guestExcursions,
     serviceKey,
+    storedExcursionHasSelections,
     storedExcursionSelectionKey,
     t.packageBuilder.services.excursion,
   ]);
@@ -2475,6 +2500,10 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
         nextRiskByGuest[guestId] = plan.riskAmount;
       });
       const territory = insuranceTerritories[0];
+      const nextStartDate = hotelSelection?.checkInDate ?? null;
+      const nextEndDate = hotelSelection?.checkOutDate ?? null;
+      const nextDateError = resolveInsuranceMinimumDaysError(nextStartDate, nextEndDate);
+      setInsuranceDateValidationError(nextDateError);
       updateInsuranceSelection({
         label: plan.title,
         planId: plan.id,
@@ -2493,9 +2522,9 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
         quoteDiscountedPriceCoverages: null,
         quotePriceCoveragesByGuest: null,
         quoteDiscountedPriceCoveragesByGuest: null,
-        quoteError: null,
-        startDate: hotelSelection?.checkInDate ?? null,
-        endDate: hotelSelection?.checkOutDate ?? null,
+        quoteError: nextDateError,
+        startDate: nextStartDate,
+        endDate: nextEndDate,
         territoryCode: insuranceSelection?.territoryCode ?? territory?.code ?? "",
         territoryLabel: insuranceSelection?.territoryLabel ?? territory?.label ?? "",
         territoryPolicyLabel:
@@ -2532,6 +2561,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
       hotelSelection?.checkInDate,
       hotelSelection?.checkOutDate,
       t.packageBuilder.insurance.defaultTravelCountry,
+      resolveInsuranceMinimumDaysError,
       requestHotelSelection,
       updateInsuranceSelection,
     ]
@@ -2554,10 +2584,21 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
         quoteDiscountedPriceCoverages: null,
         quotePriceCoveragesByGuest: null,
         quoteDiscountedPriceCoveragesByGuest: null,
-        quoteError: null,
+        quoteError: resolveInsuranceMinimumDaysError(
+          insuranceSelection?.startDate ?? hotelSelection?.checkInDate ?? null,
+          insuranceSelection?.endDate ?? hotelSelection?.checkOutDate ?? null
+        ),
       });
     },
-    [insuranceTerritories, updateInsuranceSelection]
+    [
+      hotelSelection?.checkInDate,
+      hotelSelection?.checkOutDate,
+      insuranceSelection?.endDate,
+      insuranceSelection?.startDate,
+      insuranceTerritories,
+      resolveInsuranceMinimumDaysError,
+      updateInsuranceSelection,
+    ]
   );
 
   const handleToggleInsuranceGuestCoverage = useCallback((guestId: string | null) => {
@@ -2587,12 +2628,20 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
       quoteDiscountedPriceCoverages: null,
       quotePriceCoveragesByGuest: null,
       quoteDiscountedPriceCoveragesByGuest: null,
-      quoteError: null,
+      quoteError: resolveInsuranceMinimumDaysError(
+        insuranceSelection?.startDate ?? hotelSelection?.checkInDate ?? null,
+        insuranceSelection?.endDate ?? hotelSelection?.checkOutDate ?? null
+      ),
     });
   }, [
+    hotelSelection?.checkInDate,
+    hotelSelection?.checkOutDate,
     insuranceGuestIds,
+    insuranceSelection?.endDate,
     insuranceSelection?.selected,
+    insuranceSelection?.startDate,
     selectedInsuranceGuestIds,
+    resolveInsuranceMinimumDaysError,
     updateInsuranceSelection,
   ]);
 
@@ -2634,18 +2683,25 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
       if (!selection?.startDate || !selection.endDate) return;
       const startDate = formatDateLocal(selection.startDate);
       const endDate = formatDateLocal(selection.endDate);
+      const nextDateError = resolveInsuranceMinimumDaysError(startDate, endDate);
       setInsuranceDateDraft({ startDate, endDate });
       if (insuranceDateFocusedRange[1] === 0) {
+        return;
+      }
+      if (nextDateError) {
+        setInsuranceDateValidationError(nextDateError);
         return;
       }
       const currentStart = insuranceSelection.startDate ?? null;
       const currentEnd = insuranceSelection.endDate ?? null;
       if (currentStart === startDate && currentEnd === endDate) {
+        setInsuranceDateValidationError(null);
         setInsuranceDateDraft(null);
         setInsuranceDateFocusedRange([0, 0]);
         setShowInsuranceDatePicker(false);
         return;
       }
+      setInsuranceDateValidationError(null);
       updateInsuranceSelection({
         startDate,
         endDate,
@@ -2671,6 +2727,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
       insuranceSelection?.selected,
       insuranceSelection?.startDate,
       insuranceSelection?.endDate,
+      resolveInsuranceMinimumDaysError,
       updateInsuranceSelection,
     ]
   );
@@ -2689,6 +2746,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
   ]);
 
   const handleRemoveInsurance = useCallback(() => {
+    setInsuranceDateValidationError(null);
     updatePackageBuilderState((prev) => ({
       ...prev,
       insurance: undefined,
@@ -2697,6 +2755,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
   }, []);
 
   const handleToggleInsuranceDatePicker = useCallback(() => {
+    setInsuranceDateValidationError(null);
     setInsuranceDateDraft(null);
     setInsuranceDateFocusedRange([0, 0]);
     setShowInsuranceDatePicker((prev) => !prev);
@@ -3388,6 +3447,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
               />
             </div>
           ) : null}
+          {insuranceDateErrorLabel ? <p className="state error">{insuranceDateErrorLabel}</p> : null}
         </div>
         
       </div>
@@ -3929,7 +3989,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
     const roamingLabel = t.packageBuilder.insurance.roamingLabel.trim();
     const summaryTitle = selectedPlan?.title ?? t.packageBuilder.services.insurance;
     const insuranceQuoteErrorLabel =
-      insuranceQuoteError ?? insuranceSelection?.quoteError ?? null;
+      insuranceDateErrorLabel ?? insuranceQuoteError ?? insuranceSelection?.quoteError ?? null;
     const activeGuestCovered =
       activeInsuranceGuestId ? selectedInsuranceGuestIdSet.has(activeInsuranceGuestId) : true;
     const activeGuestPriceCoverages =

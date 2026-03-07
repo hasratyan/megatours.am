@@ -160,6 +160,7 @@ export type Translation = {
       guestToggleAdd: string;
       errors: {
         invalidDays: string;
+        minimumDays: string;
         ageLimit: string;
       };
       subrisks: {
@@ -1274,7 +1275,7 @@ const translations: Record<Locale, Translation> = {
       warningSelectHotel: "Փաթեթ կազմելու համար առաջնահերթ ընտրեք հյուրանոց։",
       sessionExpiresIn: "Սեսիայի ավարտին մնացել է",
       sessionWarningTen:
-        "Հարգելի այցելու, խնդրում ենք շտապել ավարտել վճարումը, հակառակ դեպքում ձեր փաթեթը կվերակայվի։ Պատվերը ավարտելուց հետո Ձեզ կտրվի հնարավորություն ընտրել նաև լրացուցիչ ծառայություններ։",
+        "Հարգելի այցելու, խնդրում ենք շտապել ավարտել վճարումը, հակառակ դեպքում ձեր փաթեթը կվերակայվի։ Ամրագրումը ավարտելուց հետո Ձեզ կտրվի հնարավորություն ընտրել նաև լրացուցիչ ծառայություններ։",
       sessionWarningFive: "Մնացել է 5 րոպե՝ փաթեթի վճարումը ավարտելու համար։",
       sessionExpired: "Սեսիան ավարտվել է։ Փաթեթը վերակայվել է։ Խնդրում ենք նորից ընտրել հյուրանոցը։",
       requiredTag: "Պարտադիր",
@@ -1381,6 +1382,7 @@ const translations: Record<Locale, Translation> = {
         guestToggleAdd: "Ավելացնել ապահովագրությունը այս հյուրի համար",
         errors: {
           invalidDays: "Ճանապարհորդության օրերի քանակը սխալ է լրացված",
+          minimumDays: "Նվազագույն օրերի քանակը 3 է։",
           ageLimit:
             "100 տարեկանից բարձր անձինք չեն կարող ապահովագրվել։ Խնդրում ենք շտկել ծննդյան ամսաթիվը։",
         },
@@ -2735,7 +2737,7 @@ const translations: Record<Locale, Translation> = {
       warningSelectHotel: "Please select a hotel to continue building your package.",
       sessionExpiresIn: "Session expires in",
       sessionWarningTen:
-        "Dear guest, please hurry up to complete checkout, otherwise your package will be reset. You can select additional services later after completing the order as well.",
+        "Dear guest, please hurry up to complete checkout, otherwise your package will be reset. You can select additional services later after completing the booking as well.",
       sessionWarningFive: "5 minutes left to complete your package payment.",
       sessionExpired: "Session expired. Your package has been reset. Please select a hotel again.",
       requiredTag: "Required",
@@ -2842,6 +2844,7 @@ const translations: Record<Locale, Translation> = {
         guestToggleAdd: "Add insurance for this guest",
         errors: {
           invalidDays: "The number of travel days is incorrect.",
+          minimumDays: "The minimum number of days is 3.",
           ageLimit:
             "Travelers older than 100 cannot be insured. Please correct the birth date.",
         },
@@ -4197,7 +4200,7 @@ const translations: Record<Locale, Translation> = {
       warningSelectHotel: "Пожалуйста, выберите отель, чтобы продолжить сборку пакета.",
       sessionExpiresIn: "Сессия истекает через",
       sessionWarningTen:
-        "Уважаемый гость, пожалуйста, поторопитесь завершить оплату, иначе ваш пакет будет сброшен. Дополнительные услуги можно выбрать после завершения заказа.",
+        "Уважаемый гость, пожалуйста, поторопитесь завершить оплату, иначе ваш пакет будет сброшен. Дополнительные услуги можно выбрать после завершения бронирование.",
       sessionWarningFive: "Осталось 5 минут, чтобы завершить оплату пакета.",
       sessionExpired: "Сессия истекла. Пакет сброшен. Пожалуйста, выберите отель снова.",
       requiredTag: "Обязательно",
@@ -4310,6 +4313,7 @@ const translations: Record<Locale, Translation> = {
         guestToggleAdd: "Добавить страховку для этого гостя",
         errors: {
           invalidDays: "Неверно указано количество дней поездки.",
+          minimumDays: "Минимальное количество дней — 3.",
           ageLimit:
             "Путешественники старше 100 лет не могут быть застрахованы. Исправьте дату рождения.",
         },
