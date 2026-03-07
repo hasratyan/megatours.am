@@ -445,6 +445,11 @@ const resolveNonEmptyString = (
 const isArmenianCitizenship = (value: string | null | undefined) =>
   resolveCountryAlpha2(value) === "AM";
 
+const shouldUseInsuranceSocialCard = (
+  citizenship: string | null | undefined,
+  residency: boolean | null | undefined
+) => isArmenianCitizenship(citizenship) && residency === true;
+
 const serializeInsuranceTraveler = (
   traveler: Partial<InsuranceTravelerForm> | BookingInsuranceTraveler | null | undefined
 ) => {
@@ -2009,7 +2014,7 @@ export default function PackageCheckoutClient({
       const travelerRiskLabel =
         resolveGuestRiskLabel() ?? normalizeOptional(traveler.riskLabel);
       const citizenship = normalizeOptional(traveler.citizenship);
-      const socialCard = isArmenianCitizenship(citizenship)
+      const socialCard = shouldUseInsuranceSocialCard(citizenship, traveler.residency)
         ? normalizeOptional(traveler.socialCard)
         : null;
       return {
@@ -2053,10 +2058,16 @@ export default function PackageCheckoutClient({
   ) => {
     setInsuranceQuoteError(null);
     const normalizedUpdates: Partial<InsuranceTravelerForm> = { ...updates };
-    if (
-      Object.prototype.hasOwnProperty.call(normalizedUpdates, "citizenship") &&
-      !isArmenianCitizenship(normalizedUpdates.citizenship ?? null)
-    ) {
+    const currentTraveler = insuranceTravelers.find((traveler) => traveler.id === travelerId) ?? null;
+    const nextCitizenship =
+      Object.prototype.hasOwnProperty.call(normalizedUpdates, "citizenship")
+        ? normalizedUpdates.citizenship ?? null
+        : currentTraveler?.citizenship ?? null;
+    const nextResidency =
+      Object.prototype.hasOwnProperty.call(normalizedUpdates, "residency")
+        ? normalizedUpdates.residency
+        : currentTraveler?.residency;
+    if (!shouldUseInsuranceSocialCard(nextCitizenship, nextResidency)) {
       normalizedUpdates.socialCard = "";
     }
     const dateFieldsToReset: Array<keyof InsuranceTravelerFieldErrors> = [];
@@ -3351,7 +3362,7 @@ export default function PackageCheckoutClient({
         Boolean(normalizeOptional(traveler.passportIssueDate)) &&
         Boolean(normalizeOptional(traveler.passportExpiryDate)) &&
         (traveler.type !== "Adult" ||
-          !isArmenianCitizenship(traveler.citizenship) ||
+          !shouldUseInsuranceSocialCard(traveler.citizenship, traveler.residency) ||
           Boolean(normalizeOptional(traveler.socialCard))) &&
         Boolean(normalizeOptional(traveler.citizenship)) &&
         traveler.residency !== null &&
@@ -3947,8 +3958,9 @@ export default function PackageCheckoutClient({
                         travelerFieldErrors?.passportIssueDate ?? null;
                       const passportExpiryDateFieldError =
                         travelerFieldErrors?.passportExpiryDate ?? null;
-                      const isArmenianInsuranceTraveler = isArmenianCitizenship(
-                        traveler.citizenship
+                      const shouldShowInsuranceSocialCard = shouldUseInsuranceSocialCard(
+                        traveler.citizenship,
+                        traveler.residency
                       );
                       const canCopyLeadTravelerContact = travelerIndex > 0;
                       const rawSubrisks = resolveGuestSubrisks(traveler.id);
@@ -4191,6 +4203,10 @@ export default function PackageCheckoutClient({
                               onChange={(event) =>
                                 updateInsuranceTraveler(traveler.id, {
                                   residency: event.target.value === "1",
+                                  ...(event.target.value === "1" &&
+                                  isArmenianCitizenship(traveler.citizenship)
+                                    ? {}
+                                    : { socialCard: "" }),
                                 })
                               }
                               required
@@ -4208,7 +4224,7 @@ export default function PackageCheckoutClient({
                                 const citizenship = selected?.value ?? "";
                                 updateInsuranceTraveler(traveler.id, {
                                   citizenship,
-                                  ...(isArmenianCitizenship(citizenship)
+                                  ...(shouldUseInsuranceSocialCard(citizenship, traveler.residency)
                                     ? {}
                                     : { socialCard: "" }),
                                 });
@@ -4224,7 +4240,7 @@ export default function PackageCheckoutClient({
                               noOptionsMessage={() => t.packageBuilder.checkout.countryPlaceholder}
                             />
                           </label>
-                          {isArmenianInsuranceTraveler ? (
+                          {shouldShowInsuranceSocialCard ? (
                             <label className="checkout-field">
                               <span>{t.packageBuilder.checkout.insuranceFields.socialCard}</span>
                               <input
@@ -4242,7 +4258,7 @@ export default function PackageCheckoutClient({
                                     socialCard: event.target.value,
                                   })
                                 }
-                                required={traveler.type === "Adult" && isArmenianInsuranceTraveler}
+                                required={traveler.type === "Adult" && shouldShowInsuranceSocialCard}
                               />
                             </label>
                           ) : null}

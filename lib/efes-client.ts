@@ -124,6 +124,11 @@ const isArmenianEfesCitizenship = (value: string | null | undefined) => {
   return normalized === "ARM" || normalized === "AM";
 };
 
+const shouldSendEfesSocialCard = (
+  citizenship: string | null | undefined,
+  residency: boolean | null | undefined
+) => isArmenianEfesCitizenship(citizenship) && residency === true;
+
 const maskSensitive = (value: unknown) =>
   typeof value === "string" && value.trim().length > 0 ? "<masked>" : value;
 
@@ -820,7 +825,10 @@ const buildPolicyPayload = (request: EfesPolicyRequest) => {
     resolveEfesCountry(insuredTraveler.citizenship) ??
     insuredTraveler.citizenship ??
     "ARM";
-  const insuredSocialCard = isArmenianEfesCitizenship(insuredCitizenship)
+  const insuredSocialCard = shouldSendEfesSocialCard(
+    insuredCitizenship,
+    insuredTraveler.residency
+  )
     ? insuredTraveler.socialCard ?? ""
     : "";
   const insuredMobilePhone = normalizeEfesPhone(
@@ -841,7 +849,7 @@ const buildPolicyPayload = (request: EfesPolicyRequest) => {
     resolveEfesCountry(traveler.citizenship) ??
     traveler.citizenship ??
     "ARM";
-  const travelSocialCard = isArmenianEfesCitizenship(travelCitizenship)
+  const travelSocialCard = shouldSendEfesSocialCard(travelCitizenship, traveler.residency)
     ? traveler.socialCard ?? ""
     : "";
   const travelMobilePhone = normalizeEfesPhone(traveler.mobilePhone ?? traveler.phone);
