@@ -59,10 +59,15 @@ type IdbankStatusResponse = {
   amount?: number | string;
   currency?: number | string;
   orderStatus?: number | string;
+  orderStatusName?: string;
   actionCode?: number | string;
   actionCodeDescription?: string;
   errorCode?: number | string;
   errorMessage?: string;
+  paymentState?: number | string;
+  PaymentState?: number | string;
+  paymentAmountInfo?: Record<string, unknown>;
+  PaymentAmountInfo?: Record<string, unknown>;
 };
 
 type AmeriaStatusResponse = {
@@ -270,6 +275,18 @@ const toDate = (value: unknown): Date | null => {
   return null;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const readField = (record: Record<string, unknown>, keys: string[]) => {
+  for (const key of keys) {
+    if (record[key] != null) {
+      return record[key];
+    }
+  }
+  return undefined;
+};
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const hasBookingResult = (record: VposPaymentRecord | null) => record?.bookingResult != null;
@@ -345,6 +362,42 @@ const extractJsonResponse = async (response: Response): Promise<Record<string, u
   }
 };
 
+const resolveIdbankPaidState = (payload: Record<string, unknown>) => {
+  const paymentAmountInfo = isRecord(readField(payload, ["paymentAmountInfo", "PaymentAmountInfo"]))
+    ? (readField(payload, ["paymentAmountInfo", "PaymentAmountInfo"]) as Record<string, unknown>)
+    : null;
+  const orderStatus = toNumber(payload.orderStatus);
+  const orderStatusName = resolveString(payload.orderStatusName).toLowerCase();
+  const paymentState = resolveString(
+    readField({ ...payload, ...(paymentAmountInfo ?? {}) }, ["paymentState", "PaymentState"])
+  ).toLowerCase();
+  const approvedAmount = toNumber(readField(paymentAmountInfo ?? {}, ["approvedAmount", "ApprovedAmount"]));
+  const depositedAmount = toNumber(readField(paymentAmountInfo ?? {}, ["depositedAmount", "DepositedAmount"]));
+  const normalizedErrorCode = toNumber(payload.errorCode) ?? 0;
+
+  const hasPaidOrderStatus = orderStatus === 1 || orderStatus === 2;
+  const hasPaidOrderStatusName =
+    orderStatusName === "payment_approved" || orderStatusName === "payment_deposited";
+  const hasPaidPaymentState =
+    paymentState === "1" ||
+    paymentState === "2" ||
+    paymentState === "payment_approved" ||
+    paymentState === "payment_deposited" ||
+    paymentState === "approved" ||
+    paymentState === "deposited";
+  const hasCapturedAmount =
+    (typeof depositedAmount === "number" && depositedAmount > 0) ||
+    (typeof approvedAmount === "number" && approvedAmount > 0);
+
+  return {
+    responseAmountMinor: depositedAmount ?? approvedAmount ?? toNumber(payload.amount),
+    responseCurrency: normalizeCurrencyCode(payload.currency),
+    gatewaySuccess:
+      normalizedErrorCode === 0 &&
+      (hasPaidOrderStatus || hasPaidOrderStatusName || hasPaidPaymentState || hasCapturedAmount),
+  };
+};
+
 const fetchIdbankStatus = async (
   orderId: string,
   language: string
@@ -376,23 +429,20 @@ const fetchIdbankStatus = async (
   const orderStatus = toNumber(payload.orderStatus);
   const actionCode = toNumber(payload.actionCode);
   const errorCode = toNumber(payload.errorCode);
-  const responseAmountMinor = toNumber(payload.amount);
-  const responseCurrency = normalizeCurrencyCode(payload.currency);
+  const paidState = resolveIdbankPaidState(payload);
   const actionCodeDescription =
     typeof payload.actionCodeDescription === "string" ? payload.actionCodeDescription : null;
   const errorMessage = typeof payload.errorMessage === "string" ? payload.errorMessage : null;
-  const normalizedErrorCode = errorCode ?? 0;
-  const gatewaySuccess = normalizedErrorCode === 0 && orderStatus === 2;
 
   return {
-    responseAmountMinor,
-    responseCurrency,
+    responseAmountMinor: paidState.responseAmountMinor,
+    responseCurrency: paidState.responseCurrency,
     orderStatus,
     actionCode,
     actionCodeDescription,
     errorCode,
     errorMessage,
-    gatewaySuccess,
+    gatewaySuccess: paidState.gatewaySuccess,
     raw: payload,
   };
 };
@@ -478,7 +528,56 @@ const getGatewayStatus = async (
   return fetchIdbankStatus(orderId, language);
 };
 
-export async function GET(request: NextRequest) {
+const appendCallbackParams = (target: URLSearchParams, payload: unknown) => {
+  if (!isRecord(payload)) return;
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value == null) return;
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      target.set(key, String(value));
+    }
+  });
+};
+
+const collectCallbackParams = async (request: NextRequest) => {
+  const params = new URLSearchParams(request.nextUrl.searchParams);
+  if (request.method === "GET" || request.method === "HEAD") {
+    return params;
+  }
+
+  const contentType = resolveString(request.headers.get("content-type")).toLowerCase();
+
+  try {
+    if (contentType.includes("application/json")) {
+      appendCallbackParams(params, await request.json());
+      return params;
+    }
+
+    const formData = await request.formData();
+    formData.forEach((value, key) => {
+      if (typeof value === "string") {
+        params.set(key, value);
+      }
+    });
+  } catch (error) {
+    console.warn("[Vpos][result] Failed to parse callback payload", {
+      method: request.method,
+      contentType,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+
+  return params;
+};
+
+const getFirstParam = (params: URLSearchParams, names: string[]) => {
+  for (const name of names) {
+    const value = params.get(name);
+    if (value) return value;
+  }
+  return null;
+};
+
+const handleResultCallback = async (request: NextRequest) => {
   const publicOrigin = resolvePublicOrigin(request);
   const redirect = (
     locale: Locale,
@@ -486,10 +585,18 @@ export async function GET(request: NextRequest) {
     params: Record<string, string | undefined>
   ) => buildRedirect(publicOrigin, locale, path, params);
 
-  const searchParams = request.nextUrl.searchParams;
-  const paymentIdParam = searchParams.get("paymentID") || searchParams.get("paymentId");
-  const orderIdParam = searchParams.get("orderId") || searchParams.get("mdOrder") || paymentIdParam;
-  const orderNumberParam = searchParams.get("orderNumber") || searchParams.get("orderID");
+  const searchParams = await collectCallbackParams(request);
+  const paymentIdParam = getFirstParam(searchParams, ["paymentID", "paymentId", "PaymentID"]);
+  const orderIdParam =
+    getFirstParam(searchParams, ["orderId", "OrderId", "mdOrder", "MDORDER"]) ||
+    paymentIdParam;
+  const orderNumberParam = getFirstParam(searchParams, [
+    "orderNumber",
+    "OrderNumber",
+    "merchantOrderNumber",
+    "orderID",
+    "OrderID",
+  ]);
 
   if (!orderIdParam && !orderNumberParam) {
     return redirect(defaultLocale, "/payment/fail", {});
@@ -1039,4 +1146,12 @@ export async function GET(request: NextRequest) {
     console.error("[Vpos][result] Booking failed", error);
     return redirect(locale, "/payment/fail", { orderId, orderNumber });
   }
+};
+
+export async function GET(request: NextRequest) {
+  return handleResultCallback(request);
+}
+
+export async function POST(request: NextRequest) {
+  return handleResultCallback(request);
 }
