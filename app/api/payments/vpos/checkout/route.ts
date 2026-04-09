@@ -892,6 +892,89 @@ const tryHandleBookingAddonCheckout = async (params: {
       gatewayError instanceof Error && gatewayError.message.trim().length > 0
         ? gatewayError.message
         : "Failed to initialize card payment.";
+    const failedAt = new Date();
+    await vposCollection.insertOne({
+      flow: "booking_addons",
+      provider: params.provider,
+      orderId: null,
+      orderNumber,
+      status: "init_failed",
+      amount: {
+        value: amountValue,
+        minor: amountMinor,
+        currency: "AMD",
+        currencyCode,
+        decimals: currencyDecimals,
+        baseValue: addonAmountAmd.totalAmd,
+        baseCurrency: "AMD",
+        convertedValue: addonAmountAmd.totalAmd,
+        breakdownAmd: {
+          rooms: 0,
+          transfer: addonAmountAmd.breakdownAmd.transfer,
+          excursions: addonAmountAmd.breakdownAmd.excursions,
+          insurance: addonAmountAmd.breakdownAmd.insurance,
+          flights: addonAmountAmd.breakdownAmd.flights,
+        },
+        discount: null,
+      },
+      description,
+      payload: userBooking.payload,
+      addon: {
+        targetBookingId: userBooking._id.toString(),
+        customerRefNumber: addonRequest.bookingId,
+        serviceKeys: addonRequest.serviceKeys,
+        services: addonRequest.services,
+        existingServiceKeys: [...existingServiceKeys],
+      },
+      userId,
+      userEmail: session?.user?.email ?? null,
+      userName: session?.user?.name ?? null,
+      locale: params.locale,
+      diagnostics: {
+        events: [
+          {
+            at: failedAt,
+            stage: "checkout",
+            level: "error",
+            reason: "payment_attempt_init_failed",
+            details: {
+              provider: params.provider,
+              flow: "booking_addons",
+              orderNumber,
+              bookingId: addonRequest.bookingId,
+              amountMinor,
+              currencyCode,
+              locale: params.locale,
+              message,
+            },
+          },
+        ],
+        lastEvent: {
+          at: failedAt,
+          stage: "checkout",
+          level: "error",
+          reason: "payment_attempt_init_failed",
+          message,
+        },
+        lastApplicationError: {
+          at: failedAt,
+          reason: "payment_attempt_init_failed",
+          message,
+        },
+        updatedAt: failedAt,
+      },
+      bookingError: message,
+      createdAt: failedAt,
+      updatedAt: failedAt,
+    });
+    console.error("[Vpos][checkout] Gateway init failed for booking add-ons", {
+      provider: params.provider,
+      bookingId: addonRequest.bookingId,
+      amountMinor,
+      currencyCode,
+      locale: params.locale,
+      message,
+    });
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
@@ -935,8 +1018,46 @@ const tryHandleBookingAddonCheckout = async (params: {
     userName: session?.user?.name ?? null,
     locale: params.locale,
     gateway: initResult.gatewayMeta,
+    diagnostics: {
+      events: [
+        {
+          at: now,
+          stage: "checkout",
+          level: "info",
+          reason: "payment_attempt_created",
+          details: {
+            provider: params.provider,
+            flow: "booking_addons",
+            orderId: initResult.orderId,
+            orderNumber: initResult.orderNumber,
+            bookingId: addonRequest.bookingId,
+            amountMinor,
+            currencyCode,
+            locale: params.locale,
+          },
+        },
+      ],
+      lastEvent: {
+        at: now,
+        stage: "checkout",
+        level: "info",
+        reason: "payment_attempt_created",
+      },
+      updatedAt: now,
+    },
     createdAt: now,
     updatedAt: now,
+  });
+
+  console.info("[Vpos][checkout] Stored booking add-on payment attempt", {
+    provider: params.provider,
+    flow: "booking_addons",
+    orderId: initResult.orderId,
+    orderNumber: initResult.orderNumber,
+    bookingId: addonRequest.bookingId,
+    amountMinor,
+    currencyCode,
+    locale: params.locale,
   });
 
   return NextResponse.json({
@@ -1213,6 +1334,83 @@ export async function POST(request: NextRequest) {
         gatewayError instanceof Error && gatewayError.message.trim().length > 0
           ? gatewayError.message
           : "Failed to initialize card payment.";
+      const failedAt = new Date();
+      await vposCollection.insertOne({
+        provider,
+        orderId: null,
+        orderNumber,
+        status: "init_failed",
+        bookingFingerprint,
+        bookingKey: {
+          sessionId: payload.sessionId,
+          hotelCode: payload.hotelCode,
+          groupCode: payload.groupCode,
+          rateKeyHashes: bookingRateKeyHashes,
+        },
+        amount: {
+          value: amountValue,
+          minor: amountMinor,
+          currency: "AMD",
+          currencyCode,
+          decimals: currencyDecimals,
+          baseValue: baseAmount,
+          baseCurrency: payload.currency,
+          convertedValue: totalAmd,
+          breakdownAmd: amountBreakdownAmd,
+          discount: couponAmountBreakdownAmd,
+        },
+        description,
+        payload,
+        prebookState,
+        coupon: couponAmountBreakdownAmd,
+        locale,
+        diagnostics: {
+          events: [
+            {
+              at: failedAt,
+              stage: "checkout",
+              level: "error",
+              reason: "payment_attempt_init_failed",
+              details: {
+                provider,
+                flow: "booking",
+                orderNumber,
+                sessionId: payload.sessionId,
+                customerRefNumber: payload.customerRefNumber ?? null,
+                amountMinor,
+                currencyCode,
+                locale,
+                message,
+              },
+            },
+          ],
+          lastEvent: {
+            at: failedAt,
+            stage: "checkout",
+            level: "error",
+            reason: "payment_attempt_init_failed",
+            message,
+          },
+          lastApplicationError: {
+            at: failedAt,
+            reason: "payment_attempt_init_failed",
+            message,
+          },
+          updatedAt: failedAt,
+        },
+        bookingError: message,
+        createdAt: failedAt,
+        updatedAt: failedAt,
+      });
+      console.error("[Vpos][checkout] Gateway init failed for booking payment", {
+        provider,
+        sessionId: payload.sessionId,
+        customerRefNumber: payload.customerRefNumber ?? null,
+        amountMinor,
+        currencyCode,
+        locale,
+        message,
+      });
       return NextResponse.json({ error: message }, { status: 502 });
     }
 
@@ -1255,8 +1453,47 @@ export async function POST(request: NextRequest) {
       userName: userNameValue,
       locale,
       gateway: initResult.gatewayMeta,
+      diagnostics: {
+        events: [
+          {
+            at: now,
+            stage: "checkout",
+            level: "info",
+            reason: "payment_attempt_created",
+            details: {
+              provider,
+              flow: "booking",
+              orderId: initResult.orderId,
+              orderNumber: initResult.orderNumber,
+              sessionId: payload.sessionId,
+              customerRefNumber: payload.customerRefNumber ?? null,
+              amountMinor,
+              currencyCode,
+              locale,
+            },
+          },
+        ],
+        lastEvent: {
+          at: now,
+          stage: "checkout",
+          level: "info",
+          reason: "payment_attempt_created",
+        },
+        updatedAt: now,
+      },
       createdAt: now,
       updatedAt: now,
+    });
+
+    console.info("[Vpos][checkout] Stored booking payment attempt", {
+      provider,
+      orderId: initResult.orderId,
+      orderNumber: initResult.orderNumber,
+      sessionId: payload.sessionId,
+      customerRefNumber: payload.customerRefNumber ?? null,
+      amountMinor,
+      currencyCode,
+      locale,
     });
 
     return NextResponse.json({

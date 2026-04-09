@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
+import { ObjectId, type Collection, type Document } from "mongodb";
 import { getDb } from "@/lib/db";
 import { AoryxClientError, book, bookingDetails } from "@/lib/aoryx-client";
 import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
@@ -577,6 +577,19 @@ const getFirstParam = (params: URLSearchParams, names: string[]) => {
   return null;
 };
 
+const buildDiagnosticEvent = (
+  stage: string,
+  level: "info" | "warn" | "error",
+  reason: string,
+  details: Record<string, unknown> = {}
+) => ({
+  at: new Date(),
+  stage,
+  level,
+  reason,
+  details,
+});
+
 const handleResultCallback = async (request: NextRequest) => {
   const publicOrigin = resolvePublicOrigin(request);
   const redirect = (
@@ -597,9 +610,116 @@ const handleResultCallback = async (request: NextRequest) => {
     "orderID",
     "OrderID",
   ]);
+  const callbackDetails = {
+    method: request.method,
+    path: request.nextUrl.pathname,
+    contentType: resolveString(request.headers.get("content-type")) || null,
+    clientIp: resolveString(request.headers.get("x-forwarded-for")).split(",")[0]?.trim() || null,
+    userAgent: resolveString(request.headers.get("user-agent")) || null,
+    paramKeys: Array.from(new Set(Array.from(searchParams.keys()))).sort(),
+    paymentIdParam,
+    orderIdParam,
+    orderNumberParam,
+    mdOrderParam: getFirstParam(searchParams, ["mdOrder", "MDORDER"]),
+    callbackErrorCode: getFirstParam(searchParams, ["errorCode", "ErrorCode"]),
+    callbackActionCode: getFirstParam(searchParams, ["actionCode", "ActionCode"]),
+  };
+  let paymentCollection: Collection<Document> | null = null;
+  let diagnosticOrderId: string | null = orderIdParam ?? paymentIdParam ?? null;
+  const appendDiagnosticEvent = async (
+    stage: string,
+    level: "info" | "warn" | "error",
+    reason: string,
+    details: Record<string, unknown> = {},
+    extraSet: Record<string, unknown> = {}
+  ) => {
+    if (!paymentCollection || !diagnosticOrderId) return;
+    const event = buildDiagnosticEvent(stage, level, reason, details);
+    try {
+      await paymentCollection.updateOne(
+        { orderId: diagnosticOrderId },
+        {
+          $push: {
+            "diagnostics.events": {
+              $each: [event],
+              $slice: -50,
+            },
+          },
+          $set: {
+            "diagnostics.lastEvent": event,
+            "diagnostics.updatedAt": new Date(),
+            ...extraSet,
+          },
+        } as Document
+      );
+    } catch (error) {
+      console.error("[Vpos][result] Failed to persist diagnostic event", {
+        orderId: diagnosticOrderId,
+        stage,
+        reason,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  };
+  const logRedirect = async (
+    level: "info" | "warn" | "error",
+    side: "callback" | "database" | "gateway" | "integration" | "application",
+    locale: Locale,
+    path: "/payment/success" | "/payment/fail",
+    params: Record<string, string | undefined>,
+    reason: string,
+    details: Record<string, unknown> = {}
+  ) => {
+    const payload = {
+      side,
+      reason,
+      redirectPath: path,
+      locale,
+      redirectOrderId: params.orderId ?? null,
+      redirectOrderNumber: params.orderNumber ?? null,
+      ...callbackDetails,
+      ...details,
+    };
+    if (level === "error") {
+      console.error("[Vpos][result] Redirect decision", payload);
+    } else if (level === "warn") {
+      console.warn("[Vpos][result] Redirect decision", payload);
+    } else {
+      console.info("[Vpos][result] Redirect decision", payload);
+    }
+    await appendDiagnosticEvent(
+      "redirect",
+      level,
+      reason,
+      {
+        side,
+        redirectPath: path,
+        locale,
+        redirectOrderId: params.orderId ?? null,
+        redirectOrderNumber: params.orderNumber ?? null,
+        ...details,
+      },
+      {
+        "diagnostics.lastRedirectDecision": {
+          at: new Date(),
+          level,
+          side,
+          reason,
+          redirectPath: path,
+          locale,
+          redirectOrderId: params.orderId ?? null,
+          redirectOrderNumber: params.orderNumber ?? null,
+          ...details,
+        },
+      }
+    );
+    return redirect(locale, path, params);
+  };
+
+  console.info("[Vpos][result] Callback received", callbackDetails);
 
   if (!orderIdParam && !orderNumberParam) {
-    return redirect(defaultLocale, "/payment/fail", {});
+    return logRedirect("warn", "callback", defaultLocale, "/payment/fail", {}, "missing_callback_identifiers");
   }
 
   let db: Awaited<ReturnType<typeof getDb>>;
@@ -607,10 +727,11 @@ const handleResultCallback = async (request: NextRequest) => {
     db = await getDb();
   } catch (error) {
     console.error("[Vpos][result] Failed to connect to database", error);
-    return redirect(defaultLocale, "/payment/fail", {});
+    return logRedirect("error", "database", defaultLocale, "/payment/fail", {}, "database_connection_failed");
   }
 
   const collection = db.collection("vpos_payments");
+  paymentCollection = collection;
   let record = (orderIdParam
     ? await collection.findOne({ orderId: orderIdParam })
     : null) as VposPaymentRecord | null;
@@ -622,16 +743,52 @@ const handleResultCallback = async (request: NextRequest) => {
   }
 
   if (!record) {
-    return redirect(defaultLocale, "/payment/fail", {});
+    return logRedirect("warn", "callback", defaultLocale, "/payment/fail", {}, "payment_record_not_found");
   }
 
   const locale = resolveLocale(record.locale);
   const provider = resolveProvider(record.provider);
   const orderId = record.orderId || orderIdParam || paymentIdParam || "";
   const orderNumber = record.orderNumber || orderNumberParam || "";
+  diagnosticOrderId = orderId || diagnosticOrderId;
+
+  console.info("[Vpos][result] Payment record matched", {
+    orderId,
+    orderNumber,
+    provider,
+    recordStatus: record.status ?? null,
+    flow: record.flow ?? null,
+    locale,
+  });
+  await appendDiagnosticEvent(
+    "callback",
+    "info",
+    "payment_record_matched",
+    {
+      provider,
+      orderId,
+      orderNumber,
+      recordStatus: record.status ?? null,
+      flow: record.flow ?? null,
+    },
+    {
+      "diagnostics.lastCallback": {
+        at: new Date(),
+        ...callbackDetails,
+      },
+    }
+  );
 
   if (!orderId) {
-    return redirect(locale, "/payment/fail", { orderNumber });
+    return logRedirect(
+      "warn",
+      "integration",
+      locale,
+      "/payment/fail",
+      { orderNumber },
+      "resolved_payment_record_missing_order_id",
+      { provider, recordStatus: record.status ?? null }
+    );
   }
 
   if (record.status === "booking_complete") {
@@ -672,10 +829,26 @@ const handleResultCallback = async (request: NextRequest) => {
         console.error("[Vpos][result] Failed to update coupon order stats", error);
       }
     }
-    return redirect(locale, "/payment/success", { orderId, orderNumber });
+    return logRedirect(
+      "info",
+      "application",
+      locale,
+      "/payment/success",
+      { orderId, orderNumber },
+      "payment_already_completed",
+      { provider, recordStatus: record.status ?? null }
+    );
   }
   if (record.status === "booking_failed") {
-    return redirect(locale, "/payment/fail", { orderId, orderNumber });
+    return logRedirect(
+      "warn",
+      "application",
+      locale,
+      "/payment/fail",
+      { orderId, orderNumber },
+      "payment_record_already_failed",
+      { provider, recordStatus: record.status ?? null }
+    );
   }
 
   let statusResponse: GatewayStatus;
@@ -692,7 +865,15 @@ const handleResultCallback = async (request: NextRequest) => {
     statusResponse = await getGatewayStatus(provider, orderId, language, decimals);
   } catch (error) {
     console.error("[Vpos][result] Failed to query gateway status", error);
-    return redirect(locale, "/payment/fail", { orderId, orderNumber });
+    return logRedirect(
+      "error",
+      "gateway",
+      locale,
+      "/payment/fail",
+      { orderId, orderNumber },
+      "gateway_status_lookup_failed",
+      { provider, message: error instanceof Error ? error.message : "Unknown error" }
+    );
   }
 
   const expectedAmountMinor =
@@ -714,6 +895,67 @@ const handleResultCallback = async (request: NextRequest) => {
   const paymentSuccess = statusResponse.gatewaySuccess && !paymentMismatch;
   const canUpdateStatus = !["booking_in_progress", "booking_complete", "booking_failed"].includes(
     record.status ?? ""
+  );
+
+  console.info("[Vpos][result] Gateway status evaluated", {
+    provider,
+    orderId,
+    orderNumber,
+    gatewaySuccess: statusResponse.gatewaySuccess,
+    paymentSuccess,
+    paymentMismatch,
+    expectedAmountMinor,
+    actualAmountMinor: statusResponse.responseAmountMinor,
+    expectedCurrency,
+    actualCurrency: statusResponse.responseCurrency,
+    orderStatus: statusResponse.orderStatus,
+    actionCode: statusResponse.actionCode,
+    actionCodeDescription: statusResponse.actionCodeDescription,
+    errorCode: statusResponse.errorCode,
+    errorMessage: statusResponse.errorMessage,
+    recordStatus: record.status ?? null,
+  });
+  await appendDiagnosticEvent(
+    "gateway",
+    paymentSuccess ? "info" : paymentMismatch ? "warn" : "error",
+    paymentMismatch ? "gateway_status_mismatch" : paymentSuccess ? "gateway_status_confirmed" : "gateway_status_failed",
+    {
+      provider,
+      orderId,
+      orderNumber,
+      gatewaySuccess: statusResponse.gatewaySuccess,
+      paymentSuccess,
+      paymentMismatch,
+      expectedAmountMinor,
+      actualAmountMinor: statusResponse.responseAmountMinor,
+      expectedCurrency,
+      actualCurrency: statusResponse.responseCurrency,
+      orderStatus: statusResponse.orderStatus,
+      actionCode: statusResponse.actionCode,
+      actionCodeDescription: statusResponse.actionCodeDescription,
+      errorCode: statusResponse.errorCode,
+      errorMessage: statusResponse.errorMessage,
+    },
+    {
+      "diagnostics.lastGatewayEvaluation": {
+        at: new Date(),
+        provider,
+        orderId,
+        orderNumber,
+        gatewaySuccess: statusResponse.gatewaySuccess,
+        paymentSuccess,
+        paymentMismatch,
+        expectedAmountMinor,
+        actualAmountMinor: statusResponse.responseAmountMinor,
+        expectedCurrency,
+        actualCurrency: statusResponse.responseCurrency,
+        orderStatus: statusResponse.orderStatus,
+        actionCode: statusResponse.actionCode,
+        actionCodeDescription: statusResponse.actionCodeDescription,
+        errorCode: statusResponse.errorCode,
+        errorMessage: statusResponse.errorMessage,
+      },
+    }
   );
 
   const updateFields: Record<string, unknown> = {
@@ -754,7 +996,25 @@ const handleResultCallback = async (request: NextRequest) => {
   );
 
   if (!paymentSuccess) {
-    return redirect(locale, "/payment/fail", { orderId, orderNumber });
+    return logRedirect(
+      paymentMismatch ? "warn" : "error",
+      paymentMismatch ? "integration" : "gateway",
+      locale,
+      "/payment/fail",
+      { orderId, orderNumber },
+      paymentMismatch ? "gateway_amount_or_currency_mismatch" : "gateway_reported_unsuccessful_payment",
+      {
+        provider,
+        expectedAmountMinor,
+        actualAmountMinor: statusResponse.responseAmountMinor,
+        expectedCurrency,
+        actualCurrency: statusResponse.responseCurrency,
+        orderStatus: statusResponse.orderStatus,
+        actionCode: statusResponse.actionCode,
+        errorCode: statusResponse.errorCode,
+        errorMessage: statusResponse.errorMessage,
+      }
+    );
   }
 
   const lock = await collection.findOneAndUpdate(
@@ -784,7 +1044,15 @@ const handleResultCallback = async (request: NextRequest) => {
           }
         );
       }
-      return redirect(locale, "/payment/success", { orderId, orderNumber });
+      return logRedirect(
+        "info",
+        "application",
+        locale,
+        "/payment/success",
+        { orderId, orderNumber },
+        "booking_already_completed_after_lock_conflict",
+        { provider, latestStatus: latest?.status ?? null }
+      );
     }
     if (latest?.status === "booking_in_progress") {
       for (let attempt = 0; attempt < BOOKING_STATUS_POLL_ATTEMPTS; attempt += 1) {
@@ -802,10 +1070,26 @@ const handleResultCallback = async (request: NextRequest) => {
               }
             );
           }
-          return redirect(locale, "/payment/success", { orderId, orderNumber });
+          return logRedirect(
+            "info",
+            "application",
+            locale,
+            "/payment/success",
+            { orderId, orderNumber },
+            "booking_completed_during_polling",
+            { provider, pollAttempt: attempt + 1, latestStatus: polled?.status ?? null }
+          );
         }
         if (polled?.status === "booking_failed") {
-          return redirect(locale, "/payment/fail", { orderId, orderNumber });
+          return logRedirect(
+            "error",
+            "application",
+            locale,
+            "/payment/fail",
+            { orderId, orderNumber },
+            "booking_failed_during_polling",
+            { provider, pollAttempt: attempt + 1 }
+          );
         }
       }
 
@@ -842,12 +1126,28 @@ const handleResultCallback = async (request: NextRequest) => {
           orderId,
           provider,
         });
-        return redirect(locale, "/payment/success", { orderId, orderNumber });
+        return logRedirect(
+          "info",
+          "application",
+          locale,
+          "/payment/success",
+          { orderId, orderNumber },
+          "booking_still_in_progress_after_payment_callback",
+          { provider }
+        );
       }
     }
 
     if (!lockedRecord && latest?.status === "booking_failed") {
-      return redirect(locale, "/payment/fail", { orderId, orderNumber });
+      return logRedirect(
+        "error",
+        "application",
+        locale,
+        "/payment/fail",
+        { orderId, orderNumber },
+        "booking_failed_after_lock_conflict",
+        { provider, latestStatus: latest?.status ?? null }
+      );
     }
 
     if (!lockedRecord) {
@@ -867,17 +1167,41 @@ const handleResultCallback = async (request: NextRequest) => {
             }
           );
         }
-        return redirect(locale, "/payment/success", { orderId, orderNumber });
+        return logRedirect(
+          "info",
+          "application",
+          locale,
+          "/payment/success",
+          { orderId, orderNumber },
+          "booking_completed_after_recovery_check",
+          { provider, latestStatus: latestAfterRecovery?.status ?? null }
+        );
       }
       if (latestAfterRecovery?.status === "booking_failed") {
-        return redirect(locale, "/payment/fail", { orderId, orderNumber });
+        return logRedirect(
+          "error",
+          "application",
+          locale,
+          "/payment/fail",
+          { orderId, orderNumber },
+          "booking_failed_after_recovery_check",
+          { provider, latestStatus: latestAfterRecovery?.status ?? null }
+        );
       }
       if (latestAfterRecovery?.status === "booking_in_progress" && !isStaleInProgressRecord(latestAfterRecovery)) {
         console.info("[Vpos][result] Booking still in progress after recovery check", {
           orderId,
           provider,
         });
-        return redirect(locale, "/payment/success", { orderId, orderNumber });
+        return logRedirect(
+          "info",
+          "application",
+          locale,
+          "/payment/success",
+          { orderId, orderNumber },
+          "booking_still_in_progress_after_recovery_check",
+          { provider }
+        );
       }
     }
 
@@ -886,7 +1210,15 @@ const handleResultCallback = async (request: NextRequest) => {
         orderId,
         provider,
       });
-      return redirect(locale, "/payment/fail", { orderId, orderNumber });
+      return logRedirect(
+        "error",
+        "application",
+        locale,
+        "/payment/fail",
+        { orderId, orderNumber },
+        "booking_did_not_reach_terminal_state",
+        { provider }
+      );
     }
   }
 
@@ -899,10 +1231,23 @@ const handleResultCallback = async (request: NextRequest) => {
           status: "booking_failed",
           bookingError: "Missing booking payload",
           updatedAt: new Date(),
+          "diagnostics.lastApplicationError": {
+            at: new Date(),
+            reason: "missing_booking_payload_after_successful_payment",
+            message: "Missing booking payload",
+          },
         },
       }
     );
-    return redirect(locale, "/payment/fail", { orderId, orderNumber });
+    return logRedirect(
+      "error",
+      "application",
+      locale,
+      "/payment/fail",
+      { orderId, orderNumber },
+      "missing_booking_payload_after_successful_payment",
+      { provider, flow: lockedRecord.flow ?? null }
+    );
   }
 
   const paymentFlow = resolveString(lockedRecord.flow).toLowerCase();
@@ -976,11 +1321,32 @@ const handleResultCallback = async (request: NextRequest) => {
               skippedServices: merged.skippedServiceKeys,
             },
             updatedAt: appliedAt,
+            "diagnostics.lastApplicationResult": {
+              at: appliedAt,
+              reason: "booking_addons_applied",
+              requestedServiceKeys,
+              targetBookingId,
+            },
           },
         }
       );
 
-      return redirect(locale, "/payment/success", { orderId, orderNumber });
+      console.info("[Vpos][result] Booking add-ons applied after payment", {
+        provider,
+        orderId,
+        orderNumber,
+        requestedServiceKeys,
+        targetBookingId,
+      });
+      return logRedirect(
+        "info",
+        "application",
+        locale,
+        "/payment/success",
+        { orderId, orderNumber },
+        "booking_addons_applied",
+        { provider, requestedServiceKeys, targetBookingId }
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to apply booking add-ons";
       await collection.updateOne(
@@ -990,11 +1356,24 @@ const handleResultCallback = async (request: NextRequest) => {
             status: "booking_failed",
             bookingError: message,
             updatedAt: new Date(),
+            "diagnostics.lastApplicationError": {
+              at: new Date(),
+              reason: "booking_addon_apply_failed",
+              message,
+            },
           },
         }
       );
       console.error("[Vpos][result] Add-on booking update failed", error);
-      return redirect(locale, "/payment/fail", { orderId, orderNumber });
+      return logRedirect(
+        "error",
+        "application",
+        locale,
+        "/payment/fail",
+        { orderId, orderNumber },
+        "booking_addon_apply_failed",
+        { provider, message }
+      );
     }
   }
 
@@ -1011,6 +1390,12 @@ const handleResultCallback = async (request: NextRequest) => {
           status: "booking_complete",
           bookingResult: result,
           updatedAt: new Date(),
+          "diagnostics.lastApplicationResult": {
+            at: new Date(),
+            reason: "booking_completed_after_successful_payment",
+            bookingStatus: result.status ?? null,
+            customerRefNumber: payload.customerRefNumber ?? null,
+          },
         },
       }
     );
@@ -1130,7 +1515,26 @@ const handleResultCallback = async (request: NextRequest) => {
       });
     }
 
-    return redirect(locale, "/payment/success", { orderId, orderNumber });
+    console.info("[Vpos][result] Booking completed after successful payment", {
+      provider,
+      orderId,
+      orderNumber,
+      bookingStatus: result.status ?? null,
+      customerRefNumber: payload.customerRefNumber ?? null,
+    });
+    return logRedirect(
+      "info",
+      "application",
+      locale,
+      "/payment/success",
+      { orderId, orderNumber },
+      "booking_completed_after_successful_payment",
+      {
+        provider,
+        bookingStatus: result.status ?? null,
+        customerRefNumber: payload.customerRefNumber ?? null,
+      }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to complete booking";
     await collection.updateOne(
@@ -1140,11 +1544,26 @@ const handleResultCallback = async (request: NextRequest) => {
           status: "booking_failed",
           bookingError: message,
           updatedAt: new Date(),
+          "diagnostics.lastApplicationError": {
+            at: new Date(),
+            reason: "booking_complete_step_failed_after_successful_payment",
+            message,
+            endpoint: error instanceof AoryxClientError ? error.endpoint : null,
+            statusCode: error instanceof AoryxClientError ? error.statusCode : null,
+          },
         },
       }
     );
     console.error("[Vpos][result] Booking failed", error);
-    return redirect(locale, "/payment/fail", { orderId, orderNumber });
+    return logRedirect(
+      "error",
+      "application",
+      locale,
+      "/payment/fail",
+      { orderId, orderNumber },
+      "booking_complete_step_failed_after_successful_payment",
+      { provider, message }
+    );
   }
 };
 

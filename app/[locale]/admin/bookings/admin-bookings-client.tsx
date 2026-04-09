@@ -38,6 +38,7 @@ type AdminBookingRecord = {
   displayProfit?: number | null;
   displayProfitCurrency?: string | null;
   refundServices?: RefundServiceOption[];
+  payments?: Record<string, unknown>[];
 };
 
 type AdminBookingsClientProps = {
@@ -1194,6 +1195,10 @@ export default function AdminBookingsClient({
                                 <div>
                                   <span>Cancellation / Payment</span>
                                   <pre>{JSON.stringify(item.entry.cancellation ?? null, null, 2)}</pre>
+                                </div>
+                                <div>
+                                  <span>Payment Diagnostics</span>
+                                  <pre>{JSON.stringify(item.entry.payments ?? null, null, 2)}</pre>
                                 </div>
                               </div>
                               <div className="admin-json-grid">

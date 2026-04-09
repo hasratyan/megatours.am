@@ -61,6 +61,41 @@ type AdminBookingRecord = {
   displayProfit?: number | null;
   displayProfitCurrency?: string | null;
   refundServices?: RefundServiceOption[];
+  payments?: Record<string, unknown>[];
+};
+
+type PaymentRecord = {
+  provider?: string | null;
+  flow?: string | null;
+  orderId?: string | null;
+  orderNumber?: string | null;
+  billNo?: string | null;
+  status?: string | null;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+  amount?: {
+    value?: number | null;
+    currency?: string | null;
+    formatted?: string | null;
+  } | null;
+  bookingError?: string | null;
+  errorMessage?: string | null;
+  actionCodeDescription?: string | null;
+  gatewayAmount?: number | null;
+  gatewayCurrency?: string | null;
+  amountMismatch?: Record<string, unknown> | null;
+  diagnostics?: Record<string, unknown> | null;
+  gatewayResponse?: Record<string, unknown> | null;
+  cancellation?: Record<string, unknown> | null;
+  insurancePolicies?: unknown[] | null;
+  insuranceError?: string | null;
+  insuranceUpdatedAt?: Date | string | null;
+  payload?: {
+    customerRefNumber?: string | null;
+  } | null;
+  addon?: {
+    customerRefNumber?: string | null;
+  } | null;
 };
 
 const resolveLocale = (value: string | undefined) =>
@@ -71,6 +106,58 @@ const serializeDate = (value?: Date | string | null) => {
   if (value instanceof Date) return value.toISOString();
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+};
+
+const resolvePaymentCustomerRef = (payment: PaymentRecord) =>
+  payment.payload?.customerRefNumber ?? payment.addon?.customerRefNumber ?? null;
+
+const buildPaymentDebugRecord = (payment: PaymentRecord, source: "vpos" | "idram") => {
+  const diagnostics = payment.diagnostics ?? null;
+  const lastRedirectDecision =
+    diagnostics && typeof diagnostics === "object" && "lastRedirectDecision" in diagnostics
+      ? (diagnostics.lastRedirectDecision as Record<string, unknown> | null)
+      : null;
+  const lastApplicationError =
+    diagnostics && typeof diagnostics === "object" && "lastApplicationError" in diagnostics
+      ? (diagnostics.lastApplicationError as Record<string, unknown> | null)
+      : null;
+  const lastInsuranceError =
+    diagnostics && typeof diagnostics === "object" && "lastInsuranceError" in diagnostics
+      ? (diagnostics.lastInsuranceError as Record<string, unknown> | null)
+      : null;
+  const summary =
+    (typeof lastRedirectDecision?.reason === "string" && lastRedirectDecision.reason) ||
+    (typeof lastApplicationError?.message === "string" && lastApplicationError.message) ||
+    (typeof lastInsuranceError?.message === "string" && lastInsuranceError.message) ||
+    payment.bookingError ||
+    payment.insuranceError ||
+    payment.errorMessage ||
+    payment.actionCodeDescription ||
+    payment.status ||
+    null;
+
+  return sanitizeJson({
+    source,
+    provider: payment.provider ?? null,
+    flow: payment.flow ?? null,
+    reference: payment.orderId ?? payment.billNo ?? null,
+    orderNumber: payment.orderNumber ?? null,
+    status: payment.status ?? null,
+    createdAt: serializeDate(payment.createdAt),
+    updatedAt: serializeDate(payment.updatedAt),
+    summary,
+    bookingError: payment.bookingError ?? null,
+    gatewayError: payment.errorMessage ?? payment.actionCodeDescription ?? null,
+    gatewayAmount: payment.gatewayAmount ?? payment.amount?.value ?? null,
+    gatewayCurrency: payment.gatewayCurrency ?? payment.amount?.currency ?? null,
+    amountMismatch: payment.amountMismatch ?? null,
+    diagnostics,
+    gatewayResponse: payment.gatewayResponse ?? null,
+    cancellation: payment.cancellation ?? null,
+    insurancePolicies: payment.insurancePolicies ?? null,
+    insuranceError: payment.insuranceError ?? null,
+    insuranceUpdatedAt: serializeDate(payment.insuranceUpdatedAt),
+  }) as Record<string, unknown>;
 };
 
 const sanitizeBookingPayload = (payload?: AoryxBookingPayload | null): AoryxBookingPayload | null => {
@@ -279,8 +366,95 @@ export default async function AdminBookingsPage({ params }: PageProps) {
     ])
   );
 
+  const customerRefs = Array.from(
+    new Set(
+      bookingDocs
+        .map((entry) => entry.payload?.customerRefNumber ?? entry.booking?.customerRefNumber ?? null)
+        .filter((value): value is string => Boolean(value && value.trim().length > 0))
+    )
+  );
+
+  const [vposPaymentDocs, idramPaymentDocs] = customerRefs.length
+    ? await Promise.all([
+        db
+          .collection("vpos_payments")
+          .find({
+            $or: [
+              { "payload.customerRefNumber": { $in: customerRefs } },
+              { "addon.customerRefNumber": { $in: customerRefs } },
+            ],
+          })
+          .project({
+            _id: 0,
+            provider: 1,
+            flow: 1,
+            orderId: 1,
+            orderNumber: 1,
+            status: 1,
+            createdAt: 1,
+            updatedAt: 1,
+            bookingError: 1,
+            errorMessage: 1,
+            actionCodeDescription: 1,
+            gatewayAmount: 1,
+            gatewayCurrency: 1,
+            amountMismatch: 1,
+            diagnostics: 1,
+            gatewayResponse: 1,
+            cancellation: 1,
+            insurancePolicies: 1,
+            insuranceError: 1,
+            insuranceUpdatedAt: 1,
+            "payload.customerRefNumber": 1,
+            "addon.customerRefNumber": 1,
+          })
+          .sort({ updatedAt: -1, createdAt: -1 })
+          .toArray(),
+        db
+          .collection("idram_payments")
+          .find({
+            $or: [
+              { "payload.customerRefNumber": { $in: customerRefs } },
+              { "addon.customerRefNumber": { $in: customerRefs } },
+            ],
+          })
+          .project({
+            _id: 0,
+            flow: 1,
+            billNo: 1,
+            status: 1,
+            amount: 1,
+            createdAt: 1,
+            updatedAt: 1,
+            bookingError: 1,
+            cancellation: 1,
+            diagnostics: 1,
+            insurancePolicies: 1,
+            insuranceError: 1,
+            insuranceUpdatedAt: 1,
+            "payload.customerRefNumber": 1,
+            "addon.customerRefNumber": 1,
+          })
+          .sort({ updatedAt: -1, createdAt: -1 })
+          .toArray(),
+      ])
+    : [[], []];
+
+  const paymentsByCustomerRef = new Map<string, Record<string, unknown>[]>();
+  const attachPaymentRecord = (payment: PaymentRecord, source: "vpos" | "idram") => {
+    const customerRef = resolvePaymentCustomerRef(payment);
+    if (!customerRef) return;
+    const existing = paymentsByCustomerRef.get(customerRef) ?? [];
+    existing.push(buildPaymentDebugRecord(payment, source));
+    paymentsByCustomerRef.set(customerRef, existing);
+  };
+
+  (vposPaymentDocs as PaymentRecord[]).forEach((payment) => attachPaymentRecord(payment, "vpos"));
+  (idramPaymentDocs as PaymentRecord[]).forEach((payment) => attachPaymentRecord(payment, "idram"));
+
   const bookings: AdminBookingRecord[] = bookingDocs.map((entry) => {
     const profile = entry.userIdString ? profileMap.get(entry.userIdString) ?? null : null;
+    const customerRef = entry.payload?.customerRefNumber ?? entry.booking?.customerRefNumber ?? null;
     return {
       id:
         (entry._id && typeof (entry._id as { toString?: () => string }).toString === "function"
@@ -296,6 +470,7 @@ export default async function AdminBookingsPage({ params }: PageProps) {
       coupon: sanitizeAppliedCoupon(entry.coupon ?? null),
       refundState: entry.cancellation?.refund?.status ?? null,
       cancellation: entry.cancellation ? sanitizeJson(entry.cancellation) : null,
+      payments: customerRef ? paymentsByCustomerRef.get(customerRef) ?? [] : [],
     };
   });
   const [hotelMarkup, rates] = await Promise.all([

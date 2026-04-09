@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
-import { ObjectId } from "mongodb";
+import { ObjectId, type Collection, type Document } from "mongodb";
 import { getDb } from "@/lib/db";
 import { AoryxClientError, book, bookingDetails } from "@/lib/aoryx-client";
 import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
@@ -195,6 +195,19 @@ const unwrapFindOneAndUpdateResult = <T,>(
   return result as T;
 };
 
+const buildDiagnosticEvent = (
+  stage: string,
+  level: "info" | "warn" | "error",
+  reason: string,
+  details: Record<string, unknown> = {}
+) => ({
+  at: new Date(),
+  stage,
+  level,
+  reason,
+  details,
+});
+
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
 
@@ -202,13 +215,28 @@ export async function POST(request: NextRequest) {
   const recAccount = readField(formData, "EDP_REC_ACCOUNT");
   const amountRaw = readField(formData, "EDP_AMOUNT");
   const precheckFlag = readField(formData, "EDP_PRECHECK");
+  const callbackRequestDetails = {
+    method: request.method,
+    path: request.nextUrl.pathname,
+    contentType: resolveString(request.headers.get("content-type")) || null,
+    clientIp: resolveString(request.headers.get("x-forwarded-for")).split(",")[0]?.trim() || null,
+    userAgent: resolveString(request.headers.get("user-agent")) || null,
+    billNo: billNo || null,
+    recAccount: recAccount || null,
+    amountRaw: amountRaw || null,
+    precheckFlag: precheckFlag || null,
+  };
+
+  console.info("[Idram][result] Callback received", callbackRequestDetails);
 
   if (!billNo || !recAccount || !amountRaw) {
+    console.warn("[Idram][result] Missing payment details", callbackRequestDetails);
     return textResponse("Missing payment details", 400);
   }
 
   const amountParsed = parseAmount(amountRaw);
   if (amountParsed === null) {
+    console.warn("[Idram][result] Invalid payment amount", callbackRequestDetails);
     return textResponse("Invalid payment amount", 400);
   }
 
@@ -221,13 +249,71 @@ export async function POST(request: NextRequest) {
   }
 
   const collection = db.collection("idram_payments");
+  const paymentCollection = collection as Collection<Document>;
+  const appendDiagnosticEvent = async (
+    stage: string,
+    level: "info" | "warn" | "error",
+    reason: string,
+    details: Record<string, unknown> = {},
+    extraSet: Record<string, unknown> = {}
+  ) => {
+    const event = buildDiagnosticEvent(stage, level, reason, details);
+    try {
+      await paymentCollection.updateOne(
+        { billNo },
+        {
+          $push: {
+            "diagnostics.events": {
+              $each: [event],
+              $slice: -50,
+            },
+          },
+          $set: {
+            "diagnostics.lastEvent": event,
+            "diagnostics.updatedAt": new Date(),
+            ...extraSet,
+          },
+        } as Document
+      );
+    } catch (error) {
+      console.error("[Idram][result] Failed to persist diagnostic event", {
+        billNo,
+        stage,
+        reason,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  };
   const record = (await collection.findOne({ billNo })) as IdramPaymentRecord | null;
 
   if (!record) {
+    console.warn("[Idram][result] Unknown bill", callbackRequestDetails);
     return textResponse("Unknown bill", 400);
   }
 
   if (record.recAccount && record.recAccount !== recAccount) {
+    console.warn("[Idram][result] Account mismatch", {
+      billNo,
+      expectedRecAccount: record.recAccount,
+      receivedRecAccount: recAccount,
+    });
+    await appendDiagnosticEvent(
+      "callback",
+      "error",
+      "account_mismatch",
+      {
+        expectedRecAccount: record.recAccount ?? null,
+        receivedRecAccount: recAccount,
+      },
+      {
+        "diagnostics.lastCallback": {
+          at: new Date(),
+          phase: "validation",
+          ...callbackRequestDetails,
+          validationError: "account_mismatch",
+        },
+      }
+    );
     return textResponse("Account mismatch", 400);
   }
 
@@ -237,21 +323,71 @@ export async function POST(request: NextRequest) {
     (typeof record.amount?.value === "number" && Math.abs(record.amount.value - amountParsed) < 0.01);
 
   if (!amountMatches) {
+    console.warn("[Idram][result] Amount mismatch", {
+      billNo,
+      expectedAmountFormatted: record.amount?.formatted ?? null,
+      expectedAmountValue: record.amount?.value ?? null,
+      receivedAmount: amountRaw,
+      normalizedAmount,
+    });
+    await appendDiagnosticEvent(
+      "callback",
+      "error",
+      "amount_mismatch",
+      {
+        expectedAmountFormatted: record.amount?.formatted ?? null,
+        expectedAmountValue: record.amount?.value ?? null,
+        receivedAmount: amountRaw,
+        normalizedAmount,
+      },
+      {
+        "diagnostics.lastCallback": {
+          at: new Date(),
+          phase: "validation",
+          ...callbackRequestDetails,
+          normalizedAmount,
+          validationError: "amount_mismatch",
+        },
+      }
+    );
     return textResponse("Amount mismatch", 400);
   }
 
   if (precheckFlag.toUpperCase() === "YES") {
     try {
+      const precheckAt = new Date();
+      const precheckEvent = buildDiagnosticEvent("callback", "info", "precheck_received", {
+        recordStatus: record.status ?? null,
+        normalizedAmount,
+      });
       await collection.updateOne(
         { billNo },
-        {
+        ({
           $set: {
             status: record.status === "created" ? "prechecked" : record.status ?? "prechecked",
-            precheckAt: new Date(),
-            updatedAt: new Date(),
+            precheckAt,
+            updatedAt: precheckAt,
+            "diagnostics.lastEvent": precheckEvent,
+            "diagnostics.lastCallback": {
+              at: precheckAt,
+              phase: "precheck",
+              ...callbackRequestDetails,
+              normalizedAmount,
+            },
+            "diagnostics.updatedAt": precheckAt,
           },
-        }
+          $push: {
+            "diagnostics.events": {
+              $each: [precheckEvent],
+              $slice: -50,
+            },
+          },
+        }) as Document
       );
+      console.info("[Idram][result] Stored precheck", {
+        billNo,
+        previousStatus: record.status ?? null,
+      });
     } catch (error) {
       console.error("[Idram][result] Failed to store precheck", error);
     }
@@ -262,8 +398,29 @@ export async function POST(request: NextRequest) {
   const transId = readField(formData, "EDP_TRANS_ID");
   const transDate = readField(formData, "EDP_TRANS_DATE");
   const checksum = readField(formData, "EDP_CHECKSUM");
+  const confirmationDetails = {
+    ...callbackRequestDetails,
+    payerAccount: payerAccount || null,
+    transId: transId || null,
+    transDate: transDate || null,
+  };
 
   if (!payerAccount || !transId || !transDate || !checksum) {
+    console.warn("[Idram][result] Missing confirmation details", confirmationDetails);
+    await appendDiagnosticEvent(
+      "callback",
+      "error",
+      "missing_confirmation_details",
+      confirmationDetails,
+      {
+        "diagnostics.lastCallback": {
+          at: new Date(),
+          phase: "payment_confirmation",
+          ...confirmationDetails,
+          validationError: "missing_confirmation_details",
+        },
+      }
+    );
     return textResponse("Missing confirmation details", 400);
   }
 
@@ -272,6 +429,7 @@ export async function POST(request: NextRequest) {
     : "";
   if (!secretKey) {
     console.error("[Idram][result] Missing IDRAM_SECRET_KEY");
+    await appendDiagnosticEvent("integration", "error", "missing_idram_secret_key", confirmationDetails);
     return textResponse("Missing secret key", 500);
   }
 
@@ -286,10 +444,41 @@ export async function POST(request: NextRequest) {
   ]);
 
   if (expectedChecksum.toLowerCase() !== checksum.toLowerCase()) {
+    console.warn("[Idram][result] Checksum mismatch", {
+      billNo,
+      expectedChecksum,
+      receivedChecksum: checksum,
+      transId,
+      transDate,
+    });
+    await appendDiagnosticEvent(
+      "callback",
+      "error",
+      "checksum_mismatch",
+      {
+        payerAccount,
+        transId,
+        transDate,
+      },
+      {
+        "diagnostics.lastCallback": {
+          at: new Date(),
+          phase: "payment_confirmation",
+          ...confirmationDetails,
+          validationError: "checksum_mismatch",
+        },
+      }
+    );
     return textResponse("Checksum mismatch", 400);
   }
 
   if (record.status === "booking_complete") {
+    await appendDiagnosticEvent("callback", "info", "callback_ignored_booking_already_complete", {
+      recordStatus: record.status ?? null,
+      payerAccount,
+      transId,
+      transDate,
+    });
     const couponCode = resolveCouponCode(record);
     if (couponCode && record.couponOrderCounted !== true) {
       try {
@@ -331,13 +520,32 @@ export async function POST(request: NextRequest) {
   }
 
   if (record.status === "booking_failed") {
+    await appendDiagnosticEvent("callback", "info", "callback_ignored_booking_already_failed", {
+      recordStatus: record.status ?? null,
+      payerAccount,
+      transId,
+      transDate,
+    });
     return textResponse("OK", 200);
   }
 
   const now = new Date();
+  const paymentConfirmationEvent = buildDiagnosticEvent(
+    "callback",
+    "info",
+    "payment_confirmation_received",
+    {
+      payerAccount,
+      transId,
+      transDate,
+      amountRaw,
+      normalizedAmount,
+      recordStatus: record.status ?? null,
+    }
+  );
   const lock = await collection.findOneAndUpdate(
     { billNo, status: { $nin: ["booking_complete", "booking_failed", "booking_in_progress"] } },
-    {
+    ({
       $set: {
         status: "booking_in_progress",
         paidAt: now,
@@ -349,27 +557,71 @@ export async function POST(request: NextRequest) {
           checksum,
           amount: amountRaw,
         },
+        "diagnostics.lastEvent": paymentConfirmationEvent,
+        "diagnostics.lastCallback": {
+          at: now,
+          phase: "payment_confirmation",
+          ...confirmationDetails,
+          normalizedAmount,
+        },
+        "diagnostics.updatedAt": now,
       },
-    },
+      $push: {
+        "diagnostics.events": {
+          $each: [paymentConfirmationEvent],
+          $slice: -50,
+        },
+      },
+    }) as Document,
     { returnDocument: "after" }
   );
 
   const lockedRecord = unwrapFindOneAndUpdateResult<IdramPaymentRecord>(lock);
   if (!lockedRecord) {
+    await appendDiagnosticEvent("callback", "info", "callback_ignored_lock_not_acquired", {
+      payerAccount,
+      transId,
+      transDate,
+    });
     return textResponse("OK", 200);
   }
 
+  console.info("[Idram][result] Payment record locked", {
+    billNo,
+    flow: lockedRecord.flow ?? "booking",
+    recordStatus: lockedRecord.status ?? null,
+  });
+
   const payload = lockedRecord.payload as AoryxBookingPayload | undefined;
   if (!payload) {
+    const missingPayloadAt = new Date();
     await collection.updateOne(
       { billNo },
-      {
+      ({
         $set: {
           status: "booking_failed",
           bookingError: "Missing booking payload",
-          updatedAt: new Date(),
+          updatedAt: missingPayloadAt,
+          "diagnostics.lastApplicationError": {
+            at: missingPayloadAt,
+            phase: "booking",
+            flow: lockedRecord.flow ?? "booking",
+            reason: "missing_booking_payload",
+            message: "Missing booking payload",
+          },
+          "diagnostics.updatedAt": missingPayloadAt,
         },
-      }
+        $push: {
+          "diagnostics.events": {
+            $each: [
+              buildDiagnosticEvent("application", "error", "missing_booking_payload", {
+                flow: lockedRecord.flow ?? "booking",
+              }),
+            ],
+            $slice: -50,
+          },
+        },
+      }) as Document
     );
     return textResponse("OK", 200);
   }
@@ -429,7 +681,7 @@ export async function POST(request: NextRequest) {
 
       await collection.updateOne(
         { billNo },
-        {
+        ({
           $set: {
             status: "booking_complete",
             payload: merged.payload,
@@ -442,20 +694,68 @@ export async function POST(request: NextRequest) {
               skippedServices: merged.skippedServiceKeys,
             },
             updatedAt: appliedAt,
+            "diagnostics.lastApplicationResult": {
+              at: appliedAt,
+              phase: "addon_apply",
+              flow: "booking_addons",
+              targetBookingId,
+              requestedServices: requestedServiceKeys,
+              appliedServices: merged.appliedServiceKeys,
+              skippedServices: merged.skippedServiceKeys,
+            },
+            "diagnostics.updatedAt": appliedAt,
           },
-        }
+          $push: {
+            "diagnostics.events": {
+              $each: [
+                buildDiagnosticEvent("application", "info", "addon_booking_applied", {
+                  targetBookingId,
+                  requestedServices: requestedServiceKeys,
+                  appliedServices: merged.appliedServiceKeys,
+                  skippedServices: merged.skippedServiceKeys,
+                }),
+              ],
+              $slice: -50,
+            },
+          },
+        }) as Document
       );
+      console.info("[Idram][result] Add-on booking update completed", {
+        billNo,
+        targetBookingId,
+        requestedServices: requestedServiceKeys,
+        appliedServices: merged.appliedServiceKeys,
+        skippedServices: merged.skippedServiceKeys,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to apply booking add-ons";
+      const failedAt = new Date();
       await collection.updateOne(
         { billNo },
-        {
+        ({
           $set: {
             status: "booking_failed",
             bookingError: message,
-            updatedAt: new Date(),
+            updatedAt: failedAt,
+            "diagnostics.lastApplicationError": {
+              at: failedAt,
+              phase: "addon_apply",
+              flow: "booking_addons",
+              message,
+            },
+            "diagnostics.updatedAt": failedAt,
           },
-        }
+          $push: {
+            "diagnostics.events": {
+              $each: [
+                buildDiagnosticEvent("application", "error", "addon_booking_update_failed", {
+                  message,
+                }),
+              ],
+              $slice: -50,
+            },
+          },
+        }) as Document
       );
       console.error("[Idram][result] Add-on booking update failed", error);
     }
@@ -464,16 +764,50 @@ export async function POST(request: NextRequest) {
 
   try {
     const result: AoryxBookingResult = await bookWithRecovery(payload, { billNo });
+    const completedAt = new Date();
     await collection.updateOne(
       { billNo },
-      {
+      ({
         $set: {
           status: "booking_complete",
           bookingResult: result,
-          updatedAt: new Date(),
+          updatedAt: completedAt,
+          "diagnostics.lastApplicationResult": {
+            at: completedAt,
+            phase: "booking",
+            flow: paymentFlow || "booking",
+            status: result.status ?? null,
+            customerRefNumber: result.customerRefNumber ?? payload.customerRefNumber ?? null,
+            hotelConfirmationNumber: result.hotelConfirmationNumber ?? null,
+            supplierConfirmationNumber: result.supplierConfirmationNumber ?? null,
+            adsConfirmationNumber: result.adsConfirmationNumber ?? null,
+          },
+          "diagnostics.updatedAt": completedAt,
         },
-      }
+        $push: {
+          "diagnostics.events": {
+            $each: [
+              buildDiagnosticEvent("application", "info", "booking_completed", {
+                flow: paymentFlow || "booking",
+                status: result.status ?? null,
+                customerRefNumber: result.customerRefNumber ?? payload.customerRefNumber ?? null,
+                hotelConfirmationNumber: result.hotelConfirmationNumber ?? null,
+                supplierConfirmationNumber: result.supplierConfirmationNumber ?? null,
+                adsConfirmationNumber: result.adsConfirmationNumber ?? null,
+              }),
+            ],
+            $slice: -50,
+          },
+        },
+      }) as Document
     );
+
+    console.info("[Idram][result] Booking completed", {
+      billNo,
+      flow: paymentFlow || "booking",
+      status: result.status ?? null,
+      customerRefNumber: result.customerRefNumber ?? payload.customerRefNumber ?? null,
+    });
 
     const couponCode = resolveCouponCode(lockedRecord);
     if (couponCode) {
@@ -523,34 +857,72 @@ export async function POST(request: NextRequest) {
       });
       const policies = await createEfesPoliciesFromBooking(payload);
       insurancePolicies = policies;
+      const insuranceUpdatedAt = new Date();
       console.info("[EFES][idram-result] policy response", {
         billNo,
         flow: paymentFlow || "booking",
         policies,
       });
-      if (policies.length > 0) {
-        await collection.updateOne(
-          { billNo },
-          {
-            $set: {
-              insurancePolicies: policies,
-              insuranceUpdatedAt: new Date(),
+      await collection.updateOne(
+        { billNo },
+        ({
+          $set: {
+            insurancePolicies: policies,
+            insuranceUpdatedAt,
+            "diagnostics.lastInsuranceResult": {
+              at: insuranceUpdatedAt,
+              flow: paymentFlow || "booking",
+              policyCount: policies.length,
+              provider: payload.insurance?.provider ?? null,
             },
-          }
-        );
-      }
+            "diagnostics.updatedAt": insuranceUpdatedAt,
+          },
+          $push: {
+            "diagnostics.events": {
+              $each: [
+                buildDiagnosticEvent("insurance", "info", "efes_policies_created", {
+                  flow: paymentFlow || "booking",
+                  policyCount: policies.length,
+                  provider: payload.insurance?.provider ?? null,
+                }),
+              ],
+              $slice: -50,
+            },
+          },
+        }) as Document
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create EFES policies";
       insurancePolicies = [];
       insuranceError = message;
+      const insuranceUpdatedAt = new Date();
       await collection.updateOne(
         { billNo },
-        {
+        ({
           $set: {
             insuranceError: message,
-            insuranceUpdatedAt: new Date(),
+            insuranceUpdatedAt,
+            "diagnostics.lastInsuranceError": {
+              at: insuranceUpdatedAt,
+              flow: paymentFlow || "booking",
+              provider: payload.insurance?.provider ?? null,
+              message,
+            },
+            "diagnostics.updatedAt": insuranceUpdatedAt,
           },
-        }
+          $push: {
+            "diagnostics.events": {
+              $each: [
+                buildDiagnosticEvent("insurance", "error", "efes_policy_creation_failed", {
+                  flow: paymentFlow || "booking",
+                  provider: payload.insurance?.provider ?? null,
+                  message,
+                }),
+              ],
+              $slice: -50,
+            },
+          },
+        }) as Document
       );
       console.error("[Idram][result] EFES policy creation failed", error);
     }
@@ -587,15 +959,38 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to complete booking";
+    const failedAt = new Date();
     await collection.updateOne(
       { billNo },
-      {
+      ({
         $set: {
           status: "booking_failed",
           bookingError: message,
-          updatedAt: new Date(),
+          updatedAt: failedAt,
+          "diagnostics.lastApplicationError": {
+            at: failedAt,
+            phase: "booking",
+            flow: paymentFlow || "booking",
+            message,
+            endpoint: error instanceof AoryxClientError ? error.endpoint ?? null : null,
+            statusCode: error instanceof AoryxClientError ? error.statusCode ?? null : null,
+          },
+          "diagnostics.updatedAt": failedAt,
         },
-      }
+        $push: {
+          "diagnostics.events": {
+            $each: [
+              buildDiagnosticEvent("application", "error", "booking_failed", {
+                flow: paymentFlow || "booking",
+                message,
+                endpoint: error instanceof AoryxClientError ? error.endpoint ?? null : null,
+                statusCode: error instanceof AoryxClientError ? error.statusCode ?? null : null,
+              }),
+            ],
+            $slice: -50,
+          },
+        },
+      }) as Document
     );
     console.error("[Idram][result] Booking failed", error);
   }

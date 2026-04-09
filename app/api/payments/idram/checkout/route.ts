@@ -75,6 +75,19 @@ type BlockingAddonIdramAttempt = {
 
 const resolveString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
+const buildDiagnosticEvent = (
+  stage: string,
+  level: "info" | "warn" | "error",
+  reason: string,
+  details: Record<string, unknown> = {}
+) => ({
+  at: new Date(),
+  stage,
+  level,
+  reason,
+  details,
+});
+
 const parseSessionId = (input: unknown): string | undefined => {
   if (typeof input !== "string") return undefined;
   const trimmed = input.trim();
@@ -453,6 +466,14 @@ const tryHandleBookingAddonCheckout = async (params: {
   const description = `Add-ons ${addonRequest.bookingId}`;
   const mergedPayload = mergeBookingAddonPayload(userBooking.payload, addonRequest.services).payload;
   const now = new Date();
+  const createdEvent = buildDiagnosticEvent("checkout", "info", "payment_attempt_created", {
+    flow: "booking_addons",
+    billNo,
+    bookingId: addonRequest.bookingId,
+    amountValue,
+    currency: "AMD",
+    locale: params.locale,
+  });
 
   await idramCollection.insertOne({
     flow: "booking_addons",
@@ -487,8 +508,22 @@ const tryHandleBookingAddonCheckout = async (params: {
     userEmail: session?.user?.email ?? null,
     userName: session?.user?.name ?? null,
     locale: params.locale,
+    diagnostics: {
+      events: [createdEvent],
+      lastEvent: createdEvent,
+      updatedAt: now,
+    },
     createdAt: now,
     updatedAt: now,
+  });
+
+  console.info("[Idram][checkout] Stored booking add-on payment attempt", {
+    flow: "booking_addons",
+    billNo,
+    bookingId: addonRequest.bookingId,
+    amountValue,
+    currency: "AMD",
+    locale: params.locale,
   });
 
   return NextResponse.json({
@@ -706,6 +741,15 @@ export async function POST(request: NextRequest) {
     const userName = session?.user?.name ?? null;
 
     const now = new Date();
+    const createdEvent = buildDiagnosticEvent("checkout", "info", "payment_attempt_created", {
+      flow: "booking",
+      billNo,
+      sessionId: payload.sessionId,
+      customerRefNumber: payload.customerRefNumber ?? null,
+      amountValue,
+      currency: amountCurrency,
+      locale,
+    });
 
     await idramCollection.insertOne({
       billNo,
@@ -734,8 +778,23 @@ export async function POST(request: NextRequest) {
       userEmail,
       userName,
       locale,
+      diagnostics: {
+        events: [createdEvent],
+        lastEvent: createdEvent,
+        updatedAt: now,
+      },
       createdAt: now,
       updatedAt: now,
+    });
+
+    console.info("[Idram][checkout] Stored booking payment attempt", {
+      flow: "booking",
+      billNo,
+      sessionId: payload.sessionId,
+      customerRefNumber: payload.customerRefNumber ?? null,
+      amountValue,
+      currency: amountCurrency,
+      locale,
     });
 
     return NextResponse.json({
