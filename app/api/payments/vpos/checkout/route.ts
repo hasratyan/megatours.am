@@ -190,7 +190,7 @@ const buildOrderNumber = (value: string | null | undefined) => {
   const suffix = Math.floor(Math.random() * 1000)
     .toString()
     .padStart(3, "0");
-  const fallback = `MEGA-${Date.now()}${suffix}`;
+  const fallback = `${Date.now()}${suffix}`;
   const raw = (value ?? "").trim();
   const candidate = raw.length > 0 ? raw : fallback;
   return candidate.length > 32 ? candidate.slice(0, 32) : candidate;

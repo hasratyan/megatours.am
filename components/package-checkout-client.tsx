@@ -2424,7 +2424,7 @@ export default function PackageCheckoutClient({
         countryCode: hotelSelection.countryCode ?? "AE",
         currency: hotelSelection.currency ?? "USD",
         nationality: hotelSelection.nationality ?? "AM",
-        customerRefNumber: `MEGA-${Date.now()}`,
+        customerRefNumber: `${Date.now()}`,
         rooms: buildRoomsPayload(),
         transferSelection:
           builderState.transfer?.selected

@@ -2384,7 +2384,7 @@ export default function HotelClient({
       countryCode: parsed.payload?.countryCode ?? "AE",
       currency: bookingCurrency,
       nationality: parsed.payload?.nationality ?? "AM",
-      customerRefNumber: `MEGA-${Date.now()}`,
+      customerRefNumber: `${Date.now()}`,
       rooms: roomsPayload,
       transferSelection: transferSelectionPayload ?? undefined,
       excursions: excursionSelectionsPayload ?? undefined,
