@@ -891,7 +891,7 @@ const handleResultCallback = async (request: NextRequest) => {
     expectedCurrency === statusResponse.responseCurrency;
 
   const now = new Date();
-  const paymentMismatch = !amountMatches || !currencyMatches;
+  const paymentMismatch = statusResponse.gatewaySuccess && (!amountMatches || !currencyMatches);
   const paymentSuccess = statusResponse.gatewaySuccess && !paymentMismatch;
   const canUpdateStatus = !["booking_in_progress", "booking_complete", "booking_failed"].includes(
     record.status ?? ""
