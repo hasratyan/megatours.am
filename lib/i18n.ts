@@ -82,6 +82,7 @@ export type Translation = {
     allSelected: string;
     changeHotel: string;
     viewService: string;
+    addService: string;
     removeTag: string;
     checkoutButton: string;
     helper: string;
@@ -448,6 +449,7 @@ export type Translation = {
         guests: string;
         total: string;
         bookedOn: string;
+        duration: string;
       };
       viewHotel: string;
       viewVoucher: string;
@@ -461,6 +463,12 @@ export type Translation = {
       issuedOn: string;
       paymentNote: string;
       modificationClosed: string;
+      addons: {
+        available: string;
+        unavailable: string;
+        helper: string;
+        unavailableHelper: string;
+      };
       sections: {
         stay: string;
         payment: string;
@@ -1263,6 +1271,7 @@ const translations: Record<Locale, Translation> = {
     packageBuilder: {
       title: "Կազմեք ձեր փաթեթը",
       subtitle: "Ավելացրեք ծառայությունները",
+      addService: "Ավելացնել ծառայություն",
       toggleOpen: "Կազմել փաթեթ",
       toggleClose: "Թաքցնել",
       toggleInProgress: "Ընթացքի մեջ է",
@@ -1879,6 +1888,7 @@ const translations: Record<Locale, Translation> = {
           guests: "Հյուրեր",
           total: "Ընդհանուր",
           bookedOn: "Ամրագրման ամսաթիվ",
+          duration: "Տևողություն",
         },
         viewHotel: "Դիտել հյուրանոցը",
         viewVoucher: "Դիտել վաուչերը",
@@ -1892,6 +1902,12 @@ const translations: Record<Locale, Translation> = {
         issuedOn: "Տրված է",
         paymentNote: "Այս վաուչերը հաստատում է ձեր ամրագրումը։",
         modificationClosed: "Այս ամրագրումն այլևս հնարավոր չէ փոփոխել, քանի որ հյուրանոցային կեցությունն արդեն ավարտվել է։",
+        addons: {
+          available: "Կարելի է ավելացնել",
+          unavailable: "Փոփոխությունը փակ է",
+          helper: "Այս ծառայությունները դեռ կցված չեն ամրագրմանը։ Կարող եք դրանք ավելացնել և վճարել առանձին։",
+          unavailableHelper: "Այս ծառայությունները դեռ կցված չեն ամրագրմանը։",
+        },
         sections: {
           stay: "Հյուրանոցային տվյալներ",
           payment: "Վճարման ամփոփում",
@@ -2725,6 +2741,7 @@ const translations: Record<Locale, Translation> = {
     packageBuilder: {
       title: "Build your package",
       subtitle: "Add services to your trip",
+      addService: "Add service",
       toggleOpen: "Package builder",
       toggleClose: "Hide builder",
       toggleInProgress: "In progress",
@@ -3345,6 +3362,7 @@ const translations: Record<Locale, Translation> = {
           guests: "Guests",
           total: "Total",
           bookedOn: "Booked on",
+          duration: "Duration",
         },
         viewHotel: "View Hotel",
         viewVoucher: "View voucher",
@@ -3358,6 +3376,12 @@ const translations: Record<Locale, Translation> = {
         issuedOn: "Issued on",
         paymentNote: "This voucher confirms your booking details.",
         modificationClosed: "This booking can no longer be modified because the hotel stay has already ended.",
+        addons: {
+          available: "Ready to add",
+          unavailable: "Changes closed",
+          helper: "These services are still missing from this booking. You can add and pay for them separately.",
+          unavailableHelper: "These services are still missing from this booking.",
+        },
         sections: {
           stay: "Hotel stay",
           payment: "Payment summary",
@@ -4188,6 +4212,7 @@ const translations: Record<Locale, Translation> = {
     packageBuilder: {
       title: "Соберите пакет",
       subtitle: "Добавьте услуги к поездке",
+      addService: "Добавить сервис",
       toggleOpen: "Конструктор пакета",
       toggleClose: "Скрыть",
       toggleInProgress: "В процессе",
@@ -4814,6 +4839,7 @@ const translations: Record<Locale, Translation> = {
           guests: "Гости",
           total: "Итого",
           bookedOn: "Дата бронирования",
+          duration: "Продолжительность",
         },
         viewHotel: "Открыть отель",
         viewVoucher: "Смотреть ваучер",
@@ -4827,6 +4853,12 @@ const translations: Record<Locale, Translation> = {
         issuedOn: "Дата выдачи",
         paymentNote: "Этот ваучер подтверждает детали вашего бронирования.",
         modificationClosed: "Это бронирование больше нельзя изменить, потому что проживание в отеле уже завершилось.",
+        addons: {
+          available: "Можно добавить",
+          unavailable: "Изменения закрыты",
+          helper: "Эти услуги еще не добавлены к бронированию. Их можно оформить и оплатить отдельно.",
+          unavailableHelper: "Эти услуги все еще не добавлены к бронированию.",
+        },
         sections: {
           stay: "Данные проживания",
           payment: "Сводка оплаты",

@@ -236,7 +236,7 @@ export type PackageBuilderState = {
   updatedAt?: number;
 };
 
-export const PACKAGE_BUILDER_SESSION_MS = 120 * 60 * 1000;
+export const PACKAGE_BUILDER_SESSION_MS = 15 * 60 * 1000;
 
 const STORAGE_KEY = "megatours-package-builder";
 const UPDATE_EVENT = "megatours-package-builder:update";

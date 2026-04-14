@@ -461,7 +461,7 @@ export default function ProfileView({
                               className="profile-link"
                               href={`/${locale}/profile/voucher/${payload.customerRefNumber}/add-services`}
                             >
-                              {t.packageBuilder.checkoutButton}
+                              {t.packageBuilder.addService}
                             </Link>
                           ) : null}
                         </div>

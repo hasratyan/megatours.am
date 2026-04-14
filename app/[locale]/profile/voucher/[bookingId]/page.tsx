@@ -363,6 +363,26 @@ export default async function VoucherPage({ params }: PageProps) {
   };
   const displayTotal = resolveBookingDisplayTotal(payload, rates, { hotelMarkup });
   const totalLabel = formatCurrencyAmount(displayTotal.amount, displayTotal.currency, "en-GB") ?? "—";
+  const couponDisplaySummary = (() => {
+    if (!appliedCoupon) return null;
+    const hasStoredDiscountedAmounts =
+      displayTotal.currency === "AMD" &&
+      typeof appliedCoupon.discountAmount === "number" &&
+      Number.isFinite(appliedCoupon.discountAmount) &&
+      typeof appliedCoupon.discountedAmount === "number" &&
+      Number.isFinite(appliedCoupon.discountedAmount);
+    const discountAmount = hasStoredDiscountedAmounts
+      ? appliedCoupon.discountAmount
+      : Math.round(((displayTotal.amount * appliedCoupon.discountPercent) / 100 + Number.EPSILON) * 100) / 100;
+    const discountedAmount = hasStoredDiscountedAmounts
+      ? appliedCoupon.discountedAmount
+      : Math.round((Math.max(0, displayTotal.amount - discountAmount) + Number.EPSILON) * 100) / 100;
+
+    return {
+      discountLabel: formatCurrencyAmount(discountAmount, displayTotal.currency, "en-GB") ?? "—",
+      discountedTotalLabel: formatCurrencyAmount(discountedAmount, displayTotal.currency, "en-GB") ?? "—",
+    };
+  })();
   const refundedAmountLabel =
     refundedAmountValue !== null ? formatDisplayPrice(refundedAmountValue, refundCurrency) : null;
   const refundStatusLabel = refundStateKey ? t.profile.voucher.updates.refundStates[refundStateKey] : null;
@@ -380,26 +400,49 @@ export default async function VoucherPage({ params }: PageProps) {
   const existingAddonServices = new Set(resolveExistingBookingAddonServiceKeys(payload));
   const addonModificationClosed = isBookingModificationClosed(payload.checkOutDate);
   const missingAddonServices = [
-    { key: "transfer", enabled: serviceFlags.transfer !== false, label: t.packageBuilder.services.transfer },
-    { key: "excursion", enabled: serviceFlags.excursion !== false, label: t.packageBuilder.services.excursion },
-    { key: "insurance", enabled: serviceFlags.insurance !== false, label: t.packageBuilder.services.insurance },
-    { key: "flight", enabled: serviceFlags.flight !== false, label: t.packageBuilder.services.flight },
+    {
+      key: "transfer",
+      enabled: serviceFlags.transfer !== false,
+      label: t.packageBuilder.services.transfer,
+      icon: "directions_car",
+    },
+    {
+      key: "excursion",
+      enabled: serviceFlags.excursion !== false,
+      label: t.packageBuilder.services.excursion,
+      icon: "tour",
+    },
+    {
+      key: "insurance",
+      enabled: serviceFlags.insurance !== false,
+      label: t.packageBuilder.services.insurance,
+      icon: "shield_with_heart",
+    },
+    {
+      key: "flight",
+      enabled: serviceFlags.flight !== false,
+      label: t.packageBuilder.services.flight,
+      icon: "flight",
+    },
   ]
     .filter((service) =>
       service.enabled &&
       !existingAddonServices.has(service.key as "transfer" | "excursion" | "insurance" | "flight")
-    )
-    .map((service) => service.label);
-  const canManageAddons =
+    );
+  const showAddonCard =
     statusKey === "confirmed" &&
     !bookingCanceledByAdmin &&
+    missingAddonServices.length > 0;
+  const canManageAddons =
+    showAddonCard &&
     !addonModificationClosed &&
     missingAddonServices.length > 0;
-  const showAddonModificationClosed =
-    statusKey === "confirmed" &&
-    !bookingCanceledByAdmin &&
-    addonModificationClosed &&
-    missingAddonServices.length > 0;
+  const addonBadgeLabel = canManageAddons
+    ? t.profile.voucher.addons.available
+    : t.profile.voucher.addons.unavailable;
+  const addonHelperText = canManageAddons
+    ? t.profile.voucher.addons.helper
+    : t.profile.voucher.addons.unavailableHelper;
   const manageAddonsHref = `/${resolvedLocale}/profile/voucher/${encodeURIComponent(bookingId)}/add-services`;
 
   const serviceCards: ServiceCard[] = [
@@ -702,26 +745,59 @@ export default async function VoucherPage({ params }: PageProps) {
           profileHref={`/${resolvedLocale}/profile`}
         />
 
-        {canManageAddons ? (
-          <section className="voucher-card voucher-card--addons">
-            <h2>{t.profile.voucher.sections.services}</h2>
-            <p>
-              {missingAddonServices.join(", ")}
-            </p>
-            <Link href={manageAddonsHref} className="service-builder__cta">
-              {t.packageBuilder.checkoutButton}
-            </Link>
-          </section>
-        ) : null}
-        {showAddonModificationClosed ? (
-          <section className="voucher-card voucher-card--addons">
-            <h2>{t.profile.voucher.sections.services}</h2>
-            <p>{missingAddonServices.join(", ")}</p>
-            <p>{t.profile.voucher.modificationClosed}</p>
-          </section>
+        {showAddonCard ? (
+          <div
+            className={`voucher-card voucher-card--addons${
+              canManageAddons ? " is-available" : " is-unavailable"
+            }`}
+          >
+            <div className="voucher-addon-card__header">
+              <div className="voucher-addon-card__intro">
+                <span
+                  className={`voucher-addon-card__badge${
+                    canManageAddons ? " is-available" : " is-unavailable"
+                  }`}
+                >
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    {canManageAddons ? "add_circle" : "event_busy"}
+                  </span>
+                  {addonBadgeLabel}
+                </span>
+                <div>
+                  <h2>{t.profile.voucher.sections.services}</h2>
+                  <p>{addonHelperText}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="voucher-addon-card__list">
+              {missingAddonServices.map((service) => (
+                <div key={service.key} className="voucher-addon-chip">
+                  <span className="material-symbols-rounded" aria-hidden="true">
+                    {service.icon}
+                  </span>
+                  <span>{service.label}</span>
+                </div>
+              ))}
+              {canManageAddons ? (
+                <Link href={manageAddonsHref} className="service-builder__cta voucher-addon-card__cta">
+                  {t.packageBuilder.checkoutButton} &nbsp;&#x2794;
+                </Link>
+              ) : null}
+            </div>
+
+            {!canManageAddons ? (
+              <div className="voucher-addon-card__alert">
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  lock_clock
+                </span>
+                <p>{t.profile.voucher.modificationClosed}</p>
+              </div>
+            ) : null}
+          </div>
         ) : null}
 
-        <section className="voucher-grid">
+        <div className="voucher-grid">
           <div className="voucher-card">
             <h2>{t.profile.voucher.sections.stay}</h2>
             <div className="voucher-definition">
@@ -743,8 +819,8 @@ export default async function VoucherPage({ params }: PageProps) {
               </div>
               {nights ? (
                 <div>
-                  <span>{t.common.night.other}</span>
-                  <strong>{nights}</strong>
+                  <span>{t.profile.bookings.labels.duration}</span>
+                  <strong>{(t.common.night[new Intl.PluralRules(resolvedLocale).select(nights) as keyof typeof t.common.night] ?? t.common.night.other).replace("{count}", String(nights))}</strong>
                 </div>
               ) : null}
               {destinationLabel ? (
@@ -761,28 +837,38 @@ export default async function VoucherPage({ params }: PageProps) {
             <div className="voucher-total">
               <div>
                 <span>{t.profile.bookings.labels.total}:</span>
-                <strong>{totalLabel}</strong>
+                <strong className={couponDisplaySummary ? "voucher-total__amount--striked" : undefined}>
+                  {totalLabel}
+                </strong>
               </div>
-              <div>
+              {couponDisplaySummary ? (
+                <>
+                  <div className="voucher-total__line voucher-total__line--discount">
+                    <span>{t.packageBuilder.checkout.couponDiscountLabel}:</span>
+                    {appliedCoupon ? (
+                      <div>
+                        <strong>-{couponDisplaySummary.discountLabel}</strong>
+                        <span>{t.packageBuilder.checkout.couponTitle}: {appliedCoupon.code} ({appliedCoupon.discountPercent}%)</span>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="voucher-total__line voucher-total__line--final">
+                    <span>{t.packageBuilder.checkout.couponTotalAfterDiscount}:</span>
+                    <strong>{couponDisplaySummary.discountedTotalLabel}</strong>
+                  </div>
+                </>
+              ) : null}
+              <div className="payment-method">
                 <span>{t.packageBuilder.checkout.paymentTitle}:</span>
                 <span>{paymentMethodLabel}</span>
               </div>
-              {appliedCoupon ? (
-                <div>
-                  <span>{t.packageBuilder.checkout.couponTitle}:</span>
-                  <span>
-                    {appliedCoupon.code} ({appliedCoupon.discountPercent}%)
-                  </span>
-                </div>
-              ) : null}
-              <p>{t.profile.voucher.paymentNote}</p>
             </div>
           </div>
-        </section>
+        </div>
         {showBookingUpdates && (
           <>
             <h2>{t.profile.voucher.sections.updates}</h2>
-            <section className="voucher-card">
+            <div className="voucher-card">
               <div className="voucher-definition">
                 {bookingCanceledByAdmin ? (
                   <div>
@@ -815,11 +901,11 @@ export default async function VoucherPage({ params }: PageProps) {
                   </div>
                 ) : null}
               </div>
-            </section>
+            </div>
           </>
         )}
         <h2>{t.profile.voucher.sections.services}</h2>
-        <section className="voucher-card voucher-card--services">
+        <div className="voucher-card voucher-card--services">
           <div className="voucher-services">
             {serviceCards.map((service) => (
               <fieldset key={service.id} className="voucher-service">
@@ -837,9 +923,9 @@ export default async function VoucherPage({ params }: PageProps) {
               </fieldset>
             ))}
           </div>
-        </section>
+        </div>
         <h2>{t.profile.voucher.sections.guests}</h2>
-        <section className="voucher-card voucher-card--guests">
+        <div className="voucher-card voucher-card--guests">
           <div className="voucher-rooms">
             {payload.rooms.map((room, index) => (
               <div key={room.roomIdentifier} className="voucher-room">
@@ -876,11 +962,11 @@ export default async function VoucherPage({ params }: PageProps) {
               </div>
             ))}
           </div>
-        </section>
+        </div>
         <h2>{t.profile.voucher.sections.notes}</h2>
-        <section className="voucher-card voucher-card--notes">
+        <div className="voucher-card voucher-card--notes">
           <p>{t.profile.voucher.notes}</p>
-        </section>
+        </div>
       </div>
     </main>
   );

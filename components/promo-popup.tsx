@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import { locales, type Locale } from "@/lib/i18n";
 import type { PromoPopupConfig } from "@/lib/promo-popup";
+import { PROMO_POPUP_CONFIG_UPDATE_EVENT } from "@/lib/promo-popup-sync";
 
 type PromoPopupResponse = {
   config: PromoPopupConfig | null;
@@ -36,6 +37,7 @@ export default function PromoPopup() {
   const { locale } = useLanguage();
   const pathname = usePathname();
   const [config, setConfig] = useState<PromoPopupConfig | null>(null);
+  const [configVersion, setConfigVersion] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
 
   const isHomePage = useMemo(() => {
@@ -50,23 +52,39 @@ export default function PromoPopup() {
   }, [pathname]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleConfigUpdated = () => {
+      setConfigVersion((current) => current + 1);
+    };
+    window.addEventListener(PROMO_POPUP_CONFIG_UPDATE_EVENT, handleConfigUpdated);
+    return () => {
+      window.removeEventListener(PROMO_POPUP_CONFIG_UPDATE_EVENT, handleConfigUpdated);
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
     const controller = new AbortController();
     fetch("/api/promo-popup", { cache: "no-store", signal: controller.signal })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: PromoPopupResponse | null) => {
         if (!active) return;
-        setConfig(data?.config ?? null);
+        const nextConfig = data?.config ?? null;
+        setConfig(nextConfig);
+        if (!nextConfig?.enabled || !nextConfig.imageUrl) {
+          setIsOpen(false);
+        }
       })
       .catch(() => {
         if (!active) return;
         setConfig(null);
+        setIsOpen(false);
       });
     return () => {
       active = false;
       controller.abort();
     };
-  }, []);
+  }, [pathname, configVersion]);
 
   useEffect(() => {
     if (!config?.enabled) return;
@@ -77,7 +95,7 @@ export default function PromoPopup() {
     try {
       if (window.localStorage.getItem(key) === "1") return;
       window.localStorage.setItem(key, "1");
-    } catch (error) {
+    } catch {
       // Ignore storage errors.
     }
 

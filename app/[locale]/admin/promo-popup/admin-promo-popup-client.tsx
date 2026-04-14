@@ -6,6 +6,7 @@ import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { useTranslations } from "@/components/language-provider";
 import { sanitizeLeadingZeroNumberInput } from "@/lib/number-input";
 import type { PromoPopupConfig, PromoPopupAdminConfig } from "@/lib/promo-popup";
+import { notifyPromoPopupConfigUpdated } from "@/lib/promo-popup-sync";
 
 type AdminPromoPopupClientProps = {
   adminUser: { name?: string | null; email?: string | null };
@@ -48,6 +49,7 @@ export default function AdminPromoPopupClient({
         { config }
       );
       setConfig(sanitizeConfig(response.config));
+      notifyPromoPopupConfigUpdated();
       setSaved(true);
     } catch (err) {
       const message = resolveSafeErrorFromUnknown(err, t.admin.promoPopup.errors.saveFailed);

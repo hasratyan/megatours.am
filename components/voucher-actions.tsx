@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type VoucherActionsProps = {
   downloadLabel: string;
@@ -16,6 +15,7 @@ export default function VoucherActions({
   profileHref,
 }: VoucherActionsProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   useEffect(() => {
     if (searchParams?.get("download") !== "1") return;
@@ -28,11 +28,11 @@ export default function VoucherActions({
   return (
     <div className="voucher-actions">
       <button type="button" className="voucher-download" onClick={() => window.print()}>
-        {downloadLabel}
+        <span className="material-symbols-rounded" aria-hidden="true">download</span>{downloadLabel}
       </button>
-      <Link className="voucher-back" href={profileHref}>
-        {backLabel}
-      </Link>
+      <button type="button" className="voucher-back" onClick={() => router.push(profileHref)}>
+        <span className="material-symbols-rounded" aria-hidden="true">person</span>{backLabel}
+      </button>
     </div>
   );
 }
