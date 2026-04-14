@@ -365,18 +365,24 @@ export default async function VoucherPage({ params }: PageProps) {
   const totalLabel = formatCurrencyAmount(displayTotal.amount, displayTotal.currency, "en-GB") ?? "—";
   const couponDisplaySummary = (() => {
     if (!appliedCoupon) return null;
-    const hasStoredDiscountedAmounts =
+    if (
       displayTotal.currency === "AMD" &&
       typeof appliedCoupon.discountAmount === "number" &&
       Number.isFinite(appliedCoupon.discountAmount) &&
       typeof appliedCoupon.discountedAmount === "number" &&
-      Number.isFinite(appliedCoupon.discountedAmount);
-    const discountAmount = hasStoredDiscountedAmounts
-      ? appliedCoupon.discountAmount
-      : Math.round(((displayTotal.amount * appliedCoupon.discountPercent) / 100 + Number.EPSILON) * 100) / 100;
-    const discountedAmount = hasStoredDiscountedAmounts
-      ? appliedCoupon.discountedAmount
-      : Math.round((Math.max(0, displayTotal.amount - discountAmount) + Number.EPSILON) * 100) / 100;
+      Number.isFinite(appliedCoupon.discountedAmount)
+    ) {
+      return {
+        discountLabel: formatCurrencyAmount(appliedCoupon.discountAmount, displayTotal.currency, "en-GB") ?? "—",
+        discountedTotalLabel:
+          formatCurrencyAmount(appliedCoupon.discountedAmount, displayTotal.currency, "en-GB") ?? "—",
+      };
+    }
+
+    const discountAmount =
+      Math.round(((displayTotal.amount * appliedCoupon.discountPercent) / 100 + Number.EPSILON) * 100) / 100;
+    const discountedAmount =
+      Math.round((Math.max(0, displayTotal.amount - discountAmount) + Number.EPSILON) * 100) / 100;
 
     return {
       discountLabel: formatCurrencyAmount(discountAmount, displayTotal.currency, "en-GB") ?? "—",

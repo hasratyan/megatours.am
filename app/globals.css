@@ -6103,6 +6103,7 @@ main.payment-status{
     font-size: 1.35rem;
     font-weight: 600;
     color: #f8fafc;
+    align-self: flex-start;
   }
 }
 
@@ -6585,6 +6586,32 @@ main.payment-status{
     & *{
       color: #000!important;
     }
+
+    .voucher-grid{
+      .voucher-card{
+        h2{
+          border-bottom: 1px dashed #d4d4d4;
+          padding-bottom: 0.25em;
+        }
+      }
+    }
+
+    .voucher-card--guests{
+      .voucher-rooms{
+        .voucher-room{
+          .voucher-guest-list{
+            li{
+              background: #dcdcdc;
+
+              .voucher-lead{
+                background: #7cf2d4;
+                font-weight: bold;
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   .voucher-shell{
@@ -6592,6 +6619,7 @@ main.payment-status{
 
     .voucher-hero{
       gap: 1.5rem;
+      flex-direction: column;
 
       .company-information{
         flex-direction: column;
@@ -6635,7 +6663,8 @@ main.payment-status{
         max-width: none;
       }
       .voucher-meta{
-        background: #7cf2d4;
+        background: #dcdcdc;
+        width: 100%;
       }
     }
   }
