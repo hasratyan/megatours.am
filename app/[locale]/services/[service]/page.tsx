@@ -4,6 +4,7 @@ import { getServerSession } from "@/lib/auth-compat/server";
 import PackageServiceClient from "@/components/package-service-client";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { getFeaturedHotelCards, type FeaturedHotelCard } from "@/lib/featured-hotels";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { isBookingModificationClosed } from "@/lib/booking-modification";
@@ -211,5 +212,20 @@ export default async function ServicePage({ params, searchParams }: PageProps) {
     );
   }
 
-  return <PackageServiceClient serviceKey={serviceKey} bookingAddonContext={bookingAddonContext} />;
+  let featuredHotels: FeaturedHotelCard[] = [];
+  if (serviceKey === "hotel") {
+    try {
+      featuredHotels = await getFeaturedHotelCards(resolvedLocale);
+    } catch (error) {
+      console.error("[ServicePage] Failed to load featured hotels", error);
+    }
+  }
+
+  return (
+    <PackageServiceClient
+      serviceKey={serviceKey}
+      bookingAddonContext={bookingAddonContext}
+      featuredHotels={featuredHotels}
+    />
+  );
 }

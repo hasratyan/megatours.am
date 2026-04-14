@@ -1,11 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
-import HotelCard from "@/components/hotel-card";
+import FeaturedHotelsMarquee from "@/components/featured-hotels-marquee";
 import SearchForm from "@/components/search-form";
 import DeferredCurvedLoop from "@/components/deferred-curved-loop";
 import HeroMedia from "@/components/hero-media";
 import ShinyText from "@/components/ShinyText";
-import { Marquee } from "@/components/ui/marquee";
 import PartnerCarousel from "@/components/partner-carousel";
 import PackageBuilderCta from "@/components/package-builder-cta";
 import type { FeaturedHotelCard } from "@/lib/featured-hotels";
@@ -18,20 +17,6 @@ type HomeProps = {
 
 export default function Home({ featuredHotels, locale }: HomeProps) {
   const t = getTranslations(locale);
-  const seen = new Set<string>();
-  const firstRow: FeaturedHotelCard[] = [];
-  const secondRow: FeaturedHotelCard[] = [];
-  let index = 0;
-  for (const hotel of featuredHotels) {
-    if (seen.has(hotel.hotelCode)) continue;
-    seen.add(hotel.hotelCode);
-    if (index % 2 === 0) {
-      firstRow.push(hotel);
-    } else {
-      secondRow.push(hotel);
-    }
-    index += 1;
-  }
 
   const resolveServiceHref = (icon: string) => {
     if (icon === "hotel") return `/${locale}/services/hotel`;
@@ -76,24 +61,7 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
             <Link href={"#"}><span className="material-symbols-rounded">redeem</span>{t.featured.cta}</Link>
           </section>
         </div>
-        {(firstRow.length > 0 || secondRow.length > 0) && (
-          <div id="hotels">
-            {firstRow.length > 0 && (
-              <Marquee reverse pauseOnHover={true}>
-                {firstRow.map((hotel) => (
-                  <HotelCard key={hotel.hotelCode} hotel={hotel} copy={t.card} locale={locale} />
-                ))}
-              </Marquee>
-            )}
-            {secondRow.length > 0 && (
-              <Marquee pauseOnHover={true}>
-                {secondRow.map((hotel) => (
-                  <HotelCard key={hotel.hotelCode} hotel={hotel} copy={t.card} locale={locale} />
-                ))}
-              </Marquee>
-            )}
-          </div>
-        )}
+        <FeaturedHotelsMarquee featuredHotels={featuredHotels} locale={locale} cardCopy={t.card} />
         <div className="container">
           {/* Services Section */}
           <section id="services" aria-labelledby="services-title">

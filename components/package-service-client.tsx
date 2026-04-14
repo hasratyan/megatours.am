@@ -10,6 +10,7 @@ import type { Locale as DateFnsLocale } from "date-fns";
 import { enGB, hy, ru } from "date-fns/locale";
 import Loader from "@/components/loader";
 import SearchForm from "@/components/search-form";
+import FeaturedHotelsMarquee from "@/components/featured-hotels-marquee";
 import { useLanguage } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
@@ -36,9 +37,11 @@ import {
 } from "@/lib/package-builder-state";
 import { useAmdRates } from "@/lib/use-amd-rates";
 import type { BookingAddonHotelContext, BookingAddonServiceKey } from "@/lib/booking-addons";
+import type { FeaturedHotelCard } from "@/lib/featured-hotels";
 
 type Props = {
   serviceKey: PackageBuilderService;
+  featuredHotels?: FeaturedHotelCard[];
   bookingAddonContext?: {
     bookingId: string;
     hotelContext: BookingAddonHotelContext;
@@ -389,7 +392,11 @@ const buildHotelSelectionFromAddonContext = (
   };
 };
 
-export default function PackageServiceClient({ serviceKey, bookingAddonContext = null }: Props) {
+export default function PackageServiceClient({
+  serviceKey,
+  featuredHotels = [],
+  bookingAddonContext = null,
+}: Props) {
   const { locale, t } = useLanguage();
   const intlLocale = intlLocales[locale] ?? "en-GB";
   const dateFnsLocale = dateFnsLocales[locale] ?? enGB;
@@ -470,6 +477,7 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
     startDate: string | null;
     endDate: string | null;
   } | null>(null);
+  const [hasPerformedHotelSearch, setHasPerformedHotelSearch] = useState<boolean | null>(null);
   const [insuranceDateFocusedRange, setInsuranceDateFocusedRange] = useState<[number, 0 | 1]>([
     0,
     0,
@@ -683,6 +691,17 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
     setInsuranceDateFocusedRange([0, 0]);
     setInsuranceDateValidationError(null);
   }, [insuranceSelection?.selected]);
+  useEffect(() => {
+    if (serviceKey !== "hotel") return;
+    if (typeof window === "undefined") return;
+    try {
+      const lastSearchLocation = sessionStorage.getItem("megatours:lastSearchLocation");
+      setHasPerformedHotelSearch(Boolean(lastSearchLocation?.trim()));
+    } catch (error) {
+      console.warn("[PackageBuilder][hotel] Failed to read last search location", error);
+      setHasPerformedHotelSearch(false);
+    }
+  }, [serviceKey]);
   const transferMissingDestination =
     serviceKey === "transfer" && hasHotel && !destinationName && !destinationCode;
   const shouldFetchTransfers =
@@ -2325,6 +2344,10 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
   ]);
 
   const pageCopy = t.packageBuilder.pages[serviceKey];
+  const showFeaturedHotelsBeforeSearch =
+    serviceKey === "hotel" &&
+    featuredHotels.length > 0 &&
+    hasPerformedHotelSearch === false;
 
   const destinationBadgeLabel = useMemo(() => {
     const normalizedDestinationName =
@@ -4277,9 +4300,14 @@ export default function PackageServiceClient({ serviceKey, bookingAddonContext =
         </div>
 
         {serviceKey === "hotel" ? (
-          <div className="search">
-            <SearchForm copy={t.search} />
-          </div>
+          <>
+            <div className="search">
+              <SearchForm copy={t.search} />
+            </div>
+            {showFeaturedHotelsBeforeSearch ? (
+              <FeaturedHotelsMarquee featuredHotels={featuredHotels} locale={locale} cardCopy={t.card} />
+            ) : null}
+          </>
         ) : serviceKey === "flight" ? (
           renderFlightPanel()
         ) : serviceKey === "transfer" ? (
