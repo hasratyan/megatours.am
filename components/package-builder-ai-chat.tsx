@@ -4,9 +4,14 @@ import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useS
 import { getJson, postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { Locale as AppLocale } from "@/lib/i18n";
-import type { PackageBuilderState, ServiceFlags } from "@/lib/package-builder-state";
+import type {
+  PackageBuilderHotelSelection,
+  PackageBuilderState,
+  ServiceFlags,
+} from "@/lib/package-builder-state";
 import {
   DEFAULT_SERVICE_FLAGS,
+  PACKAGE_BUILDER_SESSION_MS,
   openPackageBuilder,
   updatePackageBuilderState,
 } from "@/lib/package-builder-state";
@@ -179,6 +184,19 @@ const formatPrice = (amount: number | null | undefined, currency: string | null 
     return `${code} ${Math.round(amount).toLocaleString()}`;
   }
 };
+
+const buildHotelSelectionKey = (selection?: PackageBuilderHotelSelection | null) =>
+  selection?.selected
+    ? [
+        selection.hotelCode ?? "",
+        selection.destinationCode ?? "",
+        selection.checkInDate ?? "",
+        selection.checkOutDate ?? "",
+        selection.roomCount ?? "",
+        selection.guestCount ?? "",
+        selection.selectionKey ?? "",
+      ].join("|")
+    : "";
 
 const buildPackageStateFromDraft = (draft: PackageAssistantDraft): PackageBuilderState => {
   const now = Date.now();
@@ -689,7 +707,22 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
   };
 
   const onApplyOption = (option: PackageAssistantPackageOption) => {
-    updatePackageBuilderState(() => buildPackageStateFromDraft(option.draft));
+    updatePackageBuilderState((prev) => {
+      const nextState = buildPackageStateFromDraft(option.draft);
+      const previousHotelKey = buildHotelSelectionKey(prev.hotel);
+      const nextHotelKey = buildHotelSelectionKey(nextState.hotel);
+      const shouldRestartSession = nextHotelKey.length > 0 && nextHotelKey !== previousHotelKey;
+
+      return {
+        ...nextState,
+        sessionExpiresAt: shouldRestartSession
+          ? Date.now() + PACKAGE_BUILDER_SESSION_MS
+          : nextHotelKey.length > 0
+            ? prev.sessionExpiresAt
+            : undefined,
+        updatedAt: Date.now(),
+      };
+    });
     openPackageBuilder();
     setAppliedOptionId(option.id);
   };
