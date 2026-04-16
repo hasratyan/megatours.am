@@ -15,6 +15,7 @@ import {
   getPaymentMethodFlags,
 } from "@/lib/payment-method-flags";
 import {
+  type BookingAddonServiceKey,
   isBookingCanceled,
   isBookingConfirmed,
   resolveBookingAddonHotelContext,
@@ -28,8 +29,79 @@ type PageProps = {
   params: Promise<{ locale: string; bookingId: string }>;
 };
 
+type BookingRecord = {
+  payload?: AoryxBookingPayload | null;
+  booking?: AoryxBookingResult | null;
+  addonLastPayment?: unknown;
+};
+
+type AddonLastPaymentSnapshot = {
+  at: string | null;
+  provider: string | null;
+  amountValue: number | null;
+  currency: string | null;
+  requestedServices: BookingAddonServiceKey[];
+  appliedServices: BookingAddonServiceKey[];
+  skippedServices: BookingAddonServiceKey[];
+};
+
 const resolveLocale = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const isAddonServiceKey = (value: unknown): value is BookingAddonServiceKey =>
+  value === "transfer" || value === "excursion" || value === "insurance" || value === "flight";
+
+const resolveAddonServiceKeys = (value: unknown): BookingAddonServiceKey[] => {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.filter(isAddonServiceKey)));
+};
+
+const resolveAddonLastPaymentSnapshot = (value: unknown): AddonLastPaymentSnapshot | null => {
+  if (!isRecord(value)) return null;
+
+  const at =
+    typeof value.at === "string" && value.at.trim().length > 0 ? value.at.trim() : null;
+  const provider =
+    typeof value.provider === "string" && value.provider.trim().length > 0
+      ? value.provider.trim()
+      : null;
+  const amountValue =
+    typeof value.amountValue === "number" && Number.isFinite(value.amountValue)
+      ? value.amountValue
+      : null;
+  const currency =
+    typeof value.currency === "string" && value.currency.trim().length > 0
+      ? value.currency.trim()
+      : null;
+  const requestedServices = resolveAddonServiceKeys(value.requestedServices);
+  const appliedServices = resolveAddonServiceKeys(value.appliedServices);
+  const skippedServices = resolveAddonServiceKeys(value.skippedServices);
+
+  if (
+    !at &&
+    !provider &&
+    amountValue === null &&
+    !currency &&
+    requestedServices.length === 0 &&
+    appliedServices.length === 0 &&
+    skippedServices.length === 0
+  ) {
+    return null;
+  }
+
+  return {
+    at,
+    provider,
+    amountValue,
+    currency,
+    requestedServices,
+    appliedServices,
+    skippedServices,
+  };
+};
 
 export async function generateMetadata({ params }: PageProps) {
   const { locale, bookingId } = await params;
@@ -38,8 +110,8 @@ export async function generateMetadata({ params }: PageProps) {
   const trimmedBookingId = bookingId?.trim();
   return buildLocalizedMetadata({
     locale: resolvedLocale,
-    title: t.packageBuilder.title,
-    description: t.packageBuilder.subtitle,
+    title: t.profile.voucher.addServices.title,
+    description: t.profile.voucher.addServices.subtitle,
     path: trimmedBookingId
       ? `/profile/voucher/${trimmedBookingId}/add-services`
       : "/profile/voucher",
@@ -62,10 +134,10 @@ export default async function BookingAddonsPage({ params }: PageProps) {
 
   const userIdString = session.user.id;
   const db = await getDb();
-  const bookingRecord = await db.collection("user_bookings").findOne({
+  const bookingRecord = (await db.collection("user_bookings").findOne({
     userIdString,
     "payload.customerRefNumber": bookingId,
-  });
+  })) as BookingRecord | null;
 
   if (!bookingRecord?.payload) {
     notFound();
@@ -105,6 +177,7 @@ export default async function BookingAddonsPage({ params }: PageProps) {
 
   const existingServices = resolveExistingBookingAddonServiceKeys(payload);
   const hotelContext = resolveBookingAddonHotelContext(payload);
+  const lastAddonPayment = resolveAddonLastPaymentSnapshot(bookingRecord.addonLastPayment ?? null);
 
   if (!hotelContext) {
     notFound();
@@ -123,6 +196,7 @@ export default async function BookingAddonsPage({ params }: PageProps) {
         flight: serviceFlags.flight !== false,
       }}
       paymentMethodFlags={paymentMethodFlags}
+      lastAddonPayment={lastAddonPayment}
     />
   );
 }

@@ -770,7 +770,7 @@ export default async function VoucherPage({ params }: PageProps) {
                   {addonBadgeLabel}
                 </span>
                 <div>
-                  <h2>{t.profile.voucher.sections.services}</h2>
+                  <h2>{t.packageBuilder.addService}</h2>
                   <p>{addonHelperText}</p>
                 </div>
               </div>

@@ -233,6 +233,46 @@ const formatDateInput = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const parseDateTimeInput = (value?: string | null) => {
+  if (!value) return null;
+  const normalizedValue = value.trim();
+  if (!normalizedValue) return null;
+  const parsed = new Date(normalizedValue);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const buildDateTimeMinFromDate = (value?: string | null) => {
+  if (!value) return undefined;
+  const normalizedValue = value.trim();
+  return ISO_DATE_INPUT_REGEX.test(normalizedValue) ? `${normalizedValue}T00:00` : undefined;
+};
+
+const resolveLatestDateTimeInput = (...values: Array<string | null | undefined>) => {
+  let latestValue: string | undefined;
+  let latestDate: Date | null = null;
+  values.forEach((value) => {
+    const normalizedValue = value?.trim();
+    if (!normalizedValue) return;
+    const parsed = parseDateTimeInput(normalizedValue);
+    if (!parsed) return;
+    if (!latestDate || parsed.getTime() > latestDate.getTime()) {
+      latestDate = parsed;
+      latestValue = normalizedValue;
+    }
+  });
+  return latestValue;
+};
+
+const isDateTimeEarlierThan = (
+  value: string | null | undefined,
+  minValue: string | null | undefined
+) => {
+  const parsedValue = parseDateTimeInput(value);
+  const parsedMinValue = parseDateTimeInput(minValue);
+  if (!parsedValue || !parsedMinValue) return false;
+  return parsedValue.getTime() < parsedMinValue.getTime();
+};
+
 const MAX_INSURANCE_AGE_YEARS = 100;
 const MAX_INSURANCE_CHILD_AGE_YEARS = 18;
 const ISO_DATE_INPUT_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -648,6 +688,7 @@ type CheckoutDraft = {
     phone: string;
   };
   guestDetails: RoomGuestForm[];
+  transferFlightDetails?: TransferFlightDetailsForm;
   insuranceTravelers: InsuranceTravelerForm[];
 };
 
@@ -775,6 +816,10 @@ const hasManualInsuranceInput = (travelers: InsuranceTravelerForm[]) =>
 
 const hasMeaningfulCheckoutDraft = (draft: CheckoutDraft) =>
   hasNonEmptyValue(draft.contact.phone) ||
+  hasNonEmptyValue(draft.transferFlightDetails?.flightNumber) ||
+  hasNonEmptyValue(draft.transferFlightDetails?.arrivalDateTime) ||
+  hasNonEmptyValue(draft.transferFlightDetails?.departureFlightNumber) ||
+  hasNonEmptyValue(draft.transferFlightDetails?.departureDateTime) ||
   hasManualGuestInput(draft.guestDetails) ||
   hasManualInsuranceInput(draft.insuranceTravelers);
 
@@ -1042,6 +1087,18 @@ export default function PackageCheckoutClient({
   const excursion = builderState.excursion;
   const insuranceSelection = builderState.insurance;
   const insuranceActive = insuranceSelection?.selected === true;
+  const transferCheckInMinDateTime = useMemo(
+    () => buildDateTimeMinFromDate(hotel?.checkInDate ?? null),
+    [hotel?.checkInDate]
+  );
+  const transferDepartureMinDateTime = useMemo(
+    () =>
+      resolveLatestDateTimeInput(
+        transferCheckInMinDateTime,
+        transferFlightDetails.arrivalDateTime
+      ),
+    [transferCheckInMinDateTime, transferFlightDetails.arrivalDateTime]
+  );
   useEffect(() => {
     if (transfer?.selected === true) return;
     setTransferFieldErrors({});
@@ -1695,22 +1752,46 @@ export default function PackageCheckoutClient({
   const resolveTransferFlightFieldErrors = useCallback((): TransferFlightFieldErrors => {
     if (transfer?.selected !== true) return {};
     const errors: TransferFlightFieldErrors = {};
+    const arrivalDateTime = transferFlightDetails.arrivalDateTime.trim();
+    const departureDateTime = transferFlightDetails.departureDateTime.trim();
+    const hasArrivalDateTime = arrivalDateTime.length > 0;
+    const hasDepartureDateTime = departureDateTime.length > 0;
+
     if (!transferFlightDetails.flightNumber.trim()) {
       errors.flightNumber = t.hotel.addons.transfers.flightNumberRequired;
     }
-    if (!transferFlightDetails.arrivalDateTime.trim()) {
+    if (!hasArrivalDateTime) {
       errors.arrivalDateTime = t.hotel.addons.transfers.arrivalRequired;
+    } else if (
+      transferCheckInMinDateTime &&
+      isDateTimeEarlierThan(arrivalDateTime, transferCheckInMinDateTime)
+    ) {
+      errors.arrivalDateTime = t.hotel.addons.transfers.arrivalNotBeforeCheckIn;
     }
     if (transfer?.includeReturn) {
       if (!transferFlightDetails.departureFlightNumber.trim()) {
         errors.departureFlightNumber = t.hotel.addons.transfers.departureFlightNumberRequired;
       }
-      if (!transferFlightDetails.departureDateTime.trim()) {
+      if (!hasDepartureDateTime) {
         errors.departureDateTime = t.hotel.addons.transfers.departureRequired;
+      } else if (
+        transferDepartureMinDateTime &&
+        isDateTimeEarlierThan(departureDateTime, transferDepartureMinDateTime)
+      ) {
+        errors.departureDateTime = hasArrivalDateTime
+          ? t.hotel.addons.transfers.departureNotBeforeArrival
+          : t.hotel.addons.transfers.departureNotBeforeCheckIn;
       }
     }
     return errors;
-  }, [t, transfer?.selected, transfer?.includeReturn, transferFlightDetails]);
+  }, [
+    t,
+    transfer?.selected,
+    transfer?.includeReturn,
+    transferCheckInMinDateTime,
+    transferDepartureMinDateTime,
+    transferFlightDetails,
+  ]);
 
   const normalizeOptional = (value: string | null | undefined) => {
     if (typeof value !== "string") return null;
@@ -2187,6 +2268,7 @@ export default function PackageCheckoutClient({
       updatedAt: Date.now(),
       contact,
       guestDetails,
+      transferFlightDetails,
       insuranceTravelers,
     };
     if (!hasMeaningfulCheckoutDraft(draft)) return;
@@ -2198,6 +2280,7 @@ export default function PackageCheckoutClient({
     checkoutRestoreDraftModal,
     contact,
     guestDetails,
+    transferFlightDetails,
     insuranceTravelers,
   ]);
 
@@ -2268,6 +2351,13 @@ export default function PackageCheckoutClient({
         Array.isArray(draft.guestDetails) ? draft.guestDetails : []
       )
     );
+    setTransferFlightDetails({
+      flightNumber: draft.transferFlightDetails?.flightNumber ?? "",
+      arrivalDateTime: draft.transferFlightDetails?.arrivalDateTime ?? "",
+      departureFlightNumber: draft.transferFlightDetails?.departureFlightNumber ?? "",
+      departureDateTime: draft.transferFlightDetails?.departureDateTime ?? "",
+    });
+    setTransferFieldErrors({});
     if (
       insuranceSelection?.selected &&
       Array.isArray(draft.insuranceTravelers) &&
@@ -3655,6 +3745,7 @@ export default function PackageCheckoutClient({
                     <input
                       className={`checkout-input${transferFieldErrors.arrivalDateTime ? " error" : ""}`}
                       type="datetime-local"
+                      min={transferCheckInMinDateTime}
                       value={transferFlightDetails.arrivalDateTime}
                       onChange={(event) =>
                         updateTransferFlightField("arrivalDateTime", event.target.value)
@@ -3698,6 +3789,7 @@ export default function PackageCheckoutClient({
                             transferFieldErrors.departureDateTime ? " error" : ""
                           }`}
                           type="datetime-local"
+                          min={transferDepartureMinDateTime}
                           value={transferFlightDetails.departureDateTime}
                           onChange={(event) =>
                             updateTransferFlightField("departureDateTime", event.target.value)

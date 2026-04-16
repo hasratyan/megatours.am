@@ -19,7 +19,10 @@ import {
 import { getPaymentMethodFlags } from "@/lib/payment-method-flags";
 import { getServiceFlags } from "@/lib/service-flags";
 import { DEFAULT_SERVICE_FLAGS } from "@/lib/package-builder-state";
-import { validateTransferFlightDetailsForBooking } from "@/lib/b2b-service-booking";
+import {
+  validateInsuranceDetailsForBooking,
+  validateTransferFlightDetailsForBooking,
+} from "@/lib/b2b-service-booking";
 import {
   calculateBookingAddonAmountAmd,
   isBookingCanceled,
@@ -763,6 +766,21 @@ const tryHandleBookingAddonCheckout = async (params: {
           validationError instanceof Error
             ? validationError.message
             : "Transfer flight details are invalid.",
+        code: "transfer_details_required",
+      },
+      { status: 400 }
+    );
+  }
+  try {
+    validateInsuranceDetailsForBooking(addonRequest.services.insurance);
+  } catch (validationError) {
+    return NextResponse.json(
+      {
+        error:
+          validationError instanceof Error
+            ? validationError.message
+            : "Insurance details are invalid.",
+        code: "insurance_details_required",
       },
       { status: 400 }
     );

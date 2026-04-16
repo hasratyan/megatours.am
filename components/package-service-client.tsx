@@ -477,7 +477,6 @@ export default function PackageServiceClient({
     startDate: string | null;
     endDate: string | null;
   } | null>(null);
-  const [hasPerformedHotelSearch, setHasPerformedHotelSearch] = useState<boolean | null>(null);
   const [insuranceDateFocusedRange, setInsuranceDateFocusedRange] = useState<[number, 0 | 1]>([
     0,
     0,
@@ -691,17 +690,6 @@ export default function PackageServiceClient({
     setInsuranceDateFocusedRange([0, 0]);
     setInsuranceDateValidationError(null);
   }, [insuranceSelection?.selected]);
-  useEffect(() => {
-    if (serviceKey !== "hotel") return;
-    if (typeof window === "undefined") return;
-    try {
-      const lastSearchLocation = sessionStorage.getItem("megatours:lastSearchLocation");
-      setHasPerformedHotelSearch(Boolean(lastSearchLocation?.trim()));
-    } catch (error) {
-      console.warn("[PackageBuilder][hotel] Failed to read last search location", error);
-      setHasPerformedHotelSearch(false);
-    }
-  }, [serviceKey]);
   const transferMissingDestination =
     serviceKey === "transfer" && hasHotel && !destinationName && !destinationCode;
   const shouldFetchTransfers =
@@ -2344,10 +2332,11 @@ export default function PackageServiceClient({
   ]);
 
   const pageCopy = t.packageBuilder.pages[serviceKey];
-  const showFeaturedHotelsBeforeSearch =
-    serviceKey === "hotel" &&
-    featuredHotels.length > 0 &&
-    hasPerformedHotelSearch === false;
+  const showFeaturedHotelsEmptyState = serviceKey === "hotel" && featuredHotels.length > 0;
+  const bookingAddonsHref = bookingAddonContext
+    ? `/${locale}/profile/voucher/${encodeURIComponent(bookingAddonContext.bookingId)}/add-services`
+    : null;
+  const bookingAddonsHotelLabel = bookingAddonContext?.hotelContext.hotelName?.trim() ?? null;
 
   const destinationBadgeLabel = useMemo(() => {
     const normalizedDestinationName =
@@ -4266,6 +4255,20 @@ export default function PackageServiceClient({
           </>
           }
         </div>
+        {bookingAddonsHref ? (
+          <div className="panel service-builder__flow-card">
+            <div className="service-builder__flow-copy">
+              <p className="service-builder__note">
+                {bookingAddonsHotelLabel
+                  ? `${bookingAddonsHotelLabel} · ${t.profile.voucher.addServices.selectionHint}`
+                  : t.profile.voucher.addServices.selectionHint}
+              </p>
+            </div>
+            <Link href={bookingAddonsHref} className="service-builder__cta">
+              {t.profile.voucher.addServices.title}
+            </Link>
+          </div>
+        ) : null}
         {renderInsurancePlans()}
         {renderInsuranceControls()}
         {renderExcursionControls()}
@@ -4304,9 +4307,6 @@ export default function PackageServiceClient({
             <div className="search">
               <SearchForm copy={t.search} />
             </div>
-            {showFeaturedHotelsBeforeSearch ? (
-              <FeaturedHotelsMarquee featuredHotels={featuredHotels} locale={locale} cardCopy={t.card} />
-            ) : null}
           </>
         ) : serviceKey === "flight" ? (
           renderFlightPanel()
@@ -4352,6 +4352,9 @@ export default function PackageServiceClient({
           </div>
         )}
       </div>
+      {showFeaturedHotelsEmptyState ? (
+        <FeaturedHotelsMarquee featuredHotels={featuredHotels} locale={locale} cardCopy={t.card} />
+      ) : null}
     </main>
   );
 }

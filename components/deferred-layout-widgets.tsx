@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { Locale } from "@/lib/i18n";
 
@@ -14,6 +15,15 @@ type DeferredLayoutWidgetsProps = {
 
 export default function DeferredLayoutWidgets({ locale }: DeferredLayoutWidgetsProps) {
   const [shouldRender, setShouldRender] = useState(false);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const isBookingAddonsVoucherRoute =
+    typeof pathname === "string" &&
+    /^\/[^/]+\/profile\/voucher\/[^/]+\/add-services\/?$/.test(pathname);
+  const isBookingAddonsServiceRoute =
+    searchParams?.get("flow")?.trim().toLowerCase() === "booking_addons";
+  const hidePackageWidgets = isBookingAddonsVoucherRoute || isBookingAddonsServiceRoute;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -44,8 +54,8 @@ export default function DeferredLayoutWidgets({ locale }: DeferredLayoutWidgetsP
   return (
     <>
       <PromoPopup />
-      <PackageBuilderAiChat locale={locale} />
-      <PackageBuilder />
+      {!hidePackageWidgets ? <PackageBuilderAiChat locale={locale} /> : null}
+      {!hidePackageWidgets ? <PackageBuilder /> : null}
     </>
   );
 }

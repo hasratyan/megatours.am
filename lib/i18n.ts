@@ -313,6 +313,11 @@ export type Translation = {
         prebookInvalid: string;
         prebookReturnToHotel: string;
         duplicatePaymentAttempt: string;
+        bookingNotConfirmed: string;
+        bookingCanceled: string;
+        bookingModificationClosed: string;
+        addonServiceExists: string;
+        serviceDisabled: string;
         paymentFailed: string;
       };
         labels: {
@@ -401,6 +406,12 @@ export type Translation = {
       body: string;
       note: string;
       cta: string;
+      addons: {
+        title: string;
+        body: string;
+        pendingTitle: string;
+        pendingBody: string;
+      };
     };
     failure: {
       title: string;
@@ -468,6 +479,27 @@ export type Translation = {
         unavailable: string;
         helper: string;
         unavailableHelper: string;
+      };
+      addServices: {
+        title: string;
+        subtitle: string;
+        bookingSummaryTitle: string;
+        serviceSelectionTitle: string;
+        includedTitle: string;
+        unavailableTitle: string;
+        selectionHint: string;
+        emptySelection: string;
+        noRemainingTitle: string;
+        noRemainingBody: string;
+        noAvailableTitle: string;
+        noAvailableBody: string;
+        openService: string;
+        updateSelection: string;
+        totalDue: string;
+        lastPaymentTitle: string;
+        lastPaymentRequested: string;
+        lastPaymentApplied: string;
+        lastPaymentSkipped: string;
       };
       sections: {
         stay: string;
@@ -982,8 +1014,11 @@ export type Translation = {
         detailsRequired: string;
         flightNumberRequired: string;
         arrivalRequired: string;
+        arrivalNotBeforeCheckIn: string;
         departureFlightNumberRequired: string;
         departureRequired: string;
+        departureNotBeforeCheckIn: string;
+        departureNotBeforeArrival: string;
       };
       excursions: {
         title: string;
@@ -1571,6 +1606,14 @@ const translations: Record<Locale, Translation> = {
           prebookReturnToHotel: "Վերադառնալ ընտրված հյուրանոցին",
           duplicatePaymentAttempt:
             "Այս նախնական ամրագրման համար արդեն կա ակտիվ կամ ավարտված վճարում։ Խնդրում ենք ստուգել ամրագրման կարգավիճակը։",
+          bookingNotConfirmed: "Այս ամրագրումը դեռ հաստատված չէ, ուստի հավելյալ ծառայություններ ավելացնել հնարավոր չէ։",
+          bookingCanceled: "Չեղարկված ամրագրումներին հավելյալ ծառայություններ ավելացնել հնարավոր չէ։",
+          bookingModificationClosed:
+            "Այս ամրագրումն այլևս հնարավոր չէ փոփոխել, քանի որ հյուրանոցային կեցությունն արդեն ավարտվել է։",
+          addonServiceExists:
+            "Ընտրված ծառայություններից մի մասը արդեն կցված է այս ամրագրմանը։ Խնդրում ենք թարմացնել էջը և շարունակել մնացածով։",
+          serviceDisabled:
+            "Ընտրված ծառայություններից մի մասը այժմ հասանելի չէ։ Խնդրում ենք ընտրել այլ տարբերակ կամ փորձել ավելի ուշ։",
           paymentFailed: "Չհաջողվեց սկսել վճարումը։ Խնդրում ենք կրկին փորձել։",
         },
         labels: {
@@ -1716,6 +1759,12 @@ const translations: Record<Locale, Translation> = {
         body: "Շնորհակալություն MEGATOURS ընտրելու համար։",
         note: "Շուտով կստանաք հաստատման նամակ ձեր էլ․ հասցեին։",
         cta: "Անձնական էջ",
+        addons: {
+          title: "Լրացուցիչ ծառայությունների վճարումը հաջողվեց",
+          body: "Ընտրված ծառայությունները մշակվել են և ամրագրման թարմացումը հասանելի է ստորև։",
+          pendingTitle: "Վճարումը ստացվել է, ծառայությունները կցվում են",
+          pendingBody: "Վճարումը հաջողվել է։ Ընտրված ծառայությունները հիմա կցվում են ձեր ամրագրմանը։",
+        },
       },
       failure: {
         title: "Ամրագրումը չի հաստատվել",
@@ -1907,6 +1956,29 @@ const translations: Record<Locale, Translation> = {
           unavailable: "Փոփոխությունը փակ է",
           helper: "Այս ծառայությունները դեռ կցված չեն ամրագրմանը։ Կարող եք դրանք ավելացնել և վճարել առանձին։",
           unavailableHelper: "Այս ծառայությունները դեռ կցված չեն ամրագրմանը։",
+        },
+        addServices: {
+          title: "Ավելացնել ծառայություններ ամրագրմանը",
+          subtitle:
+            "Ավելացրեք միայն այն ծառայությունները, որոնք դեռ չեն կցվել այս վաուչերին, և վճարեք առանձին։",
+          bookingSummaryTitle: "Ամրագրման տվյալներ",
+          serviceSelectionTitle: "Հասանելի ծառայություններ",
+          includedTitle: "Արդեն ներառված է վաուչերում",
+          unavailableTitle: "Ժամանակավորապես անհասանելի",
+          selectionHint: "Ընտրեք ծառայություն ստորևից, որպեսզի այն ավելացնեք այս ամրագրմանը։",
+          emptySelection: "Ծառայություն դեռ ընտրված չէ։ Ընտրեք տարբերակը քարտերից՝ վճարումը շարունակելու համար։",
+          noRemainingTitle: "Ավելացնելու ծառայություն այլևս չկա",
+          noRemainingBody: "Այս ամրագրման համար արդեն ավելացված են բոլոր հասանելի լրացուցիչ ծառայությունները։",
+          noAvailableTitle: "Նոր ծառայություններ այժմ հասանելի չեն",
+          noAvailableBody:
+            "Այս ամրագրման համար բացակայող ծառայություններ կան, բայց դրանք այժմ անջատված են ադմինի կողմից։",
+          openService: "Բացել ծառայությունը",
+          updateSelection: "Փոխել ընտրությունը",
+          totalDue: "Վճարման ենթակա",
+          lastPaymentTitle: "Վերջին հավելյալ վճարում",
+          lastPaymentRequested: "Պահանջված ծառայություններ",
+          lastPaymentApplied: "Կցված ծառայություններ",
+          lastPaymentSkipped: "Բաց թողնված ծառայություններ",
         },
         sections: {
           stay: "Հյուրանոցային տվյալներ",
@@ -2425,8 +2497,14 @@ const translations: Record<Locale, Translation> = {
           detailsRequired: "Խնդրում ենք լրացնել թռիչքի տվյալները։",
           flightNumberRequired: "Խնդրում ենք նշել ժամանման թռիչքի համարը։",
           arrivalRequired: "Խնդրում ենք նշել ժամանման ամսաթիվն ու ժամը։",
+          arrivalNotBeforeCheckIn:
+            "Ժամանման ամսաթիվն ու ժամը չեն կարող լինել հյուրանոցի մուտքի ամսաթվից շուտ։",
           departureFlightNumberRequired: "Խնդրում ենք նշել մեկնման թռիչքի համարը։",
           departureRequired: "Խնդրում ենք նշել մեկնման ամսաթիվն ու ժամը։",
+          departureNotBeforeCheckIn:
+            "Մեկնման ամսաթիվն ու ժամը չեն կարող լինել հյուրանոցի մուտքի ամսաթվից շուտ։",
+          departureNotBeforeArrival:
+            "Մեկնման ամսաթիվն ու ժամը չեն կարող լինել ժամանման ամսաթվից ու ժամից շուտ։",
         },
         excursions: {
           title: "Էքսկուրսիաներ",
@@ -3041,6 +3119,14 @@ const translations: Record<Locale, Translation> = {
           prebookReturnToHotel: "Back to selected hotel",
           duplicatePaymentAttempt:
             "There is already an active or completed payment for this prebook session. Please check your booking status.",
+          bookingNotConfirmed: "This booking is not confirmed yet, so extra services cannot be added.",
+          bookingCanceled: "Canceled bookings cannot receive additional services.",
+          bookingModificationClosed:
+            "This booking can no longer be modified because the hotel stay has already ended.",
+          addonServiceExists:
+            "Some of the selected services are already attached to this booking. Refresh the page and continue with the remaining ones.",
+          serviceDisabled:
+            "Some of the selected services are currently unavailable. Please choose another option or try again later.",
           paymentFailed: "Failed to start payment. Please try again.",
         },
         labels: {
@@ -3190,6 +3276,12 @@ const translations: Record<Locale, Translation> = {
         body: "Thanks for choosing MEGATOURS.",
         note: "You will receive a confirmation email shortly.",
         cta: "Go to My Account",
+        addons: {
+          title: "Add-on payment completed",
+          body: "Your selected services were processed and the booking update summary is shown below.",
+          pendingTitle: "Payment received, services are being attached",
+          pendingBody: "Your payment was successful. We are attaching the selected services to this booking now.",
+        },
       },
       failure: {
         title: "Payment Failed",
@@ -3381,6 +3473,29 @@ const translations: Record<Locale, Translation> = {
           unavailable: "Changes closed",
           helper: "These services are still missing from this booking. You can add and pay for them separately.",
           unavailableHelper: "These services are still missing from this booking.",
+        },
+        addServices: {
+          title: "Add services to this booking",
+          subtitle:
+            "Only the services that are still missing from this voucher can be added and paid for separately.",
+          bookingSummaryTitle: "Booking details",
+          serviceSelectionTitle: "Available services",
+          includedTitle: "Already included in this voucher",
+          unavailableTitle: "Temporarily unavailable",
+          selectionHint: "Choose a service below to attach it to this booking.",
+          emptySelection: "No service is selected yet. Pick an option from the cards below to continue to payment.",
+          noRemainingTitle: "Nothing else can be added",
+          noRemainingBody: "All currently available add-on services are already attached to this booking.",
+          noAvailableTitle: "No new services are available right now",
+          noAvailableBody:
+            "This booking still has missing services, but they are currently disabled by the admin team.",
+          openService: "Open service",
+          updateSelection: "Change selection",
+          totalDue: "Amount due",
+          lastPaymentTitle: "Last add-on payment",
+          lastPaymentRequested: "Requested services",
+          lastPaymentApplied: "Applied services",
+          lastPaymentSkipped: "Skipped services",
         },
         sections: {
           stay: "Hotel stay",
@@ -3899,8 +4014,14 @@ const translations: Record<Locale, Translation> = {
           detailsRequired: "Please add flight details for your transfer.",
           flightNumberRequired: "Arrival flight number is required.",
           arrivalRequired: "Arrival date and time are required.",
+          arrivalNotBeforeCheckIn:
+            "Arrival date and time cannot be earlier than the hotel check-in date.",
           departureFlightNumberRequired: "Departure flight number is required.",
           departureRequired: "Departure date and time are required.",
+          departureNotBeforeCheckIn:
+            "Departure date and time cannot be earlier than the hotel check-in date.",
+          departureNotBeforeArrival:
+            "Departure date and time cannot be earlier than the arrival date and time.",
         },
         excursions: {
           title: "Excursions",
@@ -4518,6 +4639,14 @@ const translations: Record<Locale, Translation> = {
           prebookReturnToHotel: "Вернуться к выбранному отелю",
           duplicatePaymentAttempt:
             "Для этой сессии предбронирования уже есть активный или завершенный платеж. Проверьте статус бронирования.",
+          bookingNotConfirmed: "Это бронирование еще не подтверждено, поэтому дополнительные услуги добавить нельзя.",
+          bookingCanceled: "К отмененным бронированиям нельзя добавлять дополнительные услуги.",
+          bookingModificationClosed:
+            "Это бронирование больше нельзя изменить, потому что проживание в отеле уже завершилось.",
+          addonServiceExists:
+            "Некоторые выбранные услуги уже прикреплены к этому бронированию. Обновите страницу и продолжите с оставшимися услугами.",
+          serviceDisabled:
+            "Некоторые выбранные услуги сейчас недоступны. Выберите другой вариант или попробуйте позже.",
           paymentFailed: "Не удалось начать оплату. Пожалуйста, попробуйте снова.",
         },
         labels: {
@@ -4667,6 +4796,12 @@ const translations: Record<Locale, Translation> = {
         body: "Спасибо, что выбрали MEGATOURS.",
         note: "Скоро вы получите подтверждение на вашу электронную почту.",
         cta: "Личный кабинет",
+        addons: {
+          title: "Оплата дополнительных услуг завершена",
+          body: "Выбранные услуги обработаны, а итог обновления бронирования показан ниже.",
+          pendingTitle: "Платеж получен, услуги прикрепляются",
+          pendingBody: "Оплата прошла успешно. Сейчас мы прикрепляем выбранные услуги к этому бронированию.",
+        },
       },
       failure: {
         title: "Платеж не прошел",
@@ -4858,6 +4993,29 @@ const translations: Record<Locale, Translation> = {
           unavailable: "Изменения закрыты",
           helper: "Эти услуги еще не добавлены к бронированию. Их можно оформить и оплатить отдельно.",
           unavailableHelper: "Эти услуги все еще не добавлены к бронированию.",
+        },
+        addServices: {
+          title: "Добавить услуги к бронированию",
+          subtitle:
+            "Отдельно можно оформить и оплатить только те услуги, которых еще нет в этом ваучере.",
+          bookingSummaryTitle: "Детали бронирования",
+          serviceSelectionTitle: "Доступные услуги",
+          includedTitle: "Уже включено в ваучер",
+          unavailableTitle: "Временно недоступно",
+          selectionHint: "Выберите услугу ниже, чтобы добавить ее к этому бронированию.",
+          emptySelection: "Пока ничего не выбрано. Выберите услугу на карточках ниже, чтобы перейти к оплате.",
+          noRemainingTitle: "Больше нечего добавлять",
+          noRemainingBody: "Все доступные дополнительные услуги уже прикреплены к этому бронированию.",
+          noAvailableTitle: "Новые услуги сейчас недоступны",
+          noAvailableBody:
+            "Для этого бронирования еще есть отсутствующие услуги, но сейчас они отключены администратором.",
+          openService: "Открыть услугу",
+          updateSelection: "Изменить выбор",
+          totalDue: "К оплате",
+          lastPaymentTitle: "Последний платеж за доп. услуги",
+          lastPaymentRequested: "Запрошенные услуги",
+          lastPaymentApplied: "Добавленные услуги",
+          lastPaymentSkipped: "Пропущенные услуги",
         },
         sections: {
           stay: "Данные проживания",
@@ -5380,8 +5538,14 @@ const translations: Record<Locale, Translation> = {
           detailsRequired: "Заполните данные рейса для трансфера.",
           flightNumberRequired: "Номер рейса прилета обязателен.",
           arrivalRequired: "Дата и время прилета обязательны.",
+          arrivalNotBeforeCheckIn:
+            "Дата и время прилета не могут быть раньше даты заезда в отель.",
           departureFlightNumberRequired: "Номер рейса вылета обязателен.",
           departureRequired: "Дата и время вылета обязательны.",
+          departureNotBeforeCheckIn:
+            "Дата и время вылета не могут быть раньше даты заезда в отель.",
+          departureNotBeforeArrival:
+            "Дата и время вылета не могут быть раньше даты и времени прилета.",
         },
         excursions: {
           title: "Экскурсии",

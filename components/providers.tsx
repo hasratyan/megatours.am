@@ -1,7 +1,6 @@
 "use client";
 
 import { SessionProvider } from "@/lib/auth-compat/react";
-import { LanguageProvider } from "@/components/language-provider";
 import type { ReactNode } from "react";
 
 type ProvidersProps = {
@@ -9,9 +8,5 @@ type ProvidersProps = {
 };
 
 export default function Providers({ children }: ProvidersProps) {
-  return (
-    <SessionProvider>
-      <LanguageProvider>{children}</LanguageProvider>
-    </SessionProvider>
-  );
+  return <SessionProvider>{children}</SessionProvider>;
 }

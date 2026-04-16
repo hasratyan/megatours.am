@@ -2,6 +2,7 @@ import * as React from "react";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import DeferredLayoutWidgets from "@/components/deferred-layout-widgets";
+import { LanguageProvider } from "@/components/language-provider";
 import { locales, Locale } from "@/lib/i18n";
 
 // Generate static params for all locales
@@ -23,11 +24,13 @@ export default async function LocaleLayout({ children, params }: LayoutProps) {
   }
 
   return (
-    <div className="page">
-      <Header />
-      {children}
-      <Footer locale={locale} />
-      <DeferredLayoutWidgets locale={locale as Locale} />
-    </div>
+    <LanguageProvider initialLocale={locale as Locale}>
+      <div className="page">
+        <Header />
+        {children}
+        <Footer locale={locale} />
+        <DeferredLayoutWidgets locale={locale as Locale} />
+      </div>
+    </LanguageProvider>
   );
 }
