@@ -31,7 +31,7 @@
     "react-select": "^5.10.2",
     "tailwind-merge": "^3.5.0",
     "better-auth": "^1.6.5",
-    "@better-auth/mongo-adapter": "^1.6.2"
+    "@better-auth/mongo-adapter": "^1.6.5"
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^16.2.4",
