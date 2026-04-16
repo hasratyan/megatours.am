@@ -29,7 +29,9 @@ export default async function LocaleLayout({ children, params }: LayoutProps) {
         <Header />
         {children}
         <Footer locale={locale} />
-        <DeferredLayoutWidgets locale={locale as Locale} />
+        <React.Suspense fallback={null}>
+          <DeferredLayoutWidgets locale={locale as Locale} />
+        </React.Suspense>
       </div>
     </LanguageProvider>
   );

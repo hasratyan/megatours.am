@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getServerSession } from "@/lib/auth-compat/server";
@@ -745,11 +746,13 @@ export default async function VoucherPage({ params }: PageProps) {
           </div>
         </div>
 
-        <VoucherActions
-          downloadLabel={t.profile.voucher.downloadPdf}
-          backLabel={t.profile.voucher.backToProfile}
-          profileHref={`/${resolvedLocale}/profile`}
-        />
+        <Suspense fallback={null}>
+          <VoucherActions
+            downloadLabel={t.profile.voucher.downloadPdf}
+            backLabel={t.profile.voucher.backToProfile}
+            profileHref={`/${resolvedLocale}/profile`}
+          />
+        </Suspense>
 
         {showAddonCard ? (
           <div

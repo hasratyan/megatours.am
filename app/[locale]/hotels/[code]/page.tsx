@@ -1,4 +1,4 @@
-import { cache } from "react";
+import { Suspense, cache } from "react";
 import HotelClient from "./hotel-client";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
@@ -72,12 +72,14 @@ export default async function HotelPage({ params }: PageProps) {
   }
 
   return (
-    <HotelClient
-      initialHotelInfo={hotelInfoResult}
-      initialRoomDetails={null}
-      initialHotelError={hotelError}
-      initialRoomsError={null}
-      initialAmdRates={null}
-    />
+    <Suspense fallback={null}>
+      <HotelClient
+        initialHotelInfo={hotelInfoResult}
+        initialRoomDetails={null}
+        initialHotelError={hotelError}
+        initialRoomsError={null}
+        initialAmdRates={null}
+      />
+    </Suspense>
   );
 }
