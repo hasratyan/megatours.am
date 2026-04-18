@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId, type Collection, type Document } from "mongodb";
 import { getDb } from "@/lib/db";
+import {
+  attachGatewayAuditLogPath,
+  postIdbankFormWithAudit,
+  readGatewayAuditLogPath,
+} from "@/lib/idbank-gateway-audit";
 import { AoryxClientError, book, bookingDetails } from "@/lib/aoryx-client";
 import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
 import { recordUserBooking, type AppliedBookingCoupon } from "@/lib/user-data";
@@ -91,6 +96,7 @@ type GatewayStatus = {
   errorMessage: string | null;
   gatewaySuccess: boolean;
   raw: Record<string, unknown>;
+  auditLogPath?: string | null;
 };
 
 const IDBANK_DEFAULT_BASE_URL = "https://ipaytest.arca.am:8445/payment/rest";
@@ -414,16 +420,28 @@ const fetchIdbankStatus = async (
   params.set("password", password);
   params.set("orderId", orderId);
   if (language) params.set("language", language);
-
-  const response = await fetch(`${baseUrl}/getOrderStatusExtended.do`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: params.toString(),
+  const requestUrl = `${baseUrl}/getOrderStatusExtended.do`;
+  const requestBody = params.toString();
+  const { response, parsedBody, logPath } = await postIdbankFormWithAudit({
+    operation: "getOrderStatusExtended",
+    url: requestUrl,
+    body: requestBody,
+    context: {
+      orderId,
+      language,
+    },
   });
 
-  const payload = (await extractJsonResponse(response)) as IdbankStatusResponse & Record<string, unknown>;
+  if (!parsedBody) {
+    throw attachGatewayAuditLogPath(new Error("Payment status lookup returned invalid JSON."), logPath);
+  }
+
+  const payload = parsedBody as IdbankStatusResponse & Record<string, unknown>;
   if (!response.ok) {
-    throw new Error(payload?.errorMessage || "Payment status lookup failed.");
+    throw attachGatewayAuditLogPath(
+      new Error(payload?.errorMessage || "Payment status lookup failed."),
+      logPath
+    );
   }
 
   const orderStatus = toNumber(payload.orderStatus);
@@ -444,6 +462,7 @@ const fetchIdbankStatus = async (
     errorMessage,
     gatewaySuccess: paidState.gatewaySuccess,
     raw: payload,
+    auditLogPath: logPath,
   };
 };
 
@@ -864,7 +883,14 @@ const handleResultCallback = async (request: NextRequest) => {
         : 2;
     statusResponse = await getGatewayStatus(provider, orderId, language, decimals);
   } catch (error) {
-    console.error("[Vpos][result] Failed to query gateway status", error);
+    const gatewayAuditLogPath = readGatewayAuditLogPath(error);
+    console.error("[Vpos][result] Failed to query gateway status", {
+      provider,
+      orderId,
+      orderNumber,
+      message: error instanceof Error ? error.message : "Unknown error",
+      gatewayAuditLogPath,
+    });
     return logRedirect(
       "error",
       "gateway",
@@ -872,7 +898,11 @@ const handleResultCallback = async (request: NextRequest) => {
       "/payment/fail",
       { orderId, orderNumber },
       "gateway_status_lookup_failed",
-      { provider, message: error instanceof Error ? error.message : "Unknown error" }
+      {
+        provider,
+        message: error instanceof Error ? error.message : "Unknown error",
+        gatewayAuditLogPath,
+      }
     );
   }
 
@@ -913,6 +943,7 @@ const handleResultCallback = async (request: NextRequest) => {
     actionCodeDescription: statusResponse.actionCodeDescription,
     errorCode: statusResponse.errorCode,
     errorMessage: statusResponse.errorMessage,
+    gatewayAuditLogPath: statusResponse.auditLogPath ?? null,
     recordStatus: record.status ?? null,
   });
   await appendDiagnosticEvent(
@@ -935,6 +966,7 @@ const handleResultCallback = async (request: NextRequest) => {
       actionCodeDescription: statusResponse.actionCodeDescription,
       errorCode: statusResponse.errorCode,
       errorMessage: statusResponse.errorMessage,
+      gatewayAuditLogPath: statusResponse.auditLogPath ?? null,
     },
     {
       "diagnostics.lastGatewayEvaluation": {
@@ -954,6 +986,7 @@ const handleResultCallback = async (request: NextRequest) => {
         actionCodeDescription: statusResponse.actionCodeDescription,
         errorCode: statusResponse.errorCode,
         errorMessage: statusResponse.errorMessage,
+        gatewayAuditLogPath: statusResponse.auditLogPath ?? null,
       },
     }
   );
@@ -976,6 +1009,7 @@ const handleResultCallback = async (request: NextRequest) => {
     errorCode: statusResponse.errorCode,
     errorMessage: statusResponse.errorMessage,
     gatewayResponse: statusResponse.raw,
+    gatewayAuditLogPath: statusResponse.auditLogPath ?? null,
     statusCheckedAt: now,
   };
 
@@ -1013,6 +1047,7 @@ const handleResultCallback = async (request: NextRequest) => {
         actionCode: statusResponse.actionCode,
         errorCode: statusResponse.errorCode,
         errorMessage: statusResponse.errorMessage,
+        gatewayAuditLogPath: statusResponse.auditLogPath ?? null,
       }
     );
   }

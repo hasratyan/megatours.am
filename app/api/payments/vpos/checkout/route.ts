@@ -4,6 +4,11 @@ import { ObjectId, type Collection, type Document } from "mongodb";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import {
+  attachGatewayAuditLogPath,
+  postIdbankFormWithAudit,
+  readGatewayAuditLogPath,
+} from "@/lib/idbank-gateway-audit";
 import { getPrebookState, getSessionFromCookie, type StoredPrebookState } from "@/app/api/aoryx/_shared";
 import { parseBookingPayload, validatePrebookState } from "@/lib/aoryx-booking";
 import { calculateBookingTotal } from "@/lib/booking-total";
@@ -564,17 +569,26 @@ const initializeIdbankPayment = async (params: {
   if (params.language) query.set("language", params.language);
   if (params.pageView) query.set("pageView", params.pageView);
   query.set("jsonParams", JSON.stringify({ orderNumber: params.orderNumber, locale: params.locale }));
-
-  const response = await fetch(`${config.baseUrl}/register.do`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: query.toString(),
+  const requestUrl = `${config.baseUrl}/register.do`;
+  const requestBody = query.toString();
+  const { response, parsedBody, logPath } = await postIdbankFormWithAudit({
+    operation: "register",
+    url: requestUrl,
+    body: requestBody,
+    context: {
+      orderNumber: params.orderNumber,
+      amountMinor: params.amountMinor,
+      currencyCode: params.currencyCode,
+      locale: params.locale,
+      returnUrl: params.returnUrl,
+    },
   });
 
-  const body = await extractJsonResponse(response);
-  if (!body) {
-    throw new Error("Payment gateway response invalid.");
+  if (!parsedBody) {
+    throw attachGatewayAuditLogPath(new Error("Payment gateway response invalid."), logPath);
   }
+
+  const body = parsedBody;
 
   const errorCode =
     typeof body.errorCode === "number" || typeof body.errorCode === "string"
@@ -589,8 +603,11 @@ const initializeIdbankPayment = async (params: {
       typeof body.errorMessage === "string" && body.errorMessage.trim().length > 0
         ? body.errorMessage
         : "Failed to initialize card payment.";
-    console.error("[Vpos][checkout][idbank] Gateway error", body);
-    throw new Error(message);
+    console.error("[Vpos][checkout][idbank] Gateway error", {
+      ...body,
+      gatewayAuditLogPath: logPath,
+    });
+    throw attachGatewayAuditLogPath(new Error(message), logPath);
   }
 
   return {
@@ -603,6 +620,7 @@ const initializeIdbankPayment = async (params: {
       userName: config.userName,
       returnUrl: params.returnUrl,
       pageView: params.pageView,
+      auditLogPath: logPath,
     },
   } satisfies VposInitResult;
 };
@@ -910,6 +928,7 @@ const tryHandleBookingAddonCheckout = async (params: {
       gatewayError instanceof Error && gatewayError.message.trim().length > 0
         ? gatewayError.message
         : "Failed to initialize card payment.";
+    const gatewayAuditLogPath = readGatewayAuditLogPath(gatewayError);
     const failedAt = new Date();
     await vposCollection.insertOne({
       flow: "booking_addons",
@@ -964,6 +983,7 @@ const tryHandleBookingAddonCheckout = async (params: {
               currencyCode,
               locale: params.locale,
               message,
+              gatewayAuditLogPath,
             },
           },
         ],
@@ -978,9 +998,11 @@ const tryHandleBookingAddonCheckout = async (params: {
           at: failedAt,
           reason: "payment_attempt_init_failed",
           message,
+          gatewayAuditLogPath,
         },
         updatedAt: failedAt,
       },
+      gatewayAuditLogPath,
       bookingError: message,
       createdAt: failedAt,
       updatedAt: failedAt,
@@ -992,6 +1014,7 @@ const tryHandleBookingAddonCheckout = async (params: {
       currencyCode,
       locale: params.locale,
       message,
+      gatewayAuditLogPath,
     });
     return NextResponse.json({ error: message }, { status: 502 });
   }
@@ -1352,6 +1375,7 @@ export async function POST(request: NextRequest) {
         gatewayError instanceof Error && gatewayError.message.trim().length > 0
           ? gatewayError.message
           : "Failed to initialize card payment.";
+      const gatewayAuditLogPath = readGatewayAuditLogPath(gatewayError);
       const failedAt = new Date();
       await vposCollection.insertOne({
         provider,
@@ -1399,6 +1423,7 @@ export async function POST(request: NextRequest) {
                 currencyCode,
                 locale,
                 message,
+                gatewayAuditLogPath,
               },
             },
           ],
@@ -1413,9 +1438,11 @@ export async function POST(request: NextRequest) {
             at: failedAt,
             reason: "payment_attempt_init_failed",
             message,
+            gatewayAuditLogPath,
           },
           updatedAt: failedAt,
         },
+        gatewayAuditLogPath,
         bookingError: message,
         createdAt: failedAt,
         updatedAt: failedAt,
@@ -1428,6 +1455,7 @@ export async function POST(request: NextRequest) {
         currencyCode,
         locale,
         message,
+        gatewayAuditLogPath,
       });
       return NextResponse.json({ error: message }, { status: 502 });
     }

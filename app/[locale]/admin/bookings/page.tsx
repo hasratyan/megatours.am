@@ -85,6 +85,10 @@ type PaymentRecord = {
   gatewayCurrency?: string | null;
   amountMismatch?: Record<string, unknown> | null;
   diagnostics?: Record<string, unknown> | null;
+  gateway?: {
+    auditLogPath?: string | null;
+  } | null;
+  gatewayAuditLogPath?: string | null;
   gatewayResponse?: Record<string, unknown> | null;
   cancellation?: Record<string, unknown> | null;
   insurancePolicies?: unknown[] | null;
@@ -150,6 +154,7 @@ const buildPaymentDebugRecord = (payment: PaymentRecord, source: "vpos" | "idram
     gatewayError: payment.errorMessage ?? payment.actionCodeDescription ?? null,
     gatewayAmount: payment.gatewayAmount ?? payment.amount?.value ?? null,
     gatewayCurrency: payment.gatewayCurrency ?? payment.amount?.currency ?? null,
+    gatewayAuditLogPath: payment.gatewayAuditLogPath ?? payment.gateway?.auditLogPath ?? null,
     amountMismatch: payment.amountMismatch ?? null,
     diagnostics,
     gatewayResponse: payment.gatewayResponse ?? null,
@@ -400,6 +405,8 @@ export default async function AdminBookingsPage({ params }: PageProps) {
             gatewayCurrency: 1,
             amountMismatch: 1,
             diagnostics: 1,
+            gateway: 1,
+            gatewayAuditLogPath: 1,
             gatewayResponse: 1,
             cancellation: 1,
             insurancePolicies: 1,
