@@ -233,8 +233,7 @@ const resolveCurrencyConfig = (provider: PaymentProvider) => {
 const resolveIdbankConfig = () => {
   const baseUrl = normalizeBaseUrl(resolveString(process.env.VPOS_BASE_URL) || IDBANK_DEFAULT_BASE_URL);
   const userName = resolveString(process.env.VPOS_USER);
-  // const password = resolveString(process.env.VPOS_PASSWORD);
-  const password = "Megatours@2025";
+  const password = resolveString(process.env.VPOS_PASSWORD);
   return { baseUrl, userName, password };
 };
 
