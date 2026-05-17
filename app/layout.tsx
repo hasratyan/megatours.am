@@ -41,7 +41,10 @@ const zohoSalesIqHandoffOnlyScript = `
   var retryDelay=200;
 
   function hideDefaultLauncher(){
-    if(window.__MEGATOURS_ZOHO_LIVE_AGENT_REQUESTED){return true;}
+    if(
+      window.__MEGATOURS_ZOHO_LIVE_AGENT_REQUESTED||
+      document.documentElement.classList.contains("zoho-salesiq-live-agent-requested")
+    ){return true;}
     var salesiq=window.$zoho&&window.$zoho.salesiq;
     var handled=false;
 
