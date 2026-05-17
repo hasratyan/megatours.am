@@ -512,6 +512,7 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
   const copy = copyMap[locale] ?? copyMap.en;
   const [isOpen, setIsOpen] = useState(false);
   const [isAiChatEnabled, setIsAiChatEnabled] = useState(DEFAULT_SERVICE_FLAGS.aiChat);
+  const [isLiveAgentActive, setIsLiveAgentActive] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([
     {
@@ -860,6 +861,8 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
           handoverSummary
         )
       ) {
+        setIsLiveAgentActive(true);
+        setIsOpen(false);
         return;
       }
 
@@ -876,7 +879,7 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
     }
   }, [copy.liveAgentUnavailable, locale, messages, missingFields, packageOptions, sessionId]);
 
-  if (!isAiChatEnabled) {
+  if (!isAiChatEnabled || isLiveAgentActive) {
     return null;
   }
 
