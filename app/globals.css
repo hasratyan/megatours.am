@@ -9776,6 +9776,14 @@ select:focus-visible {
   }
 }
 
+html.zoho-salesiq-handoff-only:not(.zoho-salesiq-live-agent-requested) [data-id="zsalesiq"],
+html.zoho-salesiq-handoff-only:not(.zoho-salesiq-live-agent-requested) #zsiq_chat_wrap,
+html.zoho-salesiq-handoff-only:not(.zoho-salesiq-live-agent-requested) #zsiq_float{
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 .concierge-ai{
   position: fixed;
   right: 1.25rem;

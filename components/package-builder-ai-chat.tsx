@@ -41,7 +41,11 @@ type ZohoSalesIqApi = {
     question?: (question: string) => void;
   };
   chat?: {
-    start?: () => void;
+    start?: (options?: { prechat?: boolean }) => void;
+    window?: {
+      show?: () => void;
+      visible?: (state: "show" | "hide") => void;
+    };
   };
   chatwindow?: {
     visible?: (state: "show" | "hide") => void;
@@ -58,6 +62,7 @@ type ZohoWindow = Window & {
   $zoho?: {
     salesiq?: ZohoSalesIqApi;
   };
+  __MEGATOURS_ZOHO_LIVE_AGENT_REQUESTED?: boolean;
 };
 
 const copyMap: Record<
@@ -80,6 +85,7 @@ const copyMap: Record<
     open: string;
     livePrice: string;
     liveAgent: string;
+    liveAgentConnecting: string;
     liveAgentUnavailable: string;
   }
 > = {
@@ -106,6 +112,7 @@ const copyMap: Record<
     open: "Open assistant",
     livePrice: "Live prices",
     liveAgent: "Continue with live agent",
+    liveAgentConnecting: "Connecting to live agent...",
     liveAgentUnavailable:
       "Our support team is currently unavailable. Please try again later.",
   },
@@ -132,6 +139,7 @@ const copyMap: Record<
     open: "Բացել օգնականը",
     livePrice: "Իրական գներ",
     liveAgent: "Շարունակել աշխատակցի հետ",
+    liveAgentConnecting: "Կապ եմ հաստատում աշխատակցի հետ...",
     liveAgentUnavailable:
       "Մեր սպասարկման թիմը այս պահին հասանելի չէ։ Խնդրում ենք կրկին փորձել քիչ անց։",
   },
@@ -158,6 +166,7 @@ const copyMap: Record<
     open: "Открыть ассистента",
     livePrice: "Живые цены",
     liveAgent: "Продолжить с агентом",
+    liveAgentConnecting: "Подключаю агента...",
     liveAgentUnavailable:
       "Наша служба поддержки сейчас недоступна. Пожалуйста, попробуйте позже.",
   },
@@ -167,6 +176,102 @@ const ZOHO_SALESIQ_FALLBACK_URL =
   typeof process.env.NEXT_PUBLIC_ZOHO_SALESIQ_FALLBACK_URL === "string"
     ? process.env.NEXT_PUBLIC_ZOHO_SALESIQ_FALLBACK_URL.trim()
     : "";
+
+const ZOHO_SALESIQ_HANDOFF_MAX_ATTEMPTS = 40;
+const ZOHO_SALESIQ_HANDOFF_RETRY_MS = 250;
+
+const wait = (delayMs: number) =>
+  new Promise((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
+
+const getZohoSalesIq = () => (window as ZohoWindow).$zoho?.salesiq ?? null;
+
+const hasZohoOpenApi = (zoho?: ZohoSalesIqApi | null) =>
+  Boolean(
+    zoho?.chat?.start ||
+      zoho?.chat?.window?.show ||
+      zoho?.chat?.window?.visible ||
+      zoho?.chatwindow?.visible ||
+      zoho?.floatwindow?.visible ||
+      zoho?.floatbutton?.visible
+  );
+
+const waitForZohoSalesIq = async () => {
+  for (let attempt = 0; attempt <= ZOHO_SALESIQ_HANDOFF_MAX_ATTEMPTS; attempt += 1) {
+    const zoho = getZohoSalesIq();
+    if (hasZohoOpenApi(zoho)) {
+      return zoho;
+    }
+    await wait(ZOHO_SALESIQ_HANDOFF_RETRY_MS);
+  }
+
+  return null;
+};
+
+const setZohoSalesIqLiveAgentRequested = (isRequested: boolean) => {
+  const zohoWindow = window as ZohoWindow;
+  zohoWindow.__MEGATOURS_ZOHO_LIVE_AGENT_REQUESTED = isRequested;
+  document.documentElement.classList.toggle("zoho-salesiq-live-agent-requested", isRequested);
+
+  document
+    .querySelectorAll<HTMLElement>('[data-id="zsalesiq"], #zsiq_chat_wrap, #zsiq_float')
+    .forEach((node) => {
+      if (isRequested) {
+        node.removeAttribute("aria-hidden");
+        node.style.removeProperty("display");
+        node.style.removeProperty("visibility");
+        node.style.removeProperty("pointer-events");
+        return;
+      }
+
+      node.setAttribute("aria-hidden", "true");
+      node.style.setProperty("display", "none", "important");
+      node.style.setProperty("visibility", "hidden", "important");
+      node.style.setProperty("pointer-events", "none", "important");
+    });
+};
+
+const callZohoSafely = (callback: () => void) => {
+  try {
+    callback();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const openZohoSalesIqHandoff = (
+  zoho: ZohoSalesIqApi,
+  visitorDetails: Record<string, string>,
+  handoverSummary: string
+) => {
+  callZohoSafely(() => zoho.visitor?.info?.(visitorDetails));
+  callZohoSafely(() => zoho.visitor?.question?.(handoverSummary));
+
+  let opened = false;
+
+  if (typeof zoho.floatbutton?.visible === "function") {
+    opened = callZohoSafely(() => zoho.floatbutton?.visible?.("show")) || opened;
+  }
+  if (typeof zoho.floatwindow?.visible === "function") {
+    opened = callZohoSafely(() => zoho.floatwindow?.visible?.("show")) || opened;
+  }
+  if (typeof zoho.chatwindow?.visible === "function") {
+    opened = callZohoSafely(() => zoho.chatwindow?.visible?.("show")) || opened;
+  }
+  if (typeof zoho.chat?.window?.visible === "function") {
+    opened = callZohoSafely(() => zoho.chat?.window?.visible?.("show")) || opened;
+  }
+  if (typeof zoho.chat?.window?.show === "function") {
+    opened = callZohoSafely(() => zoho.chat?.window?.show?.()) || opened;
+  }
+  if (typeof zoho.chat?.start === "function") {
+    opened = callZohoSafely(() => zoho.chat?.start?.({ prechat: false })) || opened;
+  }
+
+  return opened;
+};
 
 const createMessageId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -417,6 +522,7 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isConnectingLiveAgent, setIsConnectingLiveAgent] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [packageOptions, setPackageOptions] = useState<PackageAssistantPackageOption[]>([]);
   const [missingFields, setMissingFields] = useState<string[]>([]);
@@ -710,7 +816,7 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
     setAppliedOptionId(option.id);
   };
 
-  const onContinueWithLiveAgent = useCallback(() => {
+  const onContinueWithLiveAgent = useCallback(async () => {
     const lines = messages
       .slice(-8)
       .map((message) => `${message.role === "user" ? "User" : "AI"}: ${message.content.trim()}`)
@@ -733,38 +839,41 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
       .join("\n")
       .slice(0, 1800);
 
-    const zoho = (window as ZohoWindow).$zoho?.salesiq;
-    const hasZohoOpenApi = Boolean(
-      zoho?.chat?.start ||
-        zoho?.chatwindow?.visible ||
-        zoho?.floatwindow?.visible ||
-        zoho?.floatbutton?.visible
-    );
-    if (zoho && hasZohoOpenApi) {
-      try {
-        zoho.visitor?.info?.({
-          source: "AI Concierge",
-          locale: locale.toUpperCase(),
-          sessionId: sessionId ?? "n/a",
-          missing: missingFields.join(", ") || "none",
-        });
-        zoho.visitor?.question?.(handoverSummary);
-        zoho.floatbutton?.visible?.("show");
-        zoho.floatwindow?.visible?.("show");
-        zoho.chatwindow?.visible?.("show");
-        zoho.chat?.start?.();
-        return;
-      } catch {
-        // fallback handled below
+    setErrorMessage(null);
+    setIsConnectingLiveAgent(true);
+
+    try {
+      const zoho = await waitForZohoSalesIq();
+      if (zoho) {
+        setZohoSalesIqLiveAgentRequested(true);
       }
-    }
+      if (
+        zoho &&
+        openZohoSalesIqHandoff(
+          zoho,
+          {
+            source: "AI Concierge",
+            locale: locale.toUpperCase(),
+            sessionId: sessionId ?? "n/a",
+            missing: missingFields.join(", ") || "none",
+          },
+          handoverSummary
+        )
+      ) {
+        return;
+      }
 
-    if (ZOHO_SALESIQ_FALLBACK_URL) {
-      window.open(ZOHO_SALESIQ_FALLBACK_URL, "_blank", "noopener,noreferrer");
-      return;
-    }
+      setZohoSalesIqLiveAgentRequested(false);
 
-    setErrorMessage(copy.liveAgentUnavailable);
+      if (ZOHO_SALESIQ_FALLBACK_URL) {
+        window.open(ZOHO_SALESIQ_FALLBACK_URL, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      setErrorMessage(copy.liveAgentUnavailable);
+    } finally {
+      setIsConnectingLiveAgent(false);
+    }
   }, [copy.liveAgentUnavailable, locale, messages, missingFields, packageOptions, sessionId]);
 
   if (!isAiChatEnabled) {
@@ -904,12 +1013,12 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
           type="button"
           className="concierge-ai__live-agent"
           onClick={onContinueWithLiveAgent}
-          disabled={isSending}
+          disabled={isSending || isConnectingLiveAgent}
         >
           <span className="material-symbols-rounded" aria-hidden="true">
             support_agent
           </span>
-          <span>{copy.liveAgent}</span>
+          <span>{isConnectingLiveAgent ? copy.liveAgentConnecting : copy.liveAgent}</span>
         </button>
 
         {errorMessage ? <p className="concierge-ai__error">{errorMessage}</p> : null}

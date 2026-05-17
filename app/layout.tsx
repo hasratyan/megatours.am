@@ -7,6 +7,7 @@ import "material-symbols/outlined.css";
 import "material-symbols/rounded.css";
 import Providers from "@/components/providers";
 import { metadataBase } from "@/lib/metadata";
+import { resolveZohoSalesIqScriptUrl } from "@/lib/zoho-salesiq";
 import "./globals.css";
 
 const body = Google_Sans({
@@ -30,10 +31,49 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-const zohoSalesIqScriptUrl =
-  typeof process.env.NEXT_PUBLIC_ZOHO_SALESIQ_SCRIPT_URL === "string"
-    ? process.env.NEXT_PUBLIC_ZOHO_SALESIQ_SCRIPT_URL.trim()
-    : "";
+const zohoSalesIqScriptUrl = resolveZohoSalesIqScriptUrl(
+  process.env.NEXT_PUBLIC_ZOHO_SALESIQ_SCRIPT_URL
+);
+
+const zohoSalesIqHandoffOnlyScript = `
+(function(){
+  var maxAttempts=50;
+  var retryDelay=200;
+
+  function hideDefaultLauncher(){
+    if(window.__MEGATOURS_ZOHO_LIVE_AGENT_REQUESTED){return true;}
+    var salesiq=window.$zoho&&window.$zoho.salesiq;
+    var handled=false;
+
+    ["[data-id='zsalesiq']","#zsiq_chat_wrap","#zsiq_float"].forEach(function(selector){
+      var node=document.querySelector(selector);
+      if(!node){return;}
+      node.setAttribute("aria-hidden","true");
+      node.style.setProperty("display","none","important");
+      node.style.setProperty("visibility","hidden","important");
+      node.style.setProperty("pointer-events","none","important");
+      handled=true;
+    });
+
+    if(!salesiq){return handled;}
+
+    try{if(salesiq.floatbutton&&typeof salesiq.floatbutton.visible==="function"){salesiq.floatbutton.visible("hide");handled=true;}}catch(error){}
+    try{if(salesiq.floatwindow&&typeof salesiq.floatwindow.visible==="function"){salesiq.floatwindow.visible("hide");handled=true;}}catch(error){}
+    try{if(salesiq.chatwindow&&typeof salesiq.chatwindow.visible==="function"){salesiq.chatwindow.visible("hide");handled=true;}}catch(error){}
+    try{if(salesiq.chat&&salesiq.chat.window&&typeof salesiq.chat.window.visible==="function"){salesiq.chat.window.visible("hide");handled=true;}}catch(error){}
+
+    return handled;
+  }
+
+  function poll(attempt){
+    hideDefaultLauncher();
+    if(window.__MEGATOURS_ZOHO_LIVE_AGENT_REQUESTED||attempt>=maxAttempts){return;}
+    window.setTimeout(function(){poll(attempt+1);},retryDelay);
+  }
+
+  poll(0);
+})();
+`;
 
 export default function RootLayout({ children }: Readonly<{
   children: React.ReactNode;
@@ -45,13 +85,16 @@ export default function RootLayout({ children }: Readonly<{
         {zohoSalesIqScriptUrl ? (
           <>
             <Script id="zoho-salesiq-bootstrap" strategy="beforeInteractive">
-              {`window.$zoho=window.$zoho||{};window.$zoho.salesiq=window.$zoho.salesiq||{ready:function(){}};`}
+              {`window.__MEGATOURS_ZOHO_LIVE_AGENT_REQUESTED=false;document.documentElement.classList.add("zoho-salesiq-handoff-only");window.$zoho=window.$zoho||{};window.$zoho.salesiq=window.$zoho.salesiq||{ready:function(){}};`}
             </Script>
             <Script
               id="zoho-salesiq-widget"
               src={zohoSalesIqScriptUrl}
               strategy="afterInteractive"
             />
+            <Script id="zoho-salesiq-handoff-only" strategy="afterInteractive">
+              {zohoSalesIqHandoffOnlyScript}
+            </Script>
           </>
         ) : null}
         <Providers>{children}</Providers>
