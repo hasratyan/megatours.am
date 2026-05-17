@@ -2,7 +2,6 @@ import { getDb } from "@/lib/db";
 import { listAoryxDestinations } from "@/lib/aoryx-destinations";
 import { runAoryxSearch } from "@/lib/aoryx-search";
 import { fetchExcursions, fetchTransferRates } from "@/lib/aoryx-addons";
-import { searchFlydubai } from "@/lib/flydubai-client";
 import { quoteEfesTravelCost } from "@/lib/efes-client";
 import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import { DEFAULT_SERVICE_FLAGS } from "@/lib/package-builder-state";
@@ -15,7 +14,6 @@ import type {
   AoryxTransferPricing,
   AoryxTransferVehicle,
 } from "@/types/aoryx";
-import type { FlydubaiSearchRequest } from "@/types/flydubai";
 import type {
   PackageAssistantApiMessage,
   PackageAssistantContext,
@@ -1184,6 +1182,48 @@ const applyServiceAvailabilityToReply = (
   };
 };
 
+const flightExternalRedirectNotice = (locale: Locale) =>
+  locale === "ru"
+    ? "Авиабилеты открываются на сайте авиакомпании после выбора отеля; цены не добавляются в пакет Megatours."
+    : locale === "hy"
+      ? "Ավիատոմսերը բացվում են ավիաընկերության կայքում՝ հյուրանոց ընտրելուց հետո, և արժեքը չի ավելացվում Megatours փաթեթին։"
+      : "Flights open on the airline website after hotel selection; flight prices are not added to the Megatours package.";
+
+const applyExternalFlightRedirectPolicyToReply = (
+  reply: PackageAssistantReply,
+  locale: Locale
+): PackageAssistantReply => {
+  let removedAny = false;
+  const notice = flightExternalRedirectNotice(locale);
+
+  const packageOptions = reply.packageOptions.map((option) => {
+    if (!option.draft.flight) return option;
+    removedAny = true;
+    const draft: PackageAssistantDraft = { ...option.draft };
+    delete draft.flight;
+    const approxTotal = option.approxTotal
+      ? {
+          ...option.approxTotal,
+          amount: null,
+          note: uniqueStrings([option.approxTotal.note ?? "", notice], 2).join(" "),
+        }
+      : option.approxTotal;
+    return {
+      ...option,
+      approxTotal,
+      draft,
+    };
+  });
+
+  if (!removedAny) return reply;
+
+  return {
+    ...reply,
+    packageOptions,
+    followUps: uniqueStrings([...reply.followUps, notice], 5),
+  };
+};
+
 const applyHotelFirstPolicyToReply = (
   reply: PackageAssistantReply,
   locale: Locale
@@ -1217,6 +1257,19 @@ const applyHotelFirstPolicyToReply = (
     packageOptions,
   };
 };
+
+const applyPackageReplyPolicies = (
+  reply: PackageAssistantReply,
+  serviceFlags: Record<string, boolean>,
+  locale: Locale
+) =>
+  applyHotelFirstPolicyToReply(
+    applyExternalFlightRedirectPolicyToReply(
+      applyServiceAvailabilityToReply(reply, serviceFlags, locale),
+      locale
+    ),
+    locale
+  );
 
 const toolDefinitions = [
   {
@@ -1286,27 +1339,6 @@ const toolDefinitions = [
         limit: { type: "integer", minimum: 1, maximum: 30 },
         maxPrice: { type: "number" },
       },
-      additionalProperties: false,
-    },
-  },
-  {
-    type: "function",
-    name: "search_flights",
-    description: "Search flydubai flight offers by origin/destination/date.",
-    strict: false,
-    parameters: {
-      type: "object",
-      properties: {
-        origin: { type: "string" },
-        destination: { type: "string" },
-        departureDate: { type: "string", description: "YYYY-MM-DD" },
-        returnDate: { type: "string", description: "YYYY-MM-DD" },
-        cabinClass: { type: "string" },
-        adults: { type: "integer", minimum: 1, maximum: 9 },
-        children: { type: "integer", minimum: 0, maximum: 6 },
-        currency: { type: "string" },
-      },
-      required: ["origin", "destination", "departureDate"],
       additionalProperties: false,
     },
   },
@@ -1400,7 +1432,8 @@ const buildSystemPrompt = (
     "- Never invent hotel rates, flight prices, transfer prices, or excursion prices.",
     "- If core inputs are missing, ask concise follow-up questions before finalizing options.",
     "- Never include disabled services in package drafts.",
-    "- Hotel-first rule: every package option must include hotel. Never propose transfer/flight/excursion/insurance without hotel.",
+    "- Hotel-first rule: every package option must include hotel. Never propose transfer/excursion/insurance without hotel.",
+    "- Flights are external airline redirects only. Do not include flight in package drafts, do not quote flight prices, and tell users to select a hotel first and use the Flight service to continue on the airline website.",
     "- Personalize suggestions using recent user signals when available.",
     "- If insurance is selected and dates/travelers are known, call quote_insurance before returning insurance price.",
     "- Destination policy: support UAE destinations only. If user requests another country, decline and ask for a UAE destination.",
@@ -1429,7 +1462,6 @@ const buildSystemPrompt = (
     '      "draft": {',
     '        "hotel": { "selected": true, "hotelCode": "string", "hotelName": "string", "destinationCode": "string", "destinationName": "string", "checkInDate": "YYYY-MM-DD", "checkOutDate": "YYYY-MM-DD", "roomCount": 1, "guestCount": 2, "price": 1000, "currency": "USD" },',
     '        "transfer": { "selected": true, "selectionId": "string", "label": "string", "price": 40, "currency": "USD", "transferType": "INDIVIDUAL", "vehicleName": "string", "vehicleQuantity": 1, "destinationName": "string", "destinationCode": "string", "paxCount": 2 },',
-    '        "flight": { "selected": true, "selectionId": "string", "label": "string", "price": 250, "currency": "USD", "origin": "EVN", "destination": "DXB", "departureDate": "YYYY-MM-DD", "returnDate": "YYYY-MM-DD", "cabinClass": "economy", "notes": "string" },',
     '        "excursion": { "selected": true, "label": "string", "price": 120, "currency": "USD", "items": [ { "id": "string", "name": "string", "price": 60, "currency": "USD" } ] },',
     '        "insurance": { "selected": true, "planId": "string", "planLabel": "string", "price": 40, "currency": "USD", "note": "string", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD", "days": 5 }',
     "      }",
@@ -2158,68 +2190,6 @@ const executeSearchExcursions = async (
   }
 };
 
-const executeSearchFlights = async (
-  args: Record<string, unknown>
-): Promise<ToolExecutionResult> => {
-  const origin = toTrimmedString(args.origin)?.toUpperCase() ?? null;
-  const destination = toTrimmedString(args.destination)?.toUpperCase() ?? null;
-  const departureDate = toIsoDate(args.departureDate);
-  const returnDate = toIsoDate(args.returnDate);
-  const cabinClass = toTrimmedString(args.cabinClass);
-  const adults = clampInteger(args.adults, 1, 9, 1);
-  const children = clampInteger(args.children, 0, 6, 0);
-  const currency = toCurrencyCode(args.currency);
-
-  if (!origin || !destination || !departureDate) {
-    return {
-      ok: false,
-      tool: "search_flights",
-      error: "Missing origin, destination or departureDate.",
-    };
-  }
-
-  const payload: FlydubaiSearchRequest = {
-    origin,
-    destination,
-    departureDate,
-    returnDate: returnDate ?? null,
-    cabinClass: cabinClass ?? null,
-    adults,
-    children,
-    currency: currency ?? null,
-  };
-
-  try {
-    const result = await searchFlydubai(payload, { allowMock: true });
-    return {
-      ok: true,
-      tool: "search_flights",
-      data: {
-        currency: result.currency,
-        mock: result.mock ?? false,
-        offers: result.offers.slice(0, 8).map((offer) => ({
-          id: offer.id,
-          totalPrice: offer.totalPrice,
-          currency: offer.currency,
-          cabinClass: offer.cabinClass ?? null,
-          refundable: offer.refundable ?? null,
-          outbound: offer.segments,
-          inbound: offer.returnSegments ?? null,
-        })),
-      },
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      tool: "search_flights",
-      error: resolveSafeErrorMessage(
-        error instanceof Error ? error.message : null,
-        "Flight lookup failed."
-      ),
-    };
-  }
-};
-
 const executeQuoteInsurance = async (
   args: Record<string, unknown>,
   context: PackageAssistantContext | null
@@ -2325,8 +2295,6 @@ const executeToolCall = async (
       return executeSearchTransfers(args, context.context);
     case "search_excursions":
       return executeSearchExcursions(args);
-    case "search_flights":
-      return executeSearchFlights(args);
     case "quote_insurance":
       return executeQuoteInsurance(args, context.context);
     default:
@@ -2375,30 +2343,6 @@ const appendToolPriceEvidence = (
         oneWay: toFiniteNumber(pricingRecord?.oneWay),
         returnPrice: toFiniteNumber(pricingRecord?.return),
         currency: toCurrencyCode(pricingRecord?.currency),
-      });
-    });
-    return;
-  }
-
-  if (toolResult.tool === "search_flights") {
-    const offers = Array.isArray(record.offers) ? record.offers : [];
-    offers.forEach((offer) => {
-      const offerRecord = parseRecord(offer);
-      if (!offerRecord) return;
-      const outbound = Array.isArray(offerRecord.outbound) ? offerRecord.outbound : [];
-      const inbound = Array.isArray(offerRecord.inbound) ? offerRecord.inbound : [];
-      const firstOutbound = parseRecord(outbound[0]);
-      const firstInbound = parseRecord(inbound[0]);
-      const outboundDate = toTrimmedString(firstOutbound?.departureDateTime)?.slice(0, 10) ?? null;
-      const inboundDate = toTrimmedString(firstInbound?.departureDateTime)?.slice(0, 10) ?? null;
-      evidence.flights.push({
-        id: toTrimmedString(offerRecord.id) ?? "",
-        totalPrice: toFiniteNumber(offerRecord.totalPrice),
-        currency: toCurrencyCode(offerRecord.currency),
-        origin: toTrimmedString(firstOutbound?.origin),
-        destination: toTrimmedString(firstOutbound?.destination),
-        departureDate: outboundDate,
-        returnDate: inboundDate,
       });
     });
     return;
@@ -2568,33 +2512,23 @@ export async function generatePackageAssistantReply(
 
   if (sanitizedMessages.length === 0) {
     return {
-      reply: applyHotelFirstPolicyToReply(
-        applyServiceAvailabilityToReply(
-          fallback,
-          projectContext.serviceFlags,
-          locale
-        ),
-        locale
-      ),
+      reply: applyPackageReplyPolicies(fallback, projectContext.serviceFlags, locale),
       meta: { model: "fallback", toolCalls: 0, priceAudit: emptyAudit, responseId: null },
     };
   }
 
   if (!OPENAI_API_KEY) {
-    const unavailableReply = applyHotelFirstPolicyToReply(
-      applyServiceAvailabilityToReply(
-        {
-          ...fallback,
-          message:
-            locale === "ru"
-              ? "AI временно недоступен. Напишите направление, даты и бюджет, и менеджер поможет вручную."
-              : locale === "hy"
-                ? "AI-ը ժամանակավորապես հասանելի չէ։ Գրեք ուղղությունը, ամսաթվերը և բյուջեն, և մենեջերը կօգնի։"
-                : "AI is temporarily unavailable. Share destination, dates and budget, and our manager can assist.",
-        },
-        projectContext.serviceFlags,
-        locale
-      ),
+    const unavailableReply = applyPackageReplyPolicies(
+      {
+        ...fallback,
+        message:
+          locale === "ru"
+            ? "AI временно недоступен. Напишите направление, даты и бюджет, и менеджер поможет вручную."
+            : locale === "hy"
+              ? "AI-ը ժամանակավորապես հասանելի չէ։ Գրեք ուղղությունը, ամսաթվերը և բյուջեն, և մենեջերը կօգնի։"
+              : "AI is temporarily unavailable. Share destination, dates and budget, and our manager can assist.",
+      },
+      projectContext.serviceFlags,
       locale
     );
     return {
@@ -2694,14 +2628,7 @@ export async function generatePackageAssistantReply(
       });
     }
     const normalized = normalizeReplyFromModel(extractTextFromResponse(completion.payload), locale);
-    const restricted = applyHotelFirstPolicyToReply(
-      applyServiceAvailabilityToReply(
-        normalized,
-        projectContext.serviceFlags,
-        locale
-      ),
-      locale
-    );
+    const restricted = applyPackageReplyPolicies(normalized, projectContext.serviceFlags, locale);
     const audited = applyHardPriceAudit(restricted, priceEvidence);
     return {
       reply: audited.reply,
@@ -2714,14 +2641,7 @@ export async function generatePackageAssistantReply(
     };
   }
 
-  const restrictedFallback = applyHotelFirstPolicyToReply(
-    applyServiceAvailabilityToReply(
-      fallback,
-      projectContext.serviceFlags,
-      locale
-    ),
-    locale
-  );
+  const restrictedFallback = applyPackageReplyPolicies(fallback, projectContext.serviceFlags, locale);
   const auditedFallback = applyHardPriceAudit(restrictedFallback, priceEvidence);
   return {
     reply: auditedFallback.reply,

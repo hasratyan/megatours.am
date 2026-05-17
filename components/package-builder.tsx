@@ -25,6 +25,7 @@ import {
   writePackageBuilderStateForOwner,
 } from "@/lib/package-builder-state";
 import { buildSearchQuery } from "@/lib/search-query";
+import { buildFlightRedirectFromHotel } from "@/lib/flight-redirect";
 
 type ServiceItem = {
   id: PackageBuilderService;
@@ -229,6 +230,10 @@ export default function PackageBuilder() {
     });
     return `${base}?${query}`;
   })();
+  const flightRedirect = useMemo(
+    () => buildFlightRedirectFromHotel(builderState.hotel),
+    [builderState.hotel]
+  );
 
   const services: ServiceItem[] = [
     { id: "hotel", icon: "hotel", label: t.packageBuilder.services.hotel, required: true },
@@ -247,7 +252,7 @@ export default function PackageBuilder() {
       ? builderState.hotel?.selected === true
       : builderState[serviceId]?.selected === true;
   const allEnabledSelected = services
-    .filter((service) => serviceFlags[service.id] !== false)
+    .filter((service) => service.id !== "flight" && serviceFlags[service.id] !== false)
     .every((service) => isServiceSelected(service.id));
   const serviceDisabledMessage = (() => {
     if (!disabledServiceId) return null;
@@ -326,8 +331,13 @@ export default function PackageBuilder() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (hasAnySelection) {
-      setShowToggle(true);
-      return;
+      let active = true;
+      queueMicrotask(() => {
+        if (active) setShowToggle(true);
+      });
+      return () => {
+        active = false;
+      };
     }
     lastScrollYRef.current = window.scrollY;
     const threshold = 8;
@@ -558,6 +568,18 @@ export default function PackageBuilder() {
     }
   };
 
+  const openExternalFlightRedirect = (url: string) => {
+    if (typeof window === "undefined") return;
+    updatePackageBuilderState((prev) =>
+      prev.flight ? { ...prev, flight: undefined, updatedAt: Date.now() } : prev
+    );
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      window.location.assign(url);
+    }
+    setIsOpen(false);
+  };
+
   const handleSelect = (service: ServiceItem) => {
     if (isPendingNavigation) return;
     if (serviceFlags[service.id] === false) {
@@ -571,6 +593,11 @@ export default function PackageBuilder() {
       setDisabledServiceId(null);
       setIsOpen(true);
       router.push(`/${locale}#hero`);
+      return;
+    }
+
+    if (service.id === "flight" && flightRedirect) {
+      openExternalFlightRedirect(flightRedirect.url);
       return;
     }
 

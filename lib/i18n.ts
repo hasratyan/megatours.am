@@ -125,6 +125,12 @@ export type Translation = {
       noOptions: string;
       loadFailed: string;
       demoNote: string;
+      redirectButton: string;
+      externalNote: string;
+      unsupportedDestination: string;
+      missingHotelDetails: string;
+      infantsLabel: string;
+      summaryLabel: string;
     };
     services: {
       hotel: string;
@@ -1365,6 +1371,15 @@ const translations: Record<Locale, Translation> = {
         noOptions: "Տվյալ ամսաթվերի համար թռիչքներ չկան։",
         loadFailed: "Չհաջողվեց բեռնել թռիչքները։",
         demoNote: "Ցուցադրվում են օրինակելի արժեքներ՝ մինչև թեստային հասանելիությունը։",
+        redirectButton: "Շարունակել {airline}-ում",
+        externalNote:
+          "Ավիատոմսի ամրագրումը կբացվի ավիաընկերության կայքում՝ ձեր հյուրանոցի ամսաթվերով և ուղևորների քանակով։",
+        unsupportedDestination:
+          "Թռիչքները հիմա հասանելի են միայն Դուբայի, Շարժայի և Աբու Դաբիի հյուրանոցների համար։",
+        missingHotelDetails:
+          "Թռիչքներ որոնելուց առաջ ընտրեք հաստատված ամսաթվերով հյուրանոց։",
+        infantsLabel: "նորածին",
+        summaryLabel: "Թռիչքի որոնման ամփոփում",
       },
       services: {
         hotel: "Հյուրանոց",
@@ -2878,6 +2893,14 @@ const translations: Record<Locale, Translation> = {
         noOptions: "No flights available for these dates.",
         loadFailed: "Failed to load flight options.",
         demoNote: "Showing demo fares until test credentials are provided.",
+        redirectButton: "Continue to {airline}",
+        externalNote:
+          "Flight booking opens on the airline website with your hotel dates and passenger count.",
+        unsupportedDestination:
+          "Flights are currently available only for Dubai, Sharjah, and Abu Dhabi hotels.",
+        missingHotelDetails: "Select a hotel with confirmed dates before searching flights.",
+        infantsLabel: "infants",
+        summaryLabel: "Flight search summary",
       },
       services: {
         hotel: "Hotel",
@@ -4398,6 +4421,15 @@ const translations: Record<Locale, Translation> = {
         noOptions: "Нет доступных рейсов на эти даты.",
         loadFailed: "Не удалось загрузить рейсы.",
         demoNote: "Показаны демо-тарифы до получения тестовых данных.",
+        redirectButton: "Перейти на сайт {airline}",
+        externalNote:
+          "Бронирование авиабилетов откроется на сайте авиакомпании с датами отеля и количеством пассажиров.",
+        unsupportedDestination:
+          "Сейчас перелеты доступны только для отелей в Дубае, Шардже и Абу-Даби.",
+        missingHotelDetails:
+          "Выберите отель с подтвержденными датами перед поиском авиабилетов.",
+        infantsLabel: "младенцы",
+        summaryLabel: "Сводка поиска рейса",
       },
       services: {
         hotel: "Отель",

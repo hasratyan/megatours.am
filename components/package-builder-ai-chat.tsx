@@ -257,22 +257,6 @@ const buildPackageStateFromDraft = (draft: PackageAssistantDraft): PackageBuilde
     };
   }
 
-  if (draft.flight?.selected) {
-    state.flight = {
-      selected: true,
-      selectionId: draft.flight.selectionId ?? null,
-      label: draft.flight.label ?? null,
-      price: draft.flight.price ?? null,
-      currency: draft.flight.currency ?? null,
-      origin: draft.flight.origin ?? null,
-      destination: draft.flight.destination ?? null,
-      departureDate: draft.flight.departureDate ?? null,
-      returnDate: draft.flight.returnDate ?? null,
-      cabinClass: draft.flight.cabinClass ?? null,
-      notes: draft.flight.notes ?? null,
-    };
-  }
-
   if (draft.excursion?.selected) {
     const items = (draft.excursion.items ?? []).filter((item) => item?.id);
     state.excursion = {
@@ -315,7 +299,6 @@ const resolveOptionTags = (option: PackageAssistantPackageOption) => {
   const tags: string[] = [];
   if (option.draft.hotel?.selected) tags.push("Hotel");
   if (option.draft.transfer?.selected) tags.push("Transfer");
-  if (option.draft.flight?.selected) tags.push("Flight");
   if (option.draft.excursion?.selected) tags.push("Excursion");
   if (option.draft.insurance?.selected) tags.push("Insurance");
   return tags;

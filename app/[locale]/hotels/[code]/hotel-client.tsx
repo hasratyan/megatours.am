@@ -1941,6 +1941,7 @@ export default function HotelClient({
           shouldClearTransferByName || shouldClearTransferByCode
         );
         const resetPackage = options?.resetPackage === true;
+        const shouldClearFlight = resetPackage || prevHotelKey !== nextHotelKey;
         const nextTransfer = resetPackage
           ? undefined
           : shouldClearTransfer
@@ -1952,7 +1953,7 @@ export default function HotelClient({
           transfer: nextTransfer,
           excursion: resetPackage ? undefined : prev.excursion,
           insurance: resetPackage ? undefined : prev.insurance,
-          flight: resetPackage ? undefined : prev.flight,
+          flight: shouldClearFlight ? undefined : prev.flight,
           sessionExpiresAt: shouldStartSession
             ? now + PACKAGE_BUILDER_SESSION_MS
             : prev.sessionExpiresAt,
