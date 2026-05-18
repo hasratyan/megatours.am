@@ -9,6 +9,7 @@ import Loader from "@/components/loader";
 import { ApiError, postJson } from "@/lib/api-helpers";
 import { parseSearchParams } from "@/lib/search-query";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
+import { resolveHotelPrimaryImageUrl } from "@/lib/hotel-share";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount, type AmdRates } from "@/lib/currency";
@@ -960,6 +961,7 @@ export default function HotelClient({
   const [amenitiesExpanded, setAmenitiesExpanded] = useState(false);
   const [amenitiesOverflow, setAmenitiesOverflow] = useState(false);
   const finalError = error;
+  const heroImageUrl = resolveHotelPrimaryImageUrl(hotelInfo);
 
   useEffect(() => {
     setHotelInfo(initialHotelInfo);
@@ -2456,7 +2458,7 @@ export default function HotelClient({
       <main
         className="details"
         style={{
-          "--background-image": hotelInfo?.imageUrl ? `url(${hotelInfo.imageUrl})` : "none"
+          "--background-image": heroImageUrl ? `url(${heroImageUrl})` : "none"
         } as React.CSSProperties}
       >
         <div className="container header">

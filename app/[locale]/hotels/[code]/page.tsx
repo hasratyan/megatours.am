@@ -3,6 +3,7 @@ import HotelClient from "./hotel-client";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
+import { buildHotelShareTitle, resolveHotelPrimaryImageUrl } from "@/lib/hotel-share";
 
 const resolveLocale = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
@@ -31,11 +32,15 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   try {
     const info = await getHotelInfoCached(hotelCode);
     if (info?.name) {
+      const title = buildHotelShareTitle(info.name, resolvedLocale);
+      const primaryImageUrl = resolveHotelPrimaryImageUrl(info);
+
       return buildLocalizedMetadata({
         locale: resolvedLocale,
-        title: info.name,
+        title,
         description: t.hero.subtitle,
         path: `/hotels/${hotelCode}`,
+        imagePath: primaryImageUrl,
       });
     }
   } catch (error) {
