@@ -6588,6 +6588,21 @@ main.payment-status{
   display: flex;
   justify-content: flex-end;
   align-items: flex-start;
+
+  a{
+    color: #fff;
+    display: flex;
+    gap: 0.25em;
+    background: #fff1;
+    padding: 0.5em 0.75em;
+    align-items: center;
+    border-radius: 1em;
+    border: 1px solid #fff7;
+
+    &:hover{
+      background: #fff2;
+    }
+  }
 }
 
 .booking-addons-hero{
@@ -6785,6 +6800,7 @@ main.payment-status{
   gap: 0.85rem;
   justify-content: space-between;
   align-items: center;
+  color: #fff;
 }
 
 .booking-addon-card__price{
