@@ -311,10 +311,13 @@ export default async function PaymentSuccessPage({
       ? t.payment.success.addons.body
       : t.payment.success.addons.pendingBody
     : t.payment.success.body;
+  const shouldResetPackageBuilder = isAddonFlow
+    ? isAddonApplied
+    : isBookingConfirmed || isBookingPending;
 
   return (
     <main className="container payment-status success">
-      <PackageBuilderResetOnConfirm enabled={isAddonFlow ? isAddonApplied : isBookingConfirmed} />
+      <PackageBuilderResetOnConfirm enabled={shouldResetPackageBuilder} />
       <span className="material-symbols-rounded">{statusIcon}</span>
       <h1>{statusTitle}</h1>
       <p>{statusBody}</p>
