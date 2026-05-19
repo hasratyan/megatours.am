@@ -8,6 +8,7 @@ import "material-symbols/rounded.css";
 import MetaPixel from "@/components/meta-pixel";
 import Providers from "@/components/providers";
 import { metadataBase } from "@/lib/metadata";
+import { metaPixelId } from "@/lib/meta-pixel-config";
 import { resolveZohoSalesIqScriptUrl } from "@/lib/zoho-salesiq";
 import "./globals.css";
 
@@ -35,15 +36,6 @@ export const viewport: Viewport = {
 const zohoSalesIqScriptUrl = resolveZohoSalesIqScriptUrl(
   process.env.NEXT_PUBLIC_ZOHO_SALESIQ_SCRIPT_URL
 );
-
-const defaultMetaPixelId = "1249492990325844";
-
-const resolveMetaPixelId = (value?: string) => {
-  const trimmedValue = value?.trim();
-  return trimmedValue && /^\d+$/.test(trimmedValue) ? trimmedValue : defaultMetaPixelId;
-};
-
-const metaPixelId = resolveMetaPixelId(process.env.NEXT_PUBLIC_META_PIXEL_ID);
 
 const zohoSalesIqHandoffOnlyScript = `
 (function(){

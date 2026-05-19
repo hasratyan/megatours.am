@@ -11,7 +11,9 @@ import { parseSearchParams } from "@/lib/search-query";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { resolveHotelPrimaryImageUrl } from "@/lib/hotel-share";
 import { useLanguage, useTranslations } from "@/components/language-provider";
+import { trackMetaPixelViewContent } from "@/components/meta-pixel";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
+import { metaViewContentType } from "@/lib/meta-pixel-config";
 import { formatCurrencyAmount, normalizeAmount, type AmdRates } from "@/lib/currency";
 import { useAmdRates } from "@/lib/use-amd-rates";
 import Image from "next/image";
@@ -844,7 +846,7 @@ export default function HotelClient({
   };
   const { data: session, status: authStatus } = useSession();
   const isSignedIn = Boolean(session?.user);
-  const { rates: hotelRates } = useAmdRates(initialAmdRates);
+  const { rates: hotelRates, loading: hotelRatesLoading } = useAmdRates(initialAmdRates);
   const addonRates = hotelRates;
 
   const formatDisplayPrice = useCallback(
@@ -956,6 +958,7 @@ export default function HotelClient({
   const [resolvedDestinationCode, setResolvedDestinationCode] = useState<string | null>(null);
   const amenitiesRef = useRef<HTMLDivElement | null>(null);
   const bookingPopoverRef = useRef<HTMLDivElement | null>(null);
+  const metaViewContentTrackedKeyRef = useRef<string | null>(null);
   const destinationCode =
     destinationCodeFromQuery ?? hotelInfo?.destinationId ?? resolvedDestinationCode ?? undefined;
   const [amenitiesExpanded, setAmenitiesExpanded] = useState(false);
@@ -1275,6 +1278,103 @@ export default function HotelClient({
     return sorted;
   }, [groupedRoomOptions, mealFilter, priceSort, t.hotel.roomOptions.mealPlans]);
   const isFiltered = mealFilter !== "all" || priceSort !== "default";
+  const metaContentId = useMemo(() => {
+    const candidate = hotelInfo?.systemId ?? hotelCode;
+    return typeof candidate === "string" && candidate.trim().length > 0 ? candidate.trim() : null;
+  }, [hotelCode, hotelInfo?.systemId]);
+  const metaContentCategory = useMemo(() => {
+    const parts = [
+      hotelInfo?.destinationName,
+      hotelInfo?.address?.cityName,
+      hotelInfo?.address?.countryName,
+    ]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value));
+    return parts.length > 0 ? parts.join(", ") : null;
+  }, [hotelInfo?.address?.cityName, hotelInfo?.address?.countryName, hotelInfo?.destinationName]);
+  const pricedRoomOptionCount = useMemo(
+    () =>
+      groupedRoomOptions.filter((group) => {
+        const price =
+          typeof group.displayTotalPrice === "number" && Number.isFinite(group.displayTotalPrice)
+            ? group.displayTotalPrice
+            : typeof group.totalPrice === "number" && Number.isFinite(group.totalPrice)
+              ? group.totalPrice
+              : null;
+        return price !== null && price > 0;
+      }).length,
+    [groupedRoomOptions]
+  );
+  const metaViewContentValue = useMemo(() => {
+    const values = groupedRoomOptions
+      .map((group) => {
+        const price =
+          typeof group.displayTotalPrice === "number" && Number.isFinite(group.displayTotalPrice)
+            ? group.displayTotalPrice
+            : typeof group.totalPrice === "number" && Number.isFinite(group.totalPrice)
+              ? group.totalPrice
+              : null;
+        if (price === null || price <= 0) return null;
+        const normalized = normalizeAmount(price, group.currency ?? fallbackCurrency, hotelRates);
+        return normalized?.currency === "AMD" && normalized.amount > 0 ? normalized.amount : null;
+      })
+      .filter((value): value is number => typeof value === "number");
+
+    return values.length > 0 ? Math.min(...values) : null;
+  }, [fallbackCurrency, groupedRoomOptions, hotelRates]);
+  const metaViewContentSearch = searchParams.toString();
+  const metaViewContentAdultCount =
+    parsed.payload?.rooms.reduce((sum, room) => sum + room.adults, 0) ?? null;
+  const metaViewContentChildCount =
+    parsed.payload?.rooms.reduce((sum, room) => sum + room.childrenAges.length, 0) ?? null;
+
+  useEffect(() => {
+    if (!metaContentId) return;
+    if (roomDetailsPayload && roomsLoading) return;
+    if (pricedRoomOptionCount > 0 && hotelRatesLoading && !hotelRates) return;
+
+    const routeKey = metaViewContentSearch ? `${pathname}?${metaViewContentSearch}` : pathname;
+    const valueKey =
+      typeof metaViewContentValue === "number" ? metaViewContentValue.toFixed(2) : "no-value";
+    const trackingKey = [
+      routeKey,
+      metaContentId,
+      hotelInfo?.name ?? "",
+      metaContentCategory ?? "",
+      valueKey,
+    ].join("|");
+    if (metaViewContentTrackedKeyRef.current === trackingKey) return;
+    metaViewContentTrackedKeyRef.current = trackingKey;
+
+    trackMetaPixelViewContent({
+      checkInDate: parsed.payload?.checkInDate ?? null,
+      checkOutDate: parsed.payload?.checkOutDate ?? null,
+      contentCategory: metaContentCategory,
+      contentIds: [metaContentId],
+      contentName: hotelInfo?.name ?? metaContentId,
+      contentType: metaViewContentType,
+      currency: "AMD",
+      numAdults: metaViewContentAdultCount,
+      numChildren: metaViewContentChildCount,
+      value: metaViewContentValue,
+    });
+  }, [
+    hotelInfo?.name,
+    hotelRates,
+    hotelRatesLoading,
+    metaContentCategory,
+    metaContentId,
+    metaViewContentAdultCount,
+    metaViewContentChildCount,
+    metaViewContentSearch,
+    metaViewContentValue,
+    parsed.payload?.checkInDate,
+    parsed.payload?.checkOutDate,
+    pathname,
+    pricedRoomOptionCount,
+    roomDetailsPayload,
+    roomsLoading,
+  ]);
   const bookingCurrency =
     activePrebook?.currency ??
     initialRoomDetails?.currency ??
