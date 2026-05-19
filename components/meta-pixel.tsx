@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 const metaPixelScriptSrc = "https://connect.facebook.net/en_US/fbevents.js";
@@ -59,6 +59,7 @@ const ensureMetaPixel = () => {
 
 export default function MetaPixel({ pixelId }: MetaPixelProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const lastTrackedPathRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -72,10 +73,19 @@ export default function MetaPixel({ pixelId }: MetaPixelProps) {
       metaWindow.__MEGATOURS_META_PIXEL_INITIALIZED__[pixelId] = true;
     }
 
-    if (lastTrackedPathRef.current === pathname) return;
-    lastTrackedPathRef.current = pathname;
-    fbq("track", "PageView");
-  }, [pathname, pixelId]);
+    const search = searchParams.toString();
+    const trackedPath = `${pathname}${search ? `?${search}` : ""}`;
+    if (lastTrackedPathRef.current === trackedPath) return;
+    lastTrackedPathRef.current = trackedPath;
+
+    window.setTimeout(() => {
+      fbq("track", "PageView", {
+        page_location: window.location.href,
+        page_path: `${window.location.pathname}${window.location.search}`,
+        page_title: document.title,
+      });
+    }, 0);
+  }, [pathname, pixelId, searchParams]);
 
   return (
     <noscript>

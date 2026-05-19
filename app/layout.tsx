@@ -95,7 +95,9 @@ export default function RootLayout({ children }: Readonly<{
     <html suppressHydrationWarning>
       <body className={`${body.variable} antialiased`}>
         <GoogleTagManager gtmId="GTM-MQJD3BQN" />
-        <MetaPixel pixelId={metaPixelId} />
+        <React.Suspense fallback={null}>
+          <MetaPixel pixelId={metaPixelId} />
+        </React.Suspense>
         {zohoSalesIqScriptUrl ? (
           <>
             <Script id="zoho-salesiq-bootstrap" strategy="beforeInteractive">
