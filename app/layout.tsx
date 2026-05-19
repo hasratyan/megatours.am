@@ -36,7 +36,7 @@ const zohoSalesIqScriptUrl = resolveZohoSalesIqScriptUrl(
   process.env.NEXT_PUBLIC_ZOHO_SALESIQ_SCRIPT_URL
 );
 
-const defaultMetaPixelId = "1746326223053393";
+const defaultMetaPixelId = "1249492990325844";
 
 const resolveMetaPixelId = (value?: string) => {
   const trimmedValue = value?.trim();
