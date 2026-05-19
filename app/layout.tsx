@@ -5,6 +5,7 @@ import { GoogleTagManager } from "@next/third-parties/google";
 import { Google_Sans } from "next/font/google";
 import "material-symbols/outlined.css";
 import "material-symbols/rounded.css";
+import MetaPixel from "@/components/meta-pixel";
 import Providers from "@/components/providers";
 import { metadataBase } from "@/lib/metadata";
 import { resolveZohoSalesIqScriptUrl } from "@/lib/zoho-salesiq";
@@ -34,6 +35,15 @@ export const viewport: Viewport = {
 const zohoSalesIqScriptUrl = resolveZohoSalesIqScriptUrl(
   process.env.NEXT_PUBLIC_ZOHO_SALESIQ_SCRIPT_URL
 );
+
+const defaultMetaPixelId = "1746326223053393";
+
+const resolveMetaPixelId = (value?: string) => {
+  const trimmedValue = value?.trim();
+  return trimmedValue && /^\d+$/.test(trimmedValue) ? trimmedValue : defaultMetaPixelId;
+};
+
+const metaPixelId = resolveMetaPixelId(process.env.NEXT_PUBLIC_META_PIXEL_ID);
 
 const zohoSalesIqHandoffOnlyScript = `
 (function(){
@@ -85,6 +95,7 @@ export default function RootLayout({ children }: Readonly<{
     <html suppressHydrationWarning>
       <body className={`${body.variable} antialiased`}>
         <GoogleTagManager gtmId="GTM-MQJD3BQN" />
+        <MetaPixel pixelId={metaPixelId} />
         {zohoSalesIqScriptUrl ? (
           <>
             <Script id="zoho-salesiq-bootstrap" strategy="beforeInteractive">
