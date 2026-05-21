@@ -207,6 +207,30 @@ const normalizeHotelCode = (value: string): string => {
   return normalized.length > 0 ? normalized : "0";
 };
 
+const getDestinationIdAliases = (value: string | null | undefined): string[] => {
+  const trimmed = value?.trim();
+  if (!trimmed) return [];
+
+  const aliases = new Set([trimmed]);
+  if (trimmed.endsWith("-0")) {
+    aliases.add(trimmed.slice(0, -2));
+  } else if (!trimmed.includes("-")) {
+    aliases.add(`${trimmed}-0`);
+  }
+
+  const parts = trimmed
+    .split("-")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  const parentPart = parts.find((part) => part !== "0");
+  if (parentPart) {
+    aliases.add(parentPart);
+    aliases.add(`${parentPart}-0`);
+  }
+
+  return Array.from(aliases);
+};
+
 const isZeroOrLessRating = (rating: number | null | undefined): boolean =>
   typeof rating === "number" && Number.isFinite(rating) && rating <= 0;
 
@@ -1105,6 +1129,21 @@ export default function SearchForm({
     return merged;
   }, [destinations, hotels, selectedLocation]);
 
+  const mapHotels = useMemo(() => {
+    if (selectedLocation?.type !== "destination") return hotels;
+
+    const selectedDestinationIds = new Set([
+      ...getDestinationIdAliases(selectedLocation.value),
+      ...getDestinationIdAliases(selectedLocation.rawId),
+    ]);
+
+    return hotels.filter((hotel) =>
+      getDestinationIdAliases(hotel.parentDestinationId).some((id) =>
+        selectedDestinationIds.has(id)
+      )
+    );
+  }, [hotels, selectedLocation]);
+
   const matchesLocationOption = useCallback((option: LocationOption, input: string) => {
     const searchableValue = `${option.label} ${option.value}`;
     return matchesLocationSearch(searchableValue, input);
@@ -1147,7 +1186,6 @@ export default function SearchForm({
                 return;
               }
               setSelectedLocation(option);
-              void executeSearchForLocation(option);
             }}
             placeholder={destinationsLoading ? copy.loadingDestinations : copy.wherePlaceholder}
             isLoading={destinationsLoading || hotelsLoading}
@@ -1156,7 +1194,7 @@ export default function SearchForm({
             emptyMessage={copy.noLocations}
             matchesOption={matchesLocationOption}
           />
-          {!hideLocationFields && hotels.length > 0 && (
+          {!hideLocationFields && mapHotels.length > 0 && (
             <button
               type="button"
               className="map-picker"
@@ -1175,7 +1213,7 @@ export default function SearchForm({
         </div>
       )}
 
-      {!hideLocationFields && hotels.length > 0 && (
+      {!hideLocationFields && mapHotels.length > 0 && (
         <div
           id={mapPopoverId}
           popover="auto"
@@ -1185,7 +1223,7 @@ export default function SearchForm({
           <h2>{copy.pickOnMap ?? "Pick on map"}</h2>
           {isMapOpen ? (
             <HotelMapPicker
-              hotels={hotels}
+              hotels={mapHotels}
               selectedHotel={selectedLocation?.type === "hotel" ? selectedLocation : null}
               onSelectHotel={handleMapHotelSelect}
               isOpen={isMapOpen}
