@@ -573,10 +573,11 @@ export default function PackageBuilder() {
     updatePackageBuilderState((prev) =>
       prev.flight ? { ...prev, flight: undefined, updatedAt: Date.now() } : prev
     );
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) {
-      window.location.assign(url);
-    }
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.click();
     setIsOpen(false);
   };
 
@@ -844,7 +845,9 @@ export default function PackageBuilder() {
                                 disabled={isPendingNavigation}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  if (viewHref) {
+                                  if (service.id === "flight" && flightRedirect) {
+                                    openExternalFlightRedirect(flightRedirect.url);
+                                  } else if (viewHref) {
                                     beginNavigation(service.id, viewHref);
                                   }
                                 }}
