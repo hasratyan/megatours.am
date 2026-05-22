@@ -1,9 +1,11 @@
 import * as React from "react";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
+import JsonLd from "@/components/json-ld";
 import DeferredLayoutWidgets from "@/components/deferred-layout-widgets";
 import { LanguageProvider } from "@/components/language-provider";
 import { locales, Locale } from "@/lib/i18n";
+import { buildTravelAgencyStructuredData } from "@/lib/structured-data";
 
 // Generate static params for all locales
 export function generateStaticParams() {
@@ -23,8 +25,11 @@ export default async function LocaleLayout({ children, params }: LayoutProps) {
     return null;
   }
 
+  const resolvedLocale = locale as Locale;
+
   return (
     <LanguageProvider initialLocale={locale as Locale}>
+      <JsonLd id="structured-data-travel-agency" data={buildTravelAgencyStructuredData(resolvedLocale)} />
       <div className="page">
         <Header />
         {children}

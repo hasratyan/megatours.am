@@ -9,7 +9,7 @@ const baseUrl = normalizeBaseUrl(
 
 export const metadataBase = new URL(baseUrl);
 
-const siteName = "MEGATOURS";
+export const siteName = "MEGATOURS";
 
 const ogImagesByLocale: Record<Locale, string> = {
   hy: "/images/ogimage.jpg",
@@ -33,7 +33,7 @@ const normalizePath = (value?: string | null) => {
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 };
 
-const toAbsoluteUrl = (value: string) => {
+export const toAbsoluteUrl = (value: string) => {
   if (!value) return value;
   if (value.startsWith("http://") || value.startsWith("https://")) return value;
   return new URL(value, metadataBase).toString();
@@ -48,6 +48,7 @@ type LocalizedMetadataInput = {
   path?: string | null;
   imagePath?: string | null;
   openGraphType?: "website" | "article";
+  robots?: Metadata["robots"];
 };
 
 export function buildLocalizedMetadata({
@@ -57,6 +58,7 @@ export function buildLocalizedMetadata({
   path,
   imagePath,
   openGraphType = "website",
+  robots,
 }: LocalizedMetadataInput): Metadata {
   const resolvedLocale = resolveLocale(locale);
   const normalizedPath = normalizePath(path);
@@ -72,10 +74,14 @@ export function buildLocalizedMetadata({
   return {
     title,
     description: metaDescription,
+    robots,
     alternates: {
       canonical: localePath,
       languages: Object.fromEntries(
-        locales.map((entry) => [entry, buildLocalePath(entry, normalizedPath)])
+        [
+          ...locales.map((entry) => [entry, buildLocalePath(entry, normalizedPath)]),
+          ["x-default", buildLocalePath(defaultLocale, normalizedPath)],
+        ]
       ),
     },
     openGraph: {

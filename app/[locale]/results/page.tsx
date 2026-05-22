@@ -21,6 +21,10 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
     title: t.results.fallbackTitle,
     description: t.hero.subtitle,
     path: "/results",
+    robots: {
+      index: false,
+      follow: true,
+    },
   });
 }
 

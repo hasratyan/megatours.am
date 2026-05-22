@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 import DestinationPage from "@/components/destination-page";
+import JsonLd from "@/components/json-ld";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, type Locale, locales } from "@/lib/i18n";
 import { destinationSlugs, getDestinationData } from "@/lib/destination-data";
+import { buildDestinationStructuredData } from "@/lib/structured-data";
 
 type PageProps = {
   params: Promise<{
@@ -50,5 +52,13 @@ export default async function DestinationRoute({ params }: PageProps) {
     notFound();
   }
 
-  return <DestinationPage locale={resolvedLocale} destination={data} />;
+  return (
+    <>
+      <JsonLd
+        id={`structured-data-destination-${data.slug}`}
+        data={buildDestinationStructuredData({ locale: resolvedLocale, destination: data })}
+      />
+      <DestinationPage locale={resolvedLocale} destination={data} />
+    </>
+  );
 }

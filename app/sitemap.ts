@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
-import { locales } from "@/lib/i18n";
+import { destinationSlugs } from "@/lib/destination-data";
+import { getFeaturedHotelSelections } from "@/lib/featured-hotels";
+import { defaultLocale, locales } from "@/lib/i18n";
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, "");
 
@@ -23,20 +25,45 @@ const servicePaths = [
 
 const routeDefinitions: RouteDefinition[] = [
   { path: "", priority: 1, changeFrequency: "daily" },
-  { path: "/results", priority: 0.7, changeFrequency: "weekly" },
   { path: "/services", priority: 0.8, changeFrequency: "weekly" },
   ...servicePaths.map((path) => ({ path, priority: 0.7, changeFrequency: "weekly" as const })),
+  ...destinationSlugs.map((slug) => ({ path: `/${slug}`, priority: 0.85, changeFrequency: "weekly" as const })),
   { path: "/refund-policy", priority: 0.4, changeFrequency: "monthly" },
   { path: "/privacy-policy", priority: 0.4, changeFrequency: "monthly" },
 ];
 
-export default function sitemap(): MetadataRoute.Sitemap {
+async function loadFeaturedHotelRouteDefinitions(): Promise<RouteDefinition[]> {
+  try {
+    const selections = await getFeaturedHotelSelections();
+    const seen = new Set<string>();
+    return selections
+      .map((selection) => selection.hotelCode.trim())
+      .filter((hotelCode) => {
+        if (!hotelCode || seen.has(hotelCode)) return false;
+        seen.add(hotelCode);
+        return true;
+      })
+      .map((hotelCode) => ({
+        path: `/hotels/${hotelCode}`,
+        priority: 0.75,
+        changeFrequency: "daily" as const,
+      }));
+  } catch (error) {
+    console.warn("[Sitemap] Failed to load featured hotel routes", error);
+    return [];
+  }
+}
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const lastModified = new Date();
-  const allRoutes = [...routeDefinitions];
+  const allRoutes = [...routeDefinitions, ...(await loadFeaturedHotelRouteDefinitions())];
   return allRoutes.flatMap((route) => {
     const alternates = {
       languages: Object.fromEntries(
-        locales.map((locale) => [locale, `${baseUrl}/${locale}${route.path}`]),
+        [
+          ...locales.map((locale) => [locale, `${baseUrl}/${locale}${route.path}`]),
+          ["x-default", `${baseUrl}/${defaultLocale}${route.path}`],
+        ],
       ),
     };
 

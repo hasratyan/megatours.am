@@ -1,7 +1,9 @@
 import Home from "./home";
+import JsonLd from "@/components/json-ld";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { getFeaturedHotelCards, type FeaturedHotelCard } from "@/lib/featured-hotels";
+import { buildHomeStructuredData } from "@/lib/structured-data";
 
 type PageProps = {
   params: Promise<{ locale: string }>;
@@ -26,6 +28,7 @@ export async function generateMetadata({ params }: PageProps) {
 export default async function HomePage({ params }: PageProps) {
   const { locale } = await params;
   const resolvedLocale = resolveLocale(locale);
+  const t = getTranslations(resolvedLocale);
   let featuredHotels: FeaturedHotelCard[] = [];
 
   try {
@@ -34,5 +37,20 @@ export default async function HomePage({ params }: PageProps) {
     console.error("[Home] Failed to load featured hotels", error);
   }
 
-  return <Home locale={resolvedLocale} featuredHotels={featuredHotels} />;
+  return (
+    <>
+      <JsonLd
+        id="structured-data-home"
+        data={buildHomeStructuredData({
+          locale: resolvedLocale,
+          title: `MEGATOURS | ${t.hero.title}`,
+          description: t.hero.subtitle,
+          path: `/${resolvedLocale}`,
+          faqs: t.faq.items,
+          featuredHotels,
+        })}
+      />
+      <Home locale={resolvedLocale} featuredHotels={featuredHotels} />
+    </>
+  );
 }

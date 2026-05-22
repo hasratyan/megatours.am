@@ -1,0 +1,22 @@
+# MEGATOURS
+
+MEGATOURS is a travel and tour-operator platform for booking UAE hotels, transfers, excursions, flights, and travel insurance.
+
+Important pages:
+
+- UAE hotels and travel booking: https://megatours.am/en
+- Dubai hotels and travel: https://megatours.am/en/dubai
+- Abu Dhabi hotels and travel: https://megatours.am/en/abu-dhabi
+- Sharjah hotels and travel: https://megatours.am/en/sharjah
+- Services: https://megatours.am/en/services
+
+Languages:
+
+- Armenian: https://megatours.am/hy
+- English: https://megatours.am/en
+- Russian: https://megatours.am/ru
+
+Contact:
+
+- Email: support@megatours.am
+- Phone: +37455659965

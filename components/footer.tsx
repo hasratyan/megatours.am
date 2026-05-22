@@ -90,8 +90,6 @@ const contactLinks = [
 export default function Footer({ locale }: FooterProps) {
   const resolvedLocale = resolveLocale(locale);
   const t = getTranslations(resolvedLocale);
-  const servicesNavLabel =
-    t.nav.find((entry) => entry.href === "services")?.label ?? t.packageBuilder.subtitle;
 
   return (
     <footer>
