@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Images from "next/image";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { toAbsoluteUrl } from "@/lib/metadata";
 
 type FooterProps = {
   locale?: string;
@@ -90,6 +91,8 @@ const contactLinks = [
 export default function Footer({ locale }: FooterProps) {
   const resolvedLocale = resolveLocale(locale);
   const t = getTranslations(resolvedLocale);
+  const refundPolicyUrl = toAbsoluteUrl(`/${resolvedLocale}/refund-policy`);
+  const privacyPolicyUrl = toAbsoluteUrl(`/${resolvedLocale}/privacy-policy`);
 
   return (
     <footer>
@@ -123,8 +126,8 @@ export default function Footer({ locale }: FooterProps) {
         </div>
         <div>
           <nav>
-            <Link href={`/${resolvedLocale}/refund-policy`}>{t.footer.refundPolicy}</Link>
-            <Link href={`/${resolvedLocale}/privacy-policy`}>{t.footer.securityPolicy}</Link>
+            <Link href={refundPolicyUrl}>{t.footer.refundPolicy}</Link>
+            <Link href={privacyPolicyUrl}>{t.footer.securityPolicy}</Link>
             <Link href={"https://b2b.megatours.am"} target={"_blank"}>{t.footer.b2bPartnership}</Link>
           </nav>
           <div className="payment">
