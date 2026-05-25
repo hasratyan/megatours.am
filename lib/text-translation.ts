@@ -6,6 +6,10 @@ export type SupportedTranslationLocale = "en" | "hy" | "ru";
 const TRANSLATION_CACHE_COLLECTION = "text_translation_cache";
 const TRANSLATION_CACHE_VERSION = "v2";
 const MAX_TRANSLATABLE_CHARS = 12000;
+const parsePositiveInteger = (value: string | undefined, fallback: number) => {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
 const OPENAI_TRANSLATION_MODEL_OVERRIDE =
   typeof process.env.OPENAI_TRANSLATION_MODEL === "string" &&
   process.env.OPENAI_TRANSLATION_MODEL.trim().length > 0
@@ -30,8 +34,19 @@ const OPENAI_TRANSLATION_LONG_THRESHOLD = Number.parseInt(
 const OPENAI_API_KEY =
   typeof process.env.OPENAI_API_KEY === "string" ? process.env.OPENAI_API_KEY.trim() : "";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const OPENAI_TIMEOUT_MS = 20000;
+const OPENAI_TIMEOUT_MS = parsePositiveInteger(process.env.OPENAI_TRANSLATION_TIMEOUT_MS, 8000);
+const OPENAI_FAILURE_COOLDOWN_MS = parsePositiveInteger(
+  process.env.OPENAI_TRANSLATION_FAILURE_COOLDOWN_MS,
+  120000
+);
+const OPENAI_FAILURE_LOG_INTERVAL_MS = parsePositiveInteger(
+  process.env.OPENAI_TRANSLATION_FAILURE_LOG_INTERVAL_MS,
+  30000
+);
 const TRANSLATION_BATCH_SIZE = 20;
+
+let openAiTranslationUnavailableUntil = 0;
+let openAiTranslationLastFailureLogAt = 0;
 
 type CachedTranslationDocument = {
   _id: string;
@@ -130,6 +145,42 @@ const shouldRetryWithLongModel = (
 const resolveProviderFromHeader = (value: unknown): "openai" | "passthrough" =>
   value === "openai" ? "openai" : "passthrough";
 
+const isAbortError = (error: unknown) => {
+  if (error instanceof Error && error.name === "AbortError") return true;
+  if (!error || typeof error !== "object") return false;
+  const record = error as Record<string, unknown>;
+  return record.name === "AbortError" || record.code === 20;
+};
+
+const describeOpenAiError = (error: unknown) => {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+  return { message: String(error) };
+};
+
+const markOpenAiTranslationUnavailable = (reason: string, error?: unknown) => {
+  const now = Date.now();
+  openAiTranslationUnavailableUntil = Math.max(
+    openAiTranslationUnavailableUntil,
+    now + OPENAI_FAILURE_COOLDOWN_MS
+  );
+
+  if (now - openAiTranslationLastFailureLogAt < OPENAI_FAILURE_LOG_INTERVAL_MS) return;
+  openAiTranslationLastFailureLogAt = now;
+  console.warn("[Translation] OpenAI unavailable; using source text fallback", {
+    reason,
+    timeoutMs: OPENAI_TIMEOUT_MS,
+    cooldownMs: OPENAI_FAILURE_COOLDOWN_MS,
+    error: error === undefined ? undefined : describeOpenAiError(error),
+  });
+};
+
+const shouldSkipOpenAiTranslation = () => Date.now() < openAiTranslationUnavailableUntil;
+
 const resolveOpenAiTranslations = (raw: unknown, sourceTexts: string[]): string[] | null => {
   if (typeof raw !== "string" || raw.trim().length === 0) return null;
   const cleaned = cleanupJsonString(raw);
@@ -176,6 +227,10 @@ const translateChunkWithOpenAi = async (
     return { translations: sourceTexts, provider: "passthrough" };
   }
 
+  if (shouldSkipOpenAiTranslation()) {
+    return { translations: sourceTexts, provider: "passthrough" };
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
   const model = resolveModelForChunk(sourceTexts, Boolean(options.forceLongModel));
@@ -219,7 +274,11 @@ const translateChunkWithOpenAi = async (
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
-      console.error("[Translation] OpenAI translation request failed", response.status, errorText);
+      markOpenAiTranslationUnavailable(`http_${response.status}`);
+      console.error("[Translation] OpenAI translation request failed", {
+        status: response.status,
+        body: errorText.slice(0, 500),
+      });
       return { translations: sourceTexts, provider: "passthrough" };
     }
 
@@ -251,7 +310,7 @@ const translateChunkWithOpenAi = async (
 
     return { translations: parsed, provider: "openai" };
   } catch (error) {
-    console.error("[Translation] OpenAI request error", error);
+    markOpenAiTranslationUnavailable(isAbortError(error) ? "timeout" : "request_error", error);
     return { translations: sourceTexts, provider: "passthrough" };
   } finally {
     clearTimeout(timeoutId);
