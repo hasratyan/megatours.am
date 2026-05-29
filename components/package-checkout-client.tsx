@@ -32,6 +32,7 @@ import { mapEfesErrorMessage, resolveEfesErrorKind } from "@/lib/efes-errors";
 import type { PackageBuilderState, PackageBuilderService } from "@/lib/package-builder-state";
 import {
   readPackageBuilderState,
+  resetPackageBuilderState,
   subscribePackageBuilderState,
   updatePackageBuilderState,
 } from "@/lib/package-builder-state";
@@ -96,6 +97,10 @@ type VposCheckoutResponse = {
   orderNumber: string;
 };
 
+type AdminCheckoutResponse = {
+  bookingId: string;
+};
+
 type CouponValidationResponse = {
   coupon: {
     code: string;
@@ -107,15 +112,20 @@ type CouponValidationResponse = {
 
 type AppliedCoupon = CouponValidationResponse["coupon"];
 
+const ADMIN_CHECKOUT_EMAIL = "support@megatours.am";
+
 const intlLocales: Record<AppLocale, string> = {
   hy: "hy-AM",
   en: "en-GB",
   ru: "ru-RU",
 };
 
-type PaymentMethod = CheckoutPaymentMethod;
+type PaymentMethod = CheckoutPaymentMethod | "admin";
 
-const paymentMethodOrder: PaymentMethod[] = ["idram", "idbank_card", "ameria_card"];
+const paymentMethodOrder: CheckoutPaymentMethod[] = ["idram", "idbank_card", "ameria_card"];
+
+const isCheckoutPaymentMethod = (value: PaymentMethod): value is CheckoutPaymentMethod =>
+  value !== "admin";
 
 type AddressSelectOption = {
   value: string;
@@ -835,10 +845,16 @@ export default function PackageCheckoutClient({
   const { data: session } = useSession();
   const { rates: hotelRates } = useAmdRates();
   const baseRates = hotelRates;
-  const enabledPaymentMethods = useMemo(
-    () =>
-      paymentMethodOrder.filter((method) => initialPaymentMethodFlags[method] !== false),
-    [initialPaymentMethodFlags]
+  const isAdminCheckoutUser =
+    session?.user?.email?.trim().toLowerCase() === ADMIN_CHECKOUT_EMAIL;
+  const enabledPaymentMethods = useMemo<PaymentMethod[]>(
+    () => {
+      const regularMethods: PaymentMethod[] = paymentMethodOrder.filter(
+        (method) => initialPaymentMethodFlags[method] !== false
+      );
+      return isAdminCheckoutUser ? [...regularMethods, "admin"] : regularMethods;
+    },
+    [initialPaymentMethodFlags, isAdminCheckoutUser]
   );
   const [builderState, setBuilderState] = useState<PackageBuilderState>({});
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(
@@ -940,6 +956,11 @@ export default function PackageCheckoutClient({
         payLabel: t.packageBuilder.checkout.payCard,
       },
       {
+        value: "admin" as PaymentMethod,
+        label: "Admin",
+        payLabel: "Submit booking",
+      },
+      {
         value: "ameria_card" as PaymentMethod,
         label: t.packageBuilder.checkout.methodCardAmeria,
         payLabel: t.packageBuilder.checkout.payCardAmeria,
@@ -956,8 +977,13 @@ export default function PackageCheckoutClient({
   );
   const enabledPaymentMethodOptions = useMemo(
     () =>
-      paymentMethodOptions.filter((option) => initialPaymentMethodFlags[option.value] !== false),
-    [initialPaymentMethodFlags, paymentMethodOptions]
+      paymentMethodOptions.filter((option) =>
+        option.value === "admin"
+          ? isAdminCheckoutUser
+          : isCheckoutPaymentMethod(option.value) &&
+            initialPaymentMethodFlags[option.value] !== false
+      ),
+    [initialPaymentMethodFlags, isAdminCheckoutUser, paymentMethodOptions]
   );
   const selectedPaymentMethodOption =
     enabledPaymentMethodOptions.find((option) => option.value === paymentMethod) ?? null;
@@ -2701,6 +2727,21 @@ export default function PackageCheckoutClient({
         locale,
         couponCode: appliedCoupon?.code ?? undefined,
       };
+      if (paymentMethod === "admin") {
+        const response = await postJson<AdminCheckoutResponse>(
+          "/api/payments/admin/checkout",
+          requestPayload
+        );
+        resetPackageBuilderState();
+        if (typeof window === "undefined") {
+          throw new Error(t.packageBuilder.checkout.errors.paymentFailed);
+        }
+        window.location.assign(
+          `/${locale}/profile/voucher/${encodeURIComponent(response.bookingId)}`
+        );
+        return;
+      }
+
       if (paymentMethod === "idram") {
         const checkout = await postJson<IdramCheckoutResponse>(
           "/api/payments/idram/checkout",

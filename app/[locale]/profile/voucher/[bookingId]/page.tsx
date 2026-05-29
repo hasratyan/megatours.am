@@ -321,6 +321,7 @@ export default async function VoucherPage({ params }: PageProps) {
     if (bookingSource.includes("idbank") || bookingSource.includes("vpos")) {
       return t.packageBuilder.checkout.methodCard;
     }
+    if (bookingSource.includes("admin")) return "Admin";
     return "—";
   })();
   const dateRange = formatDateRange(payload.checkInDate, payload.checkOutDate, resolvedLocale);
