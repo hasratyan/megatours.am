@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { roomDetails, AoryxServiceError, AoryxClientError } from "@/lib/aoryx-client";
+import {
+  roomDetails,
+  roomDetailsBySession,
+  AoryxServiceError,
+  AoryxClientError,
+} from "@/lib/aoryx-client";
 import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env";
 import type { AoryxSearchParams, AoryxRoomSearch } from "@/types/aoryx";
-import { obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
+import { decodeSearchToken, hashSearchRooms, obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
 import { localizeAoryxRoomOptions } from "@/lib/aoryx-room-localization";
 import { resolveTranslationLocale } from "@/lib/text-translation";
+import { getSessionFromCookie, setSessionCookie } from "../_shared";
 
 export const runtime = "nodejs";
 
@@ -79,11 +85,61 @@ export async function POST(request: NextRequest) {
       rooms,
     };
 
-    const result = await roomDetails(params);
-    const hotelMarkup = await getAoryxHotelPlatformFee().catch((error) => {
-      console.error("[Pricing] Failed to load hotel platform fee", error);
-      return null;
-    });
+    let explicitSessionId =
+      typeof body.sessionId === "string" && body.sessionId.trim().length > 0
+        ? body.sessionId.trim()
+        : null;
+    const searchToken =
+      typeof body.searchToken === "string" && body.searchToken.trim().length > 0
+        ? body.searchToken.trim()
+        : null;
+    if (searchToken) {
+      try {
+        const decoded = decodeSearchToken(searchToken);
+        const mismatch =
+          (decoded.hotelCode && decoded.hotelCode !== hotelCode) ||
+          (decoded.destinationCode && decoded.destinationCode !== (destinationCode ?? null)) ||
+          (decoded.countryCode && decoded.countryCode.toUpperCase() !== countryCode.toUpperCase()) ||
+          (decoded.nationality && decoded.nationality.toUpperCase() !== nationality.toUpperCase()) ||
+          (decoded.currency && decoded.currency.toUpperCase() !== currency.toUpperCase()) ||
+          (decoded.checkInDate && decoded.checkInDate !== checkInDate) ||
+          (decoded.checkOutDate && decoded.checkOutDate !== checkOutDate) ||
+          (decoded.roomsHash && decoded.roomsHash !== hashSearchRooms(rooms));
+        if (mismatch) {
+          return NextResponse.json(
+            { error: "Search token does not match room details request" },
+            { status: 409 }
+          );
+        }
+        explicitSessionId = decoded.sessionId;
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid search token. Please search again." },
+          { status: 400 }
+        );
+      }
+    }
+
+    const cookieSessionId = getSessionFromCookie(request);
+    const reusableSessionId = explicitSessionId ?? cookieSessionId ?? null;
+    const loadRoomDetails = async () => {
+      if (!reusableSessionId) return roomDetails(params);
+      try {
+        return await roomDetailsBySession(reusableSessionId, params);
+      } catch (error) {
+        if (explicitSessionId) throw error;
+        console.warn("[Aoryx][room-details] Session reuse failed; falling back to fresh search", error);
+        return roomDetails(params);
+      }
+    };
+
+    const [result, hotelMarkup] = await Promise.all([
+      loadRoomDetails(),
+      getAoryxHotelPlatformFee().catch((error) => {
+        console.error("[Pricing] Failed to load hotel platform fee", error);
+        return null;
+      }),
+    ]);
     const obfuscatedRooms = obfuscateRoomOptions(result.rooms, {
       sessionId: result.sessionId,
       hotelCode,
@@ -109,6 +165,7 @@ export async function POST(request: NextRequest) {
       currency: result.currency ?? null,
       rooms: roomsWithDisplayPrice,
     });
+    setSessionCookie(response, result.sessionId);
 
     return response;
   } catch (error) {

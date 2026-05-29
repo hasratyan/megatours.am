@@ -9,7 +9,6 @@ import {
   AORYX_ACTIVE_BASE_URL,
   AORYX_ACTIVE_CUSTOMER_CODE,
   AORYX_DEFAULT_CURRENCY,
-  AORYX_TIMEOUT_MS,
 } from "@/lib/env";
 import { getAmdRates } from "@/lib/pricing";
 import { convertToAmd } from "@/lib/currency";
@@ -17,8 +16,10 @@ import { cancelVposPayment } from "@/lib/vpos-cancel";
 import { verifyVposOperationState } from "@/lib/vpos-payment-details";
 import { refundVposPayment, type PaymentProvider } from "@/lib/vpos-refund";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
+import { logAoryxEndpointError } from "@/lib/aoryx-error-log";
 
 export const runtime = "nodejs";
+const AORYX_REQUEST_TIMEOUT_MS = 30000;
 
 type CancelRouteParams = {
   bookingId: string;
@@ -312,9 +313,9 @@ const requestAoryx = async (
 ) => {
   ensureAoryxConfig();
   const url = `${AORYX_ACTIVE_BASE_URL.replace(/\/+$/, "")}/${endpoint}`;
-  const timeoutMs = Number.isFinite(AORYX_TIMEOUT_MS) && AORYX_TIMEOUT_MS > 0 ? AORYX_TIMEOUT_MS : 15000;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), AORYX_REQUEST_TIMEOUT_MS);
+  let hasLoggedAoryxError = false;
 
   try {
     const response = await fetch(url, {
@@ -333,12 +334,30 @@ const requestAoryx = async (
       const dataRecord: Record<string, unknown> = data && isRecord(data) ? data : {};
       const errorInfo = isRecord(dataRecord.ErrorInfo) ? dataRecord.ErrorInfo : null;
       const message = resolveString(dataRecord.ExceptionMessage) || resolveString(errorInfo?.Description) || "Aoryx request failed.";
+      hasLoggedAoryxError = true;
+      await logAoryxEndpointError({
+        endpoint,
+        phase: "admin-cancel-http-response",
+        statusCode: response.status,
+        message,
+        payload,
+        response: data,
+      });
       throw new Error(message);
     }
 
     const errorInfo = isRecord(data.ErrorInfo) ? data.ErrorInfo : null;
     const errorDescription = resolveString(errorInfo?.Description);
     if (errorDescription) {
+      hasLoggedAoryxError = true;
+      await logAoryxEndpointError({
+        endpoint,
+        phase: "admin-cancel-supplier-response",
+        code: resolveString(errorInfo?.Code) || null,
+        message: errorDescription,
+        payload,
+        response: data,
+      });
       throw new Error(errorDescription);
     }
 
@@ -346,10 +365,34 @@ const requestAoryx = async (
     const isSuccessValue = readField(data, ["IsSuccess", "isSuccess"]);
     const isSuccess = toBoolean(isSuccessValue);
     if (isSuccess === false && exceptionMessage) {
+      hasLoggedAoryxError = true;
+      await logAoryxEndpointError({
+        endpoint,
+        phase: "admin-cancel-supplier-response",
+        message: exceptionMessage,
+        payload,
+        response: data,
+      });
       throw new Error(exceptionMessage);
     }
 
     return data;
+  } catch (error) {
+    if (!hasLoggedAoryxError) {
+      await logAoryxEndpointError({
+        endpoint,
+        phase: error instanceof Error && error.name === "AbortError" ? "admin-cancel-timeout" : "admin-cancel-transport",
+        message:
+          error instanceof Error && error.name === "AbortError"
+            ? `Aoryx request timed out after ${AORYX_REQUEST_TIMEOUT_MS}ms`
+            : error instanceof Error
+              ? error.message
+              : null,
+        payload,
+        error,
+      });
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
   }

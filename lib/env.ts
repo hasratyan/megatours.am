@@ -8,7 +8,6 @@ const {
   AORYX_TEST_API_KEY = "",
   AORYX_ENV: RAW_AORYX_ENV = "auto",
   AORYX_DEFAULT_CURRENCY = "USD",
-  AORYX_TIMEOUT_MS_RAW = "30000",
   AORYX_CUSTOMER_CODE,
   AORYX_TEST_CUSTOMER_CODE,
   FLYDUBAI_SEARCH_URL: RAW_FLYDUBAI_SEARCH_URL = "",
@@ -45,8 +44,6 @@ export {
   AORYX_CUSTOMER_CODE,
   AORYX_TEST_CUSTOMER_CODE,
 };
-export const AORYX_TIMEOUT_MS_NUMBER = Number.parseInt(AORYX_TIMEOUT_MS_RAW, 10);
-export const AORYX_TIMEOUT_MS = AORYX_TIMEOUT_MS_NUMBER;
 
 type AoryxRuntimeMode = "auto" | "live" | "test";
 export type AoryxRuntimeEnvironment = "live" | "test";

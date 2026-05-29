@@ -974,8 +974,14 @@ export default function HotelClient({
 
   const roomDetailsPayload = useMemo(() => {
     if (!parsed.payload || !hotelCode) return null;
-    return { ...parsed.payload, hotelCode, locale };
-  }, [hotelCode, locale, parsed.payload]);
+    const searchToken = searchParams.get("searchToken");
+    return {
+      ...parsed.payload,
+      hotelCode,
+      locale,
+      ...(searchToken ? { searchToken } : {}),
+    };
+  }, [hotelCode, locale, parsed.payload, searchParams]);
 
   useEffect(() => {
     setRoomsLoading(Boolean(roomDetailsPayload && !initialRoomDetails && !initialRoomsError));

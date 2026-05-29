@@ -10,12 +10,12 @@ import {
   AORYX_TEST_API_KEY,
   AORYX_TEST_CUSTOMER_CODE,
   AORYX_TEST_URL,
-  AORYX_TIMEOUT_MS,
   AORYX_DEFAULT_CURRENCY,
   AORYX_TASSPRO_CUSTOMER_CODE,
   AORYX_TASSPRO_REGION_ID,
 } from "./env";
 import { resolveSafeErrorMessage } from "@/lib/error-utils";
+import { logAoryxEndpointError } from "@/lib/aoryx-error-log";
 import type {
   AoryxSearchParams,
   AoryxSearchRequest,
@@ -67,11 +67,59 @@ type AoryxResolvedConfig = {
   customerCode: string;
 };
 
+const AORYX_DEFAULT_TIMEOUT_MS = 30000;
+const AORYX_BOOK_TIMEOUT_MS = 180000;
+const AORYX_IDEMPOTENT_RETRY_ATTEMPTS = 2;
+const AORYX_IDEMPOTENT_RETRY_DELAY_MS = 500;
+const AORYX_STATIC_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+
 // Request options
 interface AoryxRequestOptions {
   timeoutMs?: number;
   environment?: AoryxEnvironment;
+  idempotent?: boolean;
 }
+
+const IDEMPOTENT_ENDPOINTS = new Set<AoryxDistributionEndpoint | AoryxStaticEndpoint>([
+  DISTRIBUTION_ENDPOINTS.search,
+  DISTRIBUTION_ENDPOINTS.roomDetails,
+  DISTRIBUTION_ENDPOINTS.priceBreakup,
+  DISTRIBUTION_ENDPOINTS.cancellationPolicy,
+  DISTRIBUTION_ENDPOINTS.preBook,
+  DISTRIBUTION_ENDPOINTS.bookingDetails,
+  STATIC_ENDPOINTS.destinationInfo,
+  STATIC_ENDPOINTS.hotelsInfoByDestinationId,
+  STATIC_ENDPOINTS.hotelInfo,
+  STATIC_ENDPOINTS.countryInfo,
+]);
+
+type StaticCacheEntry = {
+  expiresAt: number;
+  value: unknown;
+};
+
+const staticResponseCache = new Map<string, StaticCacheEntry>();
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getStaticCache = <T>(key: string): T | null => {
+  const cached = staticResponseCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    staticResponseCache.delete(key);
+    return null;
+  }
+  return cached.value as T;
+};
+
+const setStaticCache = <T>(key: string, value: T): T => {
+  staticResponseCache.set(key, {
+    expiresAt: Date.now() + AORYX_STATIC_CACHE_TTL_MS,
+    value,
+  });
+  return value;
+};
 
 // Error classes
 export class AoryxClientError extends Error {
@@ -213,6 +261,57 @@ const isStaticEndpoint = (
   endpoint: AoryxDistributionEndpoint | AoryxStaticEndpoint
 ): endpoint is AoryxStaticEndpoint => staticEndpoints.has(endpoint as AoryxStaticEndpoint);
 
+const isLogRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+type AoryxResponseFailure = {
+  statusCode: number | null;
+  code: string | null;
+  message: string;
+};
+
+const getAoryxResponseFailure = (response: unknown, statusCode?: number): AoryxResponseFailure | null => {
+  if (!isLogRecord(response)) return null;
+  const errorInfo = isLogRecord(response.ErrorInfo) ? response.ErrorInfo : null;
+  const errorDescription = toStringValue(errorInfo?.Description);
+  const exceptionMessage = toStringValue(response.ExceptionMessage);
+  const code = toStringValue(errorInfo?.Code);
+  const supplierStatusCode = toNumber(response.StatusCode) ?? statusCode ?? null;
+  const failed =
+    response.IsSuccess === false ||
+    Boolean(errorDescription) ||
+    Boolean(exceptionMessage) ||
+    (supplierStatusCode !== null && supplierStatusCode >= 400);
+
+  if (!failed) return null;
+
+  return {
+    statusCode: supplierStatusCode,
+    code,
+    message: exceptionMessage ?? errorDescription ?? "Aoryx response reported failure",
+  };
+};
+
+const maybeLogAoryxResponseError = async (
+  endpoint: AoryxDistributionEndpoint | AoryxStaticEndpoint,
+  payload: unknown,
+  response: unknown,
+  statusCode?: number
+) => {
+  const failure = getAoryxResponseFailure(response, statusCode);
+  if (!failure) return;
+
+  await logAoryxEndpointError({
+    endpoint,
+    phase: "supplier-response",
+    statusCode: failure.statusCode,
+    code: failure.code,
+    message: failure.message,
+    payload,
+    response,
+  });
+};
+
 // Core request function
 async function coreRequest<TRequest, TResponse>(
   endpoint: AoryxDistributionEndpoint | AoryxStaticEndpoint,
@@ -224,61 +323,121 @@ async function coreRequest<TRequest, TResponse>(
     ? resolveStaticConfig()
     : resolveDistributionConfig(environment);
   const url = `${config.baseUrl}/${endpoint}`;
-  const timeoutMs = options.timeoutMs ?? AORYX_TIMEOUT_MS;
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutMs = options.timeoutMs ?? AORYX_DEFAULT_TIMEOUT_MS;
+  const idempotent = options.idempotent ?? IDEMPOTENT_ENDPOINTS.has(endpoint);
+  const maxAttempts = idempotent ? AORYX_IDEMPOTENT_RETRY_ATTEMPTS + 1 : 1;
 
   // Convert camelCase keys to PascalCase for Aoryx API
   const pascalizedPayload = pascalizeKeys(payload);
 
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ApiKey: config.apiKey,
-        ...(config.customerCode ? { CustomerCode: config.customerCode } : {}),
-      },
-      body: JSON.stringify(pascalizedPayload),
-      signal: controller.signal,
-    });
+  let lastError: unknown = null;
 
-    clearTimeout(timeoutId);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!response.ok) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ApiKey: config.apiKey,
+          ...(config.customerCode ? { CustomerCode: config.customerCode } : {}),
+        },
+        body: JSON.stringify(pascalizedPayload),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => "");
+        const retryableStatus = RETRYABLE_STATUS.has(response.status) || response.status >= 500;
+        if (idempotent && attempt < maxAttempts && retryableStatus) {
+          await sleep(AORYX_IDEMPOTENT_RETRY_DELAY_MS * attempt);
+          continue;
+        }
+
+        await logAoryxEndpointError({
+          endpoint,
+          phase: "http-response",
+          statusCode: response.status,
+          message: `Aoryx API error: ${response.status} ${response.statusText}`,
+          payload: pascalizedPayload,
+          response: errorBody || null,
+        });
+        throw new AoryxClientError(
+          resolveSafeErrorMessage(
+            `Aoryx API error: ${response.status} ${response.statusText}`,
+            "Failed to communicate with hotel service"
+          ),
+          endpoint,
+          response.status
+        );
+      }
+
+      const data = await response.json();
+      // Normalize response keys to PascalCase (API may return camelCase)
+      const normalized = pascalizeKeys(data) as TResponse;
+      const supplierFailure = getAoryxResponseFailure(normalized, response.status);
+      const supplierStatusCode = supplierFailure?.statusCode ?? null;
+      const retryableSupplierFailure =
+        supplierStatusCode !== null &&
+        (RETRYABLE_STATUS.has(supplierStatusCode) || supplierStatusCode >= 500);
+
+      if (idempotent && attempt < maxAttempts && retryableSupplierFailure) {
+        await sleep(AORYX_IDEMPOTENT_RETRY_DELAY_MS * attempt);
+        continue;
+      }
+
+      await maybeLogAoryxResponseError(endpoint, pascalizedPayload, normalized, response.status);
+      return normalized;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      lastError = error;
+
+      if (error instanceof AoryxClientError) {
+        throw error;
+      }
+
+      const isAbortError = error instanceof Error && error.name === "AbortError";
+      const isRetryableNetwork = error instanceof TypeError || isAbortError;
+
+      if (idempotent && attempt < maxAttempts && isRetryableNetwork) {
+        await sleep(AORYX_IDEMPOTENT_RETRY_DELAY_MS * attempt);
+        continue;
+      }
+
+      await logAoryxEndpointError({
+        endpoint,
+        phase: isAbortError ? "timeout" : "transport",
+        message: isAbortError ? `Aoryx request timed out after ${timeoutMs}ms` : error instanceof Error ? error.message : null,
+        payload: pascalizedPayload,
+        error,
+      });
+
       throw new AoryxClientError(
         resolveSafeErrorMessage(
-          `Aoryx API error: ${response.status} ${response.statusText}`,
+          isAbortError
+            ? `Aoryx request timed out after ${timeoutMs}ms`
+            : error instanceof Error
+              ? error.message
+              : null,
           "Failed to communicate with hotel service"
         ),
-        endpoint,
-        response.status
+        endpoint
       );
     }
-
-    const data = await response.json();
-    // Normalize response keys to PascalCase (API may return camelCase)
-    return pascalizeKeys(data) as TResponse;
-  } catch (error) {
-    clearTimeout(timeoutId);
-
-    if (error instanceof AoryxClientError) {
-      throw error;
-    }
-
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new AoryxClientError("Failed to communicate with hotel service", endpoint);
-    }
-
-    throw new AoryxClientError(
-      resolveSafeErrorMessage(
-        error instanceof Error ? error.message : null,
-        "Failed to communicate with hotel service"
-      ),
-      endpoint
-    );
   }
+
+  await logAoryxEndpointError({
+    endpoint,
+    phase: "retry-exhausted",
+    message: "Aoryx API request failed after retries",
+    payload: pascalizedPayload,
+    error: lastError,
+  });
+  throw new AoryxClientError("Failed to communicate with hotel service", endpoint);
 }
 
 // Normalize hotel from search response
@@ -1011,7 +1170,7 @@ export async function searchWithOptions(
   const response = await coreRequest<AoryxSearchRequest, AoryxSearchResponse>(
     DISTRIBUTION_ENDPOINTS.search,
     request,
-    { ...options, timeoutMs: 60000 } // Search can take longer
+    options
   );
 
   if (!response.IsSuccess && response.ExceptionMessage) {
@@ -1061,6 +1220,25 @@ export async function roomDetailsWithOptions(
   }
 
   const { sessionId, currency } = await searchWithOptions(params, options);
+  return roomDetailsBySession(sessionId, params, {
+    ...options,
+    currency,
+  });
+}
+
+export async function roomDetailsBySession(
+  sessionId: string,
+  params: AoryxSearchParams,
+  options: AoryxRequestOptions & { currency?: string | null } = {}
+): Promise<AoryxRoomDetailsResult> {
+  validateSearchParams(params);
+  if (!params.hotelCode) {
+    throw new AoryxServiceError("Hotel code is required for room details", "INVALID_PARAMS");
+  }
+  if (!sessionId) {
+    throw new AoryxServiceError("Session ID is required for room details", "INVALID_PARAMS");
+  }
+
   const searchRequest = buildSearchRequest(params);
   const request: AoryxRoomDetailsRequest = {
     hotelCode: params.hotelCode,
@@ -1071,7 +1249,7 @@ export async function roomDetailsWithOptions(
   const response = await coreRequest<AoryxRoomDetailsRequest, AoryxRoomDetailsResponse>(
     DISTRIBUTION_ENDPOINTS.roomDetails,
     request,
-    { ...options, timeoutMs: 60000 }
+    options
   );
 
   if (response.IsSuccess === false) {
@@ -1083,9 +1261,13 @@ export async function roomDetailsWithOptions(
     );
   }
 
+  const responseRecord = response as Record<string, unknown>;
+  const monetary = isRecord(responseRecord.Monetary) ? responseRecord.Monetary : null;
+  const currencyInfo = monetary && isRecord(monetary.Currency) ? monetary.Currency : null;
+
   return {
     sessionId,
-    currency,
+    currency: toStringValue(currencyInfo?.Code) ?? options.currency ?? params.currency ?? null,
     rooms: normalizeRoomOptions(response),
   };
 }
@@ -1119,7 +1301,7 @@ export async function preBook(
   const response = await coreRequest<AoryxRateKeysRequest, AoryxPreBookResponse>(
     DISTRIBUTION_ENDPOINTS.preBook,
     request,
-    { ...options, timeoutMs: 60000 }
+    options
   );
 
   if (response.IsSuccess === false) {
@@ -1164,7 +1346,7 @@ export async function bookWithOptions(
   const response = await coreRequest<AoryxBookingRequest, AoryxBookingResponse>(
     DISTRIBUTION_ENDPOINTS.book,
     request,
-    { ...options, timeoutMs: 180000 }
+    { ...options, timeoutMs: AORYX_BOOK_TIMEOUT_MS }
   );
 
   if (response.IsSuccess === false) {
@@ -1226,7 +1408,7 @@ export async function bookingDetails(
   const response = await coreRequest<AoryxBookingDetailsRequest, AoryxBookingDetailsResponse>(
     DISTRIBUTION_ENDPOINTS.bookingDetails,
     request,
-    { ...options, timeoutMs: 60000 }
+    options
   );
 
   if (response.IsSuccess === false) {
@@ -1274,6 +1456,9 @@ export async function bookingDetails(
  */
 export async function hotelsInfoByDestinationId(destinationId: string): Promise<HotelInfo[]> {
   const request: AoryxHotelsInfoByDestinationIdRequest = { destinationId };
+  const cacheKey = `hotelsInfoByDestinationId:${AORYX_RUNTIME_ENV}:${destinationId.trim().toLowerCase()}`;
+  const cached = getStaticCache<HotelInfo[]>(cacheKey);
+  if (cached) return cached;
 
   // Note: coreRequest applies pascalizeKeys to the response, so we need to use PascalCase keys
   const response = await coreRequest<
@@ -1297,7 +1482,7 @@ export async function hotelsInfoByDestinationId(destinationId: string): Promise<
     );
   }
 
-  return hotelsInformation.map((item) => {
+  const hotels = hotelsInformation.map((item) => {
     const geoCode = item.GeoCode as Record<string, unknown> | null | undefined;
     return {
       destinationId: toStringValue(item.DestinationId),
@@ -1319,6 +1504,7 @@ export async function hotelsInfoByDestinationId(destinationId: string): Promise<
         toStringValue(item.Currency),
     };
   });
+  return setStaticCache(cacheKey, hotels);
 }
 
 /**
@@ -1326,6 +1512,10 @@ export async function hotelsInfoByDestinationId(destinationId: string): Promise<
  */
 export async function hotelInfo(hotelCode: string): Promise<AoryxHotelInfoResult | null> {
   const request: AoryxHotelInfoRequest = { hotelCode };
+  const cacheKey = `hotelInfo:${AORYX_RUNTIME_ENV}:${hotelCode.trim().toLowerCase()}`;
+  const cached = getStaticCache<AoryxHotelInfoResult | null>(cacheKey);
+  if (cached !== null) return cached;
+
   const response = await coreRequest<AoryxHotelInfoRequest, AoryxHotelInfoResponse>(
     STATIC_ENDPOINTS.hotelInfo,
     request
@@ -1372,7 +1562,7 @@ export async function hotelInfo(hotelCode: string): Promise<AoryxHotelInfoResult
       ? normalizeParentDestinationId(rawDestinationId)
       : null;
 
-  return {
+  const result = {
     destinationId,
     destinationName:
       toStringValue((info as Record<string, unknown>).DestinationName) ??
@@ -1419,6 +1609,7 @@ export async function hotelInfo(hotelCode: string): Promise<AoryxHotelInfoResult
         }
       : null,
   };
+  return setStaticCache(cacheKey, result);
 }
 
 /**
@@ -1444,6 +1635,7 @@ export const aoryxClient = {
   searchWithOptions,
   roomDetails,
   roomDetailsWithOptions,
+  roomDetailsBySession,
   preBook,
   book,
   bookWithOptions,

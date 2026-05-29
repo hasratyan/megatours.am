@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   AoryxClientError,
   AoryxServiceError,
+  roomDetailsBySession,
   roomDetailsWithOptions,
 } from "@/lib/aoryx-client";
 import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env";
-import { obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
+import { decodeSearchToken, hashSearchRooms, obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
 import { authenticateB2bRequest, withB2bGatewayHeaders } from "@/lib/b2b-gateway";
 import { buildRoomFacets } from "@/lib/b2b-facets";
 import { applyHotelMarkupToRooms } from "@/lib/b2b-hotel-markup";
@@ -111,10 +112,51 @@ export async function POST(request: NextRequest) {
       rooms,
     };
 
-    const result = await roomDetailsWithOptions(params, {
-      environment: auth.context.aoryxEnvironment,
-    });
-    const hotelMarkup = await getAoryxHotelB2BPlatformFee();
+    const searchToken = parseString((body as { searchToken?: unknown }).searchToken);
+    let reusableSessionId: string | null = null;
+    if (searchToken) {
+      try {
+        const decoded = decodeSearchToken(searchToken);
+        const mismatch =
+          (decoded.hotelCode && decoded.hotelCode !== hotelCode) ||
+          (decoded.destinationCode && decoded.destinationCode !== (destinationCode || null)) ||
+          (decoded.countryCode && decoded.countryCode.toUpperCase() !== countryCode.toUpperCase()) ||
+          (decoded.nationality && decoded.nationality.toUpperCase() !== nationality.toUpperCase()) ||
+          (decoded.currency && decoded.currency.toUpperCase() !== currency.toUpperCase()) ||
+          (decoded.checkInDate && decoded.checkInDate !== checkInDate) ||
+          (decoded.checkOutDate && decoded.checkOutDate !== checkOutDate) ||
+          (decoded.roomsHash && decoded.roomsHash !== hashSearchRooms(rooms));
+        if (mismatch) {
+          return withB2bGatewayHeaders(
+            NextResponse.json(
+              { error: "Search token does not match room details request", requestId: auth.context.requestId },
+              { status: 409 }
+            ),
+            auth.context
+          );
+        }
+        reusableSessionId = decoded.sessionId;
+      } catch {
+        return withB2bGatewayHeaders(
+          NextResponse.json(
+            { error: "Invalid search token. Please search again.", requestId: auth.context.requestId },
+            { status: 400 }
+          ),
+          auth.context
+        );
+      }
+    }
+
+    const [result, hotelMarkup] = await Promise.all([
+      reusableSessionId
+        ? roomDetailsBySession(reusableSessionId, params, {
+            environment: auth.context.aoryxEnvironment,
+          })
+        : roomDetailsWithOptions(params, {
+            environment: auth.context.aoryxEnvironment,
+          }),
+      getAoryxHotelB2BPlatformFee(),
+    ]);
     const obfuscatedRooms = obfuscateRoomOptions(result.rooms, {
       sessionId: result.sessionId,
       hotelCode,

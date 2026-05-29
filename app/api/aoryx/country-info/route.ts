@@ -5,10 +5,12 @@ import {
   AORYX_ACTIVE_BASE_URL,
   AORYX_ACTIVE_CUSTOMER_CODE,
   AORYX_RUNTIME_ENV,
-  AORYX_TIMEOUT_MS,
 } from "@/lib/env";
+import { logAoryxEndpointError } from "@/lib/aoryx-error-log";
 
 export const runtime = "nodejs";
+const AORYX_REQUEST_TIMEOUT_MS = 30000;
+const COUNTRY_INFO_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 interface CountryInfoItem {
   key?: string;
@@ -22,6 +24,35 @@ interface CountryInfoResponse {
   errors?: unknown;
   data?: CountryInfoItem[] | null;
 }
+
+type CountryInfoRouteCacheValue = {
+  countryCode: string;
+  destinations: Array<{ id: string; name: string; rawId: string }>;
+  rawDestinations: Array<{ id: string; name: string; rawId: string }>;
+};
+
+const countryInfoCache = new Map<string, { expiresAt: number; value: CountryInfoRouteCacheValue }>();
+
+const getCountryInfoCache = (countryCode: string): CountryInfoRouteCacheValue | null => {
+  const cached = countryInfoCache.get(countryCode);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    countryInfoCache.delete(countryCode);
+    return null;
+  }
+  return cached.value;
+};
+
+const setCountryInfoCache = (
+  countryCode: string,
+  value: CountryInfoRouteCacheValue
+): CountryInfoRouteCacheValue => {
+  countryInfoCache.set(countryCode, {
+    expiresAt: Date.now() + COUNTRY_INFO_CACHE_TTL_MS,
+    value,
+  });
+  return value;
+};
 
 // Helper to convert value to string
 function toStringValue(value: unknown): string | null {
@@ -60,6 +91,7 @@ function hasTrailingZeroDestinationId(rawId: string | null | undefined): boolean
 const EXCLUDED_DESTINATION_IDS = new Set(["650", "650-0"]);
 
 export async function POST(request: NextRequest) {
+  let logContext: Record<string, unknown> = { route: "/api/aoryx/country-info" };
   try {
     const body = await request.json().catch(() => ({}));
     const countryCode =
@@ -67,6 +99,16 @@ export async function POST(request: NextRequest) {
         ? body.countryCode.trim().toUpperCase()
         : "AE";
     const includeAll = Boolean(body.includeAll);
+    logContext = { ...logContext, countryCode, includeAll };
+
+    const cached = getCountryInfoCache(countryCode);
+    if (cached) {
+      return NextResponse.json({
+        countryCode: cached.countryCode,
+        destinations: cached.destinations,
+        ...(includeAll ? { rawDestinations: cached.rawDestinations } : {}),
+      });
+    }
 
     const apiKeyName = AORYX_RUNTIME_ENV === "test" ? "AORYX_TEST_API_KEY" : "AORYX_API_KEY";
     const baseUrlName = AORYX_RUNTIME_ENV === "test" ? "AORYX_TEST_URL" : "AORYX_BASE_URL";
@@ -81,7 +123,7 @@ export async function POST(request: NextRequest) {
     const url = `${baseUrl}/country-info`;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), AORYX_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), AORYX_REQUEST_TIMEOUT_MS);
 
     const response = await fetch(url, {
       method: "POST",
@@ -166,13 +208,25 @@ export async function POST(request: NextRequest) {
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    return NextResponse.json({
+    const cachedValue = setCountryInfoCache(countryCode, {
       countryCode,
       destinations,
-      ...(includeAll ? { rawDestinations } : {}),
+      rawDestinations,
+    });
+
+    return NextResponse.json({
+      countryCode: cachedValue.countryCode,
+      destinations: cachedValue.destinations,
+      ...(includeAll ? { rawDestinations: cachedValue.rawDestinations } : {}),
     });
   } catch (error) {
     console.error("Country info error:", error);
+    await logAoryxEndpointError({
+      endpoint: "country-info",
+      phase: "route",
+      context: logContext,
+      error,
+    });
 
     if (error instanceof AoryxClientError) {
       return NextResponse.json(

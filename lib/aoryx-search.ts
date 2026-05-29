@@ -12,9 +12,12 @@ import {
 import { getAoryxHotelB2BPlatformFee } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
 import { isTechnicalErrorMessage } from "@/lib/error-utils";
+import { createSearchToken } from "@/lib/aoryx-rate-tokens";
 import type { AoryxSearchParams, AoryxSearchResult } from "@/types/aoryx";
 
-export type SafeSearchResult = Omit<AoryxSearchResult, "sessionId">;
+export type SafeSearchResult = Omit<AoryxSearchResult, "sessionId"> & {
+  searchToken?: string | null;
+};
 
 export const withAoryxDefaults = (payload: AoryxSearchParams): AoryxSearchParams => ({
   ...payload,
@@ -31,17 +34,20 @@ export async function runAoryxSearch(
   options: RunAoryxSearchOptions = {}
 ): Promise<SafeSearchResult> {
   const params = withAoryxDefaults(payload);
-  const result = await searchWithOptions(params, {
-    environment: options.environment ?? AORYX_RUNTIME_ENV,
-  });
+  const [result, hotelMarkup] = await Promise.all([
+    searchWithOptions(params, {
+      environment: options.environment ?? AORYX_RUNTIME_ENV,
+    }),
+    getAoryxHotelB2BPlatformFee(),
+  ]);
   const safeResult: SafeSearchResult = {
     currency: result.currency,
     propertyCount: result.propertyCount,
     responseTime: result.responseTime,
     destination: result.destination,
     hotels: result.hotels,
+    searchToken: createSearchToken({ sessionId: result.sessionId, searchParams: params }),
   };
-  const hotelMarkup = await getAoryxHotelB2BPlatformFee();
   if (hotelMarkup && Array.isArray(safeResult.hotels)) {
     return {
       ...safeResult,

@@ -1,7 +1,8 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "crypto";
-import type { AoryxBookingResult, AoryxRoomOption } from "@/types/aoryx";
+import type { AoryxBookingResult, AoryxRoomOption, AoryxSearchParams } from "@/types/aoryx";
 
 const RATE_TOKEN_PREFIX = "mt_rk_";
+const SEARCH_TOKEN_PREFIX = "mt_as_";
 const TOKEN_VERSION = 1;
 
 type RateTokenPayload = {
@@ -15,6 +16,20 @@ type RateTokenPayload = {
   priceGross?: number | null;
   priceNet?: number | null;
   priceTax?: number | null;
+  issuedAt: number;
+};
+
+type SearchTokenPayload = {
+  v: number;
+  sessionId: string;
+  destinationCode?: string | null;
+  hotelCode?: string | null;
+  countryCode?: string | null;
+  nationality?: string | null;
+  currency?: string | null;
+  checkInDate?: string | null;
+  checkOutDate?: string | null;
+  roomsHash?: string | null;
   issuedAt: number;
 };
 
@@ -51,28 +66,27 @@ const getKey = (): Buffer => {
 
 export const isRateToken = (value: string): boolean => value.startsWith(RATE_TOKEN_PREFIX);
 
-export const createRateToken = (
-  payload: Omit<RateTokenPayload, "v" | "issuedAt">
-): string => {
+export const isSearchToken = (value: string): boolean => value.startsWith(SEARCH_TOKEN_PREFIX);
+
+const encryptTokenPayload = (payload: Record<string, unknown>, prefix: string): string => {
   const key = getKey();
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const body: RateTokenPayload = { ...payload, v: TOKEN_VERSION, issuedAt: Date.now() };
-  const plaintext = Buffer.from(JSON.stringify(body), "utf8");
+  const plaintext = Buffer.from(JSON.stringify(payload), "utf8");
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const tag = cipher.getAuthTag();
   const token = Buffer.concat([iv, tag, ciphertext]).toString("base64url");
-  return `${RATE_TOKEN_PREFIX}${token}`;
+  return `${prefix}${token}`;
 };
 
-export const decodeRateToken = (token: string): RateTokenPayload => {
-  if (!isRateToken(token)) {
-    throw new Error("Not a rate token.");
+const decryptTokenPayload = (token: string, prefix: string): unknown => {
+  if (!token.startsWith(prefix)) {
+    throw new Error("Invalid token prefix.");
   }
-  const raw = token.slice(RATE_TOKEN_PREFIX.length);
+  const raw = token.slice(prefix.length);
   const packed = Buffer.from(raw, "base64url");
   if (packed.length < 12 + 16 + 1) {
-    throw new Error("Invalid rate token.");
+    throw new Error("Invalid token.");
   }
   const iv = packed.subarray(0, 12);
   const tag = packed.subarray(12, 28);
@@ -81,7 +95,30 @@ export const decodeRateToken = (token: string): RateTokenPayload => {
   const decipher = createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(tag);
   const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
-  const parsed = JSON.parse(plaintext) as Partial<RateTokenPayload>;
+  return JSON.parse(plaintext);
+};
+
+export const hashSearchRooms = (rooms: AoryxSearchParams["rooms"]): string => {
+  const normalized = rooms.map((room) => ({
+    roomIdentifier: room.roomIdentifier,
+    adults: room.adults,
+    childrenAges: [...room.childrenAges],
+  }));
+  return createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+};
+
+export const createRateToken = (
+  payload: Omit<RateTokenPayload, "v" | "issuedAt">
+): string => {
+  const body: RateTokenPayload = { ...payload, v: TOKEN_VERSION, issuedAt: Date.now() };
+  return encryptTokenPayload(body, RATE_TOKEN_PREFIX);
+};
+
+export const decodeRateToken = (token: string): RateTokenPayload => {
+  if (!isRateToken(token)) {
+    throw new Error("Not a rate token.");
+  }
+  const parsed = decryptTokenPayload(token, RATE_TOKEN_PREFIX) as Partial<RateTokenPayload>;
   if (
     parsed.v !== TOKEN_VERSION ||
     typeof parsed.rateKey !== "string" ||
@@ -92,6 +129,41 @@ export const decodeRateToken = (token: string): RateTokenPayload => {
     throw new Error("Invalid rate token.");
   }
   return parsed as RateTokenPayload;
+};
+
+export const createSearchToken = (params: {
+  sessionId: string;
+  searchParams: AoryxSearchParams;
+}): string => {
+  const body: SearchTokenPayload = {
+    v: TOKEN_VERSION,
+    sessionId: params.sessionId,
+    destinationCode: params.searchParams.destinationCode ?? null,
+    hotelCode: params.searchParams.hotelCode ?? null,
+    countryCode: params.searchParams.countryCode ?? null,
+    nationality: params.searchParams.nationality ?? null,
+    currency: params.searchParams.currency ?? null,
+    checkInDate: params.searchParams.checkInDate ?? null,
+    checkOutDate: params.searchParams.checkOutDate ?? null,
+    roomsHash: hashSearchRooms(params.searchParams.rooms),
+    issuedAt: Date.now(),
+  };
+  return encryptTokenPayload(body, SEARCH_TOKEN_PREFIX);
+};
+
+export const decodeSearchToken = (token: string): SearchTokenPayload => {
+  if (!isSearchToken(token)) {
+    throw new Error("Not a search token.");
+  }
+  const parsed = decryptTokenPayload(token, SEARCH_TOKEN_PREFIX) as Partial<SearchTokenPayload>;
+  if (
+    parsed.v !== TOKEN_VERSION ||
+    typeof parsed.sessionId !== "string" ||
+    parsed.sessionId.trim().length === 0
+  ) {
+    throw new Error("Invalid search token.");
+  }
+  return parsed as SearchTokenPayload;
 };
 
 export const hashRoomOptionId = (value: string | null | undefined): string | null => {

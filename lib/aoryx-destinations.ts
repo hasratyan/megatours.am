@@ -4,13 +4,15 @@ import {
   AORYX_ACTIVE_BASE_URL,
   AORYX_ACTIVE_CUSTOMER_CODE,
   AORYX_RUNTIME_ENV,
-  AORYX_TIMEOUT_MS,
 } from "@/lib/env";
 import { resolveSafeErrorMessage } from "@/lib/error-utils";
+import { logAoryxEndpointError } from "@/lib/aoryx-error-log";
 
 const EXCLUDED_DESTINATION_CODES = new Set(["650", "650-0"]);
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 1000;
+const AORYX_REQUEST_TIMEOUT_MS = 30000;
+const DESTINATION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 export type AoryxDestination = {
   destinationCode: string;
@@ -22,6 +24,8 @@ type DestinationLookupInput = {
   q?: string;
   limit?: number;
 };
+
+const destinationCache = new Map<string, { expiresAt: number; destinations: AoryxDestination[] }>();
 
 const toStringValue = (value: unknown) => {
   if (typeof value === "string") {
@@ -64,6 +68,28 @@ const includesQuery = (destination: AoryxDestination, query: string | null) => {
   );
 };
 
+const getDestinationCache = (countryCode: string): AoryxDestination[] | null => {
+  const cached = destinationCache.get(countryCode);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    destinationCache.delete(countryCode);
+    return null;
+  }
+  return cached.destinations;
+};
+
+const setDestinationCache = (countryCode: string, destinations: AoryxDestination[]) => {
+  destinationCache.set(countryCode, {
+    expiresAt: Date.now() + DESTINATION_CACHE_TTL_MS,
+    destinations,
+  });
+};
+
+const filterDestinations = (destinations: AoryxDestination[], query: string | null, limit: number) =>
+  destinations
+    .filter((destination) => includesQuery(destination, query))
+    .slice(0, limit);
+
 export async function listAoryxDestinations(
   input: DestinationLookupInput = {}
 ): Promise<{ countryCode: string; destinations: AoryxDestination[] }> {
@@ -79,11 +105,16 @@ export async function listAoryxDestinations(
   const countryCode = normalizeCountryCode(input.countryCode);
   const query = toStringValue(input.q)?.toLowerCase() ?? null;
   const limit = normalizeLimit(input.limit);
+  const cachedDestinations = getDestinationCache(countryCode);
+  if (cachedDestinations) {
+    return { countryCode, destinations: filterDestinations(cachedDestinations, query, limit) };
+  }
+
   const baseUrl = AORYX_ACTIVE_BASE_URL.replace(/\/$/, "");
   const url = `${baseUrl}/country-info`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), AORYX_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), AORYX_REQUEST_TIMEOUT_MS);
 
   try {
     const response = await fetch(url, {
@@ -150,13 +181,18 @@ export async function listAoryxDestinations(
       }
     }
 
-    const destinations = Array.from(destinationsByCode.values())
-      .filter((destination) => includesQuery(destination, query))
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, limit);
+    const destinations = Array.from(destinationsByCode.values()).sort((a, b) => a.name.localeCompare(b.name));
+    setDestinationCache(countryCode, destinations);
 
-    return { countryCode, destinations };
+    return { countryCode, destinations: filterDestinations(destinations, query, limit) };
   } catch (error) {
+    await logAoryxEndpointError({
+      endpoint: "country-info",
+      phase: "destination-lookup",
+      payload: { CountryCode: countryCode },
+      context: { query, limit },
+      error,
+    });
     if (error instanceof AoryxServiceError || error instanceof AoryxClientError) {
       throw error;
     }

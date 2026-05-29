@@ -7,6 +7,7 @@ import type { AoryxSearchParams, AoryxRoomSearch } from "@/types/aoryx";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { recordUserSearch } from "@/lib/user-data";
+import { setSessionCookie } from "../_shared";
 
 export const runtime = "nodejs";
 
@@ -78,10 +79,12 @@ export async function POST(request: NextRequest) {
       rooms,
     };
 
-    const result = await search(params);
+    const [result, hotelMarkup] = await Promise.all([
+      search(params),
+      getAoryxHotelPlatformFee(),
+    ]);
 
     const { sessionId: _sessionId, ...safeResult } = result;
-    const hotelMarkup = await getAoryxHotelPlatformFee();
     const markedHotels =
       hotelMarkup && Array.isArray(safeResult.hotels)
         ? safeResult.hotels.map((hotel) => ({
@@ -90,6 +93,7 @@ export async function POST(request: NextRequest) {
           }))
         : safeResult.hotels;
     const response = NextResponse.json({ ...safeResult, hotels: markedHotels });
+    setSessionCookie(response, result.sessionId);
 
     try {
       const session = await getServerSession(authOptions);

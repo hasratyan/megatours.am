@@ -29,7 +29,9 @@ interface DestinationInfo {
   rawId?: string;
 }
 
-type SafeSearchResult = Omit<AoryxSearchResult, "sessionId">;
+type SafeSearchResult = Omit<AoryxSearchResult, "sessionId"> & {
+  searchToken?: string | null;
+};
 
 type StoredLocation = {
   type: "destination" | "hotel";
@@ -730,7 +732,11 @@ export default function ResultsClient({
                       })
                     : null;
                 const detailHref =
-                  detailQuery && hotel.code ? `/${locale}/hotels/${hotel.code}?${detailQuery}` : null;
+                  detailQuery && hotel.code
+                    ? `/${locale}/hotels/${hotel.code}?${detailQuery}${
+                        result?.searchToken ? `&searchToken=${encodeURIComponent(result.searchToken)}` : ""
+                      }`
+                    : null;
 
                 return (
                   <div className="hotel-card" key={hotel.code ?? hotel.name ?? idx}>
