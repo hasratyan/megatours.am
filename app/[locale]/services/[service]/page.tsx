@@ -102,6 +102,7 @@ export default async function ServicePage({ params, searchParams }: PageProps) {
   }
 
   const session = await getServerSession(authOptions);
+  const canAccessWithoutSession = serviceKey === "excursion";
   let bookingAddonContext:
     | {
         bookingId: string;
@@ -153,7 +154,7 @@ export default async function ServicePage({ params, searchParams }: PageProps) {
     }
   }
 
-  if (!session?.user) {
+  if (!session?.user && !canAccessWithoutSession) {
     const callbackUrl = encodeURIComponent(`/${resolvedLocale}/services/${serviceKey}`);
     const relatedServices = serviceKeys.filter((entry) => entry !== serviceKey);
 
