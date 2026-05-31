@@ -1252,10 +1252,10 @@ export async function roomDetailsBySession(
     options
   );
 
-  if (response.IsSuccess === false) {
+  if (response.IsSuccess === false || response.ErrorInfo?.Description) {
     throw new AoryxServiceError(
-      response.ExceptionMessage ?? "RoomDetails request failed",
-      "ROOM_DETAILS_ERROR",
+      response.ExceptionMessage ?? response.ErrorInfo?.Description ?? "RoomDetails request failed",
+      response.ErrorInfo?.Code ?? "ROOM_DETAILS_ERROR",
       response.StatusCode ?? undefined,
       response.Errors
     );

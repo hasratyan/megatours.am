@@ -187,6 +187,10 @@ export interface AoryxRoomDetailsResponse {
   IsSuccess?: boolean;
   StatusCode?: number;
   ExceptionMessage?: string | null;
+  ErrorInfo?: {
+    Code?: string | null;
+    Description?: string | null;
+  } | null;
   Errors?: unknown;
   RoomDetails?: {
     RoomDetail?: AoryxRoomDetailItem | AoryxRoomDetailItem[];

@@ -12,7 +12,7 @@ import { getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
 import { localizeAoryxRoomOptions } from "@/lib/aoryx-room-localization";
 import { resolveTranslationLocale } from "@/lib/text-translation";
-import { getSessionFromCookie, setSessionCookie } from "../_shared";
+import { setSessionCookie } from "../_shared";
 
 export const runtime = "nodejs";
 
@@ -120,17 +120,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const cookieSessionId = getSessionFromCookie(request);
-    const reusableSessionId = explicitSessionId ?? cookieSessionId ?? null;
+    const reusableSessionId = explicitSessionId;
     const loadRoomDetails = async () => {
       if (!reusableSessionId) return roomDetails(params);
-      try {
-        return await roomDetailsBySession(reusableSessionId, params);
-      } catch (error) {
-        if (explicitSessionId) throw error;
-        console.warn("[Aoryx][room-details] Session reuse failed; falling back to fresh search", error);
-        return roomDetails(params);
-      }
+      return roomDetailsBySession(reusableSessionId, params);
     };
 
     const [result, hotelMarkup] = await Promise.all([
