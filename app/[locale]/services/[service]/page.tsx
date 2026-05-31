@@ -28,6 +28,12 @@ const serviceKeys: PackageBuilderService[] = [
   "insurance",
 ];
 
+const publicServiceKeys = new Set<PackageBuilderService>([
+  "transfer",
+  "excursion",
+  "insurance",
+]);
+
 type PageProps = {
   params: Promise<{ locale: string; service: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -102,7 +108,7 @@ export default async function ServicePage({ params, searchParams }: PageProps) {
   }
 
   const session = await getServerSession(authOptions);
-  const canAccessWithoutSession = serviceKey === "excursion";
+  const canAccessWithoutSession = publicServiceKeys.has(serviceKey);
   let bookingAddonContext:
     | {
         bookingId: string;
