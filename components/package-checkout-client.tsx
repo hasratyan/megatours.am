@@ -2534,6 +2534,7 @@ export default function PackageCheckoutClient({
       payload = {
         hotelCode,
         hotelName: hotelSelection.hotelName ?? null,
+        mealPlan: hotelSelection.mealPlan ?? null,
         checkInDate: hotelSelection.checkInDate ?? null,
         checkOutDate: hotelSelection.checkOutDate ?? null,
         destinationCode,

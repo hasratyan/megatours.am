@@ -586,6 +586,7 @@ export interface AoryxBookingPayload {
   sessionId: string;
   hotelCode: string;
   hotelName?: string | null;
+  mealPlan?: string | null;
   checkInDate?: string | null;
   checkOutDate?: string | null;
   destinationCode: string;

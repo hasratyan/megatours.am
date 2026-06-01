@@ -634,6 +634,7 @@ export const parseBookingPayload = (body: unknown, sessionId?: string): AoryxBoo
   }
 
   const hotelName = sanitizeString(record.hotelName);
+  const mealPlan = sanitizeString(record.mealPlan);
   const checkInDate = sanitizeString(record.checkInDate);
   const checkOutDate = sanitizeString(record.checkOutDate);
 
@@ -668,6 +669,7 @@ export const parseBookingPayload = (body: unknown, sessionId?: string): AoryxBoo
     sessionId: resolvedSessionId,
     hotelCode,
     hotelName,
+    mealPlan,
     checkInDate,
     checkOutDate,
     destinationCode,

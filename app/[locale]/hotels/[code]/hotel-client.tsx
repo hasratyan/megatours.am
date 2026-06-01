@@ -2484,9 +2484,19 @@ export default function HotelClient({
       roomsPayload[0].guests[0].isLeadGuest = true;
     }
 
+    const mealPlans = Array.from(
+      new Set(
+        bookingGuests
+          .map((room) => room.meal?.trim())
+          .filter((mealPlan): mealPlan is string => Boolean(mealPlan))
+      )
+    );
+    const mealPlan = mealPlans.length > 0 ? mealPlans.join(" / ") : null;
+
     const payload: BookingPayloadInput = {
       hotelCode,
       hotelName: hotelInfo?.name,
+      mealPlan,
       checkInDate: parsed.payload?.checkInDate,
       checkOutDate: parsed.payload?.checkOutDate,
       destinationCode: destination,
