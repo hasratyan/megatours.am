@@ -52,7 +52,11 @@ const toNumberValue = (value: unknown): number | null => {
   return null;
 };
 
-const normalizeMealLabel = (value: string) => value.trim().toLowerCase();
+const MEAL_FILTER_QUERY_PARAM = "meal";
+const ALL_MEALS_FILTER = "all";
+
+const normalizeMealFilterValue = (value: string) =>
+  value.trim().toLowerCase().replace(/\s+/g, "-");
 
 type MealPlanLabels = {
   roomOnly: string;
@@ -68,35 +72,44 @@ type RefundabilityLabels = {
   nonRefundable: string;
 };
 
-const localizeMealPlan = (value: string | null, labels: MealPlanLabels) => {
+const mealPlanFilterValues: Record<keyof MealPlanLabels, string> = {
+  roomOnly: "room-only",
+  breakfast: "breakfast",
+  halfBoard: "half-board",
+  fullBoard: "full-board",
+  allInclusive: "all-inclusive",
+  ultraAllInclusive: "ultra-all-inclusive",
+};
+
+const getMealPlanLabelKey = (value: string | null): keyof MealPlanLabels | null => {
   if (!value) return null;
   const tokens = value
     .trim()
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
-  if (tokens.length === 0) return value;
+  if (tokens.length === 0) return null;
   const tokenSet = new Set(tokens);
 
   const has = (token: string) => tokenSet.has(token);
 
   if (has("uai") || has("ultraallinclusive") || (has("ultra") && has("all") && has("inclusive"))) {
-    return labels.ultraAllInclusive;
+    return "ultraAllInclusive";
   }
   if (has("ai") || has("allinclusive") || (has("all") && has("inclusive"))) {
-    return labels.allInclusive;
+    return "allInclusive";
   }
   if (has("fb") || has("fullboard") || (has("full") && has("board"))) {
-    return labels.fullBoard;
+    return "fullBoard";
   }
   if (has("hb") || has("halfboard") || (has("half") && has("board"))) {
-    return labels.halfBoard;
+    return "halfBoard";
   }
   if (has("breakfast") && has("lunch") && has("dinner")) {
-    return labels.fullBoard;
+    return "fullBoard";
   }
   if ((has("breakfast") && has("dinner")) || (has("lunch") && has("dinner"))) {
-    return labels.halfBoard;
+    return "halfBoard";
   }
   if (
     has("bb") ||
@@ -105,13 +118,33 @@ const localizeMealPlan = (value: string | null, labels: MealPlanLabels) => {
     (has("bed") && has("breakfast")) ||
     has("breakfast")
   ) {
-    return labels.breakfast;
+    return "breakfast";
   }
   if (has("ro") || has("roomonly") || (has("room") && has("only"))) {
-    return labels.roomOnly;
+    return "roomOnly";
   }
+  return null;
+};
 
+const localizeMealPlan = (value: string | null, labels: MealPlanLabels) => {
+  if (!value) return null;
+  const labelKey = getMealPlanLabelKey(value);
+  if (labelKey) return labels[labelKey];
   return value;
+};
+
+const getMealFilterValue = (value: string | null): string | null => {
+  if (!value) return null;
+  const labelKey = getMealPlanLabelKey(value);
+  if (labelKey) return mealPlanFilterValues[labelKey];
+  const normalized = normalizeMealFilterValue(value);
+  return normalized.length > 0 ? normalized : null;
+};
+
+const parseMealFilterParam = (value: string | null) => {
+  if (!value) return ALL_MEALS_FILTER;
+  const normalized = normalizeMealFilterValue(value);
+  return normalized.length > 0 ? normalized : ALL_MEALS_FILTER;
 };
 
 const localizeRefundability = (value: string | null, labels: RefundabilityLabels) => {
@@ -835,6 +868,18 @@ export default function HotelClient({
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParamsString = searchParams.toString();
+  const mealFilterParam = searchParams.get(MEAL_FILTER_QUERY_PARAM);
+  const searchTokenParam = searchParams.get("searchToken");
+  const availabilitySearchKey = useMemo(() => {
+    const next = new URLSearchParams(searchParamsString);
+    next.delete(MEAL_FILTER_QUERY_PARAM);
+    return next.toString();
+  }, [searchParamsString]);
+  const mealFilterFromUrl = useMemo(
+    () => parseMealFilterParam(mealFilterParam),
+    [mealFilterParam]
+  );
   const t = useTranslations();
   const { locale } = useLanguage();
   const intlLocale = intlLocales[locale] ?? "en-GB";
@@ -870,14 +915,14 @@ export default function HotelClient({
   const hotelCode = Array.isArray(params.code) ? params.code[0] : params.code;
 
   const parsed = useMemo(() => {
-    const merged = new URLSearchParams(searchParams.toString());
+    const merged = new URLSearchParams(availabilitySearchKey);
     if (hotelCode) merged.set("hotelCode", hotelCode);
     return parseSearchParams(merged, {
       missingDates: t.search.errors.missingDates,
       missingLocation: t.search.errors.missingLocation,
       invalidRooms: t.search.errors.invalidRooms,
     });
-  }, [searchParams, hotelCode, t]);
+  }, [availabilitySearchKey, hotelCode, t]);
   const destinationCodeFromQuery =
     parsed.payload?.destinationCode ?? searchParams.get("destinationCode") ?? undefined;
 
@@ -949,7 +994,7 @@ export default function HotelClient({
     Boolean(parsed.payload && hotelCode && !initialRoomDetails && !initialRoomsError)
   );
   const [roomsError, setRoomsError] = useState<string | null>(initialRoomsError);
-  const [mealFilter, setMealFilter] = useState<string>("all");
+  const [mealFilter, setMealFilter] = useState<string>(mealFilterFromUrl);
   const [priceSort, setPriceSort] = useState<"default" | "asc" | "desc">("default");
   const [favoriteChecking, setFavoriteChecking] = useState(false);
   const [favoritePending, setFavoritePending] = useState(false);
@@ -974,14 +1019,38 @@ export default function HotelClient({
 
   const roomDetailsPayload = useMemo(() => {
     if (!parsed.payload || !hotelCode) return null;
-    const searchToken = searchParams.get("searchToken");
     return {
       ...parsed.payload,
       hotelCode,
       locale,
-      ...(searchToken ? { searchToken } : {}),
+      ...(searchTokenParam ? { searchToken: searchTokenParam } : {}),
     };
-  }, [hotelCode, locale, parsed.payload, searchParams]);
+  }, [hotelCode, locale, parsed.payload, searchTokenParam]);
+
+  useEffect(() => {
+    setMealFilter((current) => (current === mealFilterFromUrl ? current : mealFilterFromUrl));
+  }, [mealFilterFromUrl]);
+
+  const updateMealFilterInUrl = useCallback(
+    (nextMealFilter: string) => {
+      const normalizedMealFilter = parseMealFilterParam(nextMealFilter);
+      setMealFilter(normalizedMealFilter);
+
+      const nextParams = new URLSearchParams(searchParamsString);
+      if (normalizedMealFilter === ALL_MEALS_FILTER) {
+        nextParams.delete(MEAL_FILTER_QUERY_PARAM);
+      } else {
+        nextParams.set(MEAL_FILTER_QUERY_PARAM, normalizedMealFilter);
+      }
+
+      const nextQuery = nextParams.toString();
+      if (nextQuery === searchParamsString) return;
+
+      const nextHref = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+      router.replace(nextHref, { scroll: false });
+    },
+    [pathname, router, searchParamsString]
+  );
 
   useEffect(() => {
     setRoomsLoading(Boolean(roomDetailsPayload && !initialRoomDetails && !initialRoomsError));
@@ -1231,14 +1300,15 @@ export default function HotelClient({
   const mealOptions = useMemo(() => {
     const map = new Map<string, string>();
     groupedRoomOptions.forEach((group) => {
+      const mealPlan = getGroupMealLabel(group);
       const label = localizeMealPlan(
-        getGroupMealLabel(group),
+        mealPlan,
         t.hotel.roomOptions.mealPlans
       );
-      if (!label) return;
-      const normalized = normalizeMealLabel(label);
-      if (!map.has(normalized)) {
-        map.set(normalized, label);
+      const value = getMealFilterValue(mealPlan);
+      if (!label || !value) return;
+      if (!map.has(value)) {
+        map.set(value, label);
       }
     });
     return Array.from(map.entries())
@@ -1246,19 +1316,17 @@ export default function HotelClient({
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [groupedRoomOptions, t.hotel.roomOptions.mealPlans]);
   useEffect(() => {
-    if (mealFilter !== "all" && !mealOptions.some((option) => option.value === mealFilter)) {
-      setMealFilter("all");
+    if (roomsLoading || groupedRoomOptions.length === 0) return;
+    if (mealFilter !== ALL_MEALS_FILTER && !mealOptions.some((option) => option.value === mealFilter)) {
+      updateMealFilterInUrl(ALL_MEALS_FILTER);
     }
-  }, [mealFilter, mealOptions]);
+  }, [groupedRoomOptions.length, mealFilter, mealOptions, roomsLoading, updateMealFilterInUrl]);
   const visibleRoomOptions = useMemo(() => {
     let filtered = groupedRoomOptions;
-    if (mealFilter !== "all") {
+    if (mealFilter !== ALL_MEALS_FILTER) {
       filtered = filtered.filter((group) => {
-        const label = localizeMealPlan(
-          getGroupMealLabel(group),
-          t.hotel.roomOptions.mealPlans
-        );
-        return label ? normalizeMealLabel(label) === mealFilter : false;
+        const value = getMealFilterValue(getGroupMealLabel(group));
+        return value === mealFilter;
       });
     }
     if (priceSort === "default") return filtered;
@@ -1282,8 +1350,8 @@ export default function HotelClient({
       return priceSort === "asc" ? aPrice - bPrice : bPrice - aPrice;
     });
     return sorted;
-  }, [groupedRoomOptions, mealFilter, priceSort, t.hotel.roomOptions.mealPlans]);
-  const isFiltered = mealFilter !== "all" || priceSort !== "default";
+  }, [groupedRoomOptions, mealFilter, priceSort]);
+  const isFiltered = mealFilter !== ALL_MEALS_FILTER || priceSort !== "default";
   const metaContentId = useMemo(() => {
     const candidate = hotelInfo?.systemId ?? hotelCode;
     return typeof candidate === "string" && candidate.trim().length > 0 ? candidate.trim() : null;
@@ -1328,7 +1396,7 @@ export default function HotelClient({
 
     return values.length > 0 ? Math.min(...values) : null;
   }, [fallbackCurrency, groupedRoomOptions, hotelRates]);
-  const metaViewContentSearch = searchParams.toString();
+  const metaViewContentSearch = availabilitySearchKey;
   const metaViewContentAdultCount =
     parsed.payload?.rooms.reduce((sum, room) => sum + room.adults, 0) ?? null;
   const metaViewContentChildCount =
@@ -2740,7 +2808,7 @@ export default function HotelClient({
                           <span>{t.hotel.roomOptions.filterMeal}</span>
                           <select
                             value={mealFilter}
-                            onChange={(event) => setMealFilter(event.target.value)}
+                            onChange={(event) => updateMealFilterInUrl(event.target.value)}
                             disabled={mealOptions.length === 0}
                           >
                             <option value="all">{t.hotel.roomOptions.allMeals}</option>
