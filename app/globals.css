@@ -6211,6 +6211,7 @@ main.payment-status{
   display: flex;
   align-items: self-start;
   flex: 1 0 0;
+  rule: 1px solid #fff1;
 
   & > div{
     margin: auto;
@@ -6278,7 +6279,8 @@ main.payment-status{
 .voucher-definition{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
+  gap: 1.5em;
+  rule: 1px solid #fff1;
 
   span{
     display: block;
