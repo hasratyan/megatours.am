@@ -16,6 +16,7 @@ import {
 } from "./env";
 import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import { logAoryxEndpointError } from "@/lib/aoryx-error-log";
+import { logAoryxFlow } from "@/lib/aoryx-flow-logger";
 import type {
   AoryxSearchParams,
   AoryxSearchRequest,
@@ -312,6 +313,55 @@ const maybeLogAoryxResponseError = async (
   });
 };
 
+const allEndpointFlowLogsEnabled = () => process.env.AORYX_FLOW_LOG_ALL_ENDPOINTS === "1";
+
+const readSessionId = (value: unknown): string | null => {
+  if (!isLogRecord(value)) return null;
+  const direct = value.SessionId ?? value.sessionId;
+  if (typeof direct === "string" && direct.trim().length > 0) return direct;
+  const generalInfo = value.GeneralInfo ?? value.generalInfo;
+  if (isLogRecord(generalInfo)) {
+    const nested = generalInfo.SessionId ?? generalInfo.sessionId;
+    if (typeof nested === "string" && nested.trim().length > 0) return nested;
+  }
+  return null;
+};
+
+const logAoryxEndpointFlow = ({
+  endpoint,
+  phase,
+  statusCode,
+  request,
+  response,
+  error,
+  attempt,
+  maxAttempts,
+}: {
+  endpoint: AoryxDistributionEndpoint | AoryxStaticEndpoint;
+  phase: string;
+  statusCode?: number | null;
+  request: unknown;
+  response?: unknown;
+  error?: unknown;
+  attempt: number;
+  maxAttempts: number;
+}) => {
+  if (!allEndpointFlowLogsEnabled()) return;
+
+  logAoryxFlow(`endpoint-${endpoint}`, {
+    stage: "endpoint",
+    endpoint,
+    sessionId: readSessionId(response) ?? readSessionId(request),
+    phase,
+    statusCode: statusCode ?? null,
+    attempt,
+    maxAttempts,
+    request,
+    response,
+    error,
+  });
+};
+
 // Core request function
 async function coreRequest<TRequest, TResponse>(
   endpoint: AoryxDistributionEndpoint | AoryxStaticEndpoint,
@@ -358,6 +408,15 @@ async function coreRequest<TRequest, TResponse>(
           continue;
         }
 
+        logAoryxEndpointFlow({
+          endpoint,
+          phase: "http-response",
+          statusCode: response.status,
+          request: pascalizedPayload,
+          response: errorBody || null,
+          attempt,
+          maxAttempts,
+        });
         await logAoryxEndpointError({
           endpoint,
           phase: "http-response",
@@ -376,7 +435,50 @@ async function coreRequest<TRequest, TResponse>(
         );
       }
 
-      const data = await response.json();
+      const text = await response.text();
+      if (!text) {
+        logAoryxEndpointFlow({
+          endpoint,
+          phase: "success",
+          statusCode: response.status,
+          request: pascalizedPayload,
+          response: {},
+          attempt,
+          maxAttempts,
+        });
+        return {} as TResponse;
+      }
+
+      let data: unknown;
+      try {
+        data = JSON.parse(text);
+      } catch (error) {
+        logAoryxEndpointFlow({
+          endpoint,
+          phase: "parse-response",
+          statusCode: response.status,
+          request: pascalizedPayload,
+          response: text,
+          error,
+          attempt,
+          maxAttempts,
+        });
+        await logAoryxEndpointError({
+          endpoint,
+          phase: "parse-response",
+          statusCode: response.status,
+          message: "Failed to parse Aoryx response",
+          payload: pascalizedPayload,
+          response: text,
+          error,
+        });
+        throw new AoryxClientError(
+          resolveSafeErrorMessage("Failed to parse Aoryx response", "Failed to communicate with hotel service"),
+          endpoint,
+          response.status
+        );
+      }
+
       // Normalize response keys to PascalCase (API may return camelCase)
       const normalized = pascalizeKeys(data) as TResponse;
       const supplierFailure = getAoryxResponseFailure(normalized, response.status);
@@ -391,6 +493,15 @@ async function coreRequest<TRequest, TResponse>(
       }
 
       await maybeLogAoryxResponseError(endpoint, pascalizedPayload, normalized, response.status);
+      logAoryxEndpointFlow({
+        endpoint,
+        phase: "success",
+        statusCode: response.status,
+        request: pascalizedPayload,
+        response: data,
+        attempt,
+        maxAttempts,
+      });
       return normalized;
     } catch (error) {
       clearTimeout(timeoutId);
@@ -408,6 +519,14 @@ async function coreRequest<TRequest, TResponse>(
         continue;
       }
 
+      logAoryxEndpointFlow({
+        endpoint,
+        phase: isAbortError ? "timeout" : "transport",
+        request: pascalizedPayload,
+        error,
+        attempt,
+        maxAttempts,
+      });
       await logAoryxEndpointError({
         endpoint,
         phase: isAbortError ? "timeout" : "transport",
@@ -436,6 +555,14 @@ async function coreRequest<TRequest, TResponse>(
     message: "Aoryx API request failed after retries",
     payload: pascalizedPayload,
     error: lastError,
+  });
+  logAoryxEndpointFlow({
+    endpoint,
+    phase: "retry-exhausted",
+    request: pascalizedPayload,
+    error: lastError,
+    attempt: maxAttempts,
+    maxAttempts,
   });
   throw new AoryxClientError("Failed to communicate with hotel service", endpoint);
 }
