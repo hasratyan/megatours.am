@@ -17,6 +17,15 @@ type BookingEmailInput = {
   coupon?: AppliedBookingCoupon | null;
 };
 
+type OperationalEmailInput = {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+  from?: string;
+  useSupportEmail?: boolean;
+};
+
 type BookingEmailCopy = {
   subject: (hotelName: string, bookingId: string) => string;
   header: {
@@ -256,11 +265,15 @@ const resolveTransferTypeLabel = (
   return null;
 };
 
-const buildTransport = () => {
+const buildTransport = (options: { useSupportEmail?: boolean } = {}) => {
   const host = process.env.SMTP_HOST?.trim();
   const port = Number(process.env.SMTP_PORT ?? "587");
-  const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASS?.trim();
+  const user = options.useSupportEmail
+    ? process.env.SMTP_SUPPORT_USER?.trim()
+    : process.env.SMTP_USER?.trim();
+  const pass = options.useSupportEmail
+    ? process.env.SMTP_SUPPORT_PASS?.trim()
+    : process.env.SMTP_PASS?.trim();
   if (!host || !user || !pass) return null;
   const secure = port === 465;
   return nodemailer.createTransport({
@@ -270,6 +283,49 @@ const buildTransport = () => {
     auth: { user, pass },
   });
 };
+
+const resolveFromAddress = (explicitFrom?: string | null) =>
+  explicitFrom?.trim() ||
+  process.env.EMAIL_FROM?.trim() ||
+  process.env.SMTP_FROM?.trim() ||
+  process.env.SMTP_USER?.trim() ||
+  "";
+
+export async function sendOperationalEmail({
+  to,
+  subject,
+  html,
+  text,
+  from: explicitFrom,
+  useSupportEmail = false,
+}: OperationalEmailInput) {
+  if (!to) return false;
+  const transport = buildTransport({ useSupportEmail });
+  if (!transport) {
+    console.warn("[Email] Missing SMTP configuration. Skipping operational email.");
+    return false;
+  }
+
+  const from = resolveFromAddress(explicitFrom);
+  if (!from) {
+    console.warn("[Email] Missing FROM address. Skipping operational email.");
+    return false;
+  }
+
+  try {
+    await transport.sendMail({
+      from,
+      to,
+      subject,
+      html,
+      text,
+    });
+    return true;
+  } catch (error) {
+    console.error("[Email] Failed to send operational email", error);
+    return false;
+  }
+}
 
 export async function sendBookingConfirmationEmail({
   to,
@@ -288,11 +344,7 @@ export async function sendBookingConfirmationEmail({
     return false;
   }
 
-  const from =
-    process.env.EMAIL_FROM?.trim() ||
-    process.env.SMTP_FROM?.trim() ||
-    process.env.SMTP_USER?.trim() ||
-    "";
+  const from = resolveFromAddress();
   if (!from) {
     console.warn("[Email] Missing FROM address. Skipping booking email.");
     return false;
