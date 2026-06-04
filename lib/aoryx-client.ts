@@ -69,6 +69,7 @@ type AoryxResolvedConfig = {
 };
 
 const AORYX_DEFAULT_TIMEOUT_MS = 30000;
+const AORYX_SEARCH_TIMEOUT_MS = 30000;
 const AORYX_BOOK_TIMEOUT_MS = 180000;
 const AORYX_IDEMPOTENT_RETRY_ATTEMPTS = 2;
 const AORYX_IDEMPOTENT_RETRY_DELAY_MS = 500;
@@ -1297,7 +1298,11 @@ export async function searchWithOptions(
   const response = await coreRequest<AoryxSearchRequest, AoryxSearchResponse>(
     DISTRIBUTION_ENDPOINTS.search,
     request,
-    options
+    {
+      ...options,
+      timeoutMs: options.timeoutMs ?? AORYX_SEARCH_TIMEOUT_MS,
+      idempotent: options.idempotent ?? false,
+    }
   );
 
   if (!response.IsSuccess && response.ExceptionMessage) {

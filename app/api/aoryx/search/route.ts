@@ -8,6 +8,7 @@ import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { recordUserSearch } from "@/lib/user-data";
 import { setSessionCookie } from "../_shared";
+import { createSearchToken } from "@/lib/aoryx-rate-tokens";
 
 export const runtime = "nodejs";
 
@@ -92,7 +93,11 @@ export async function POST(request: NextRequest) {
             minPrice: applyMarkup(hotel.minPrice, hotelMarkup) ?? hotel.minPrice,
           }))
         : safeResult.hotels;
-    const response = NextResponse.json({ ...safeResult, hotels: markedHotels });
+    const response = NextResponse.json({
+      ...safeResult,
+      hotels: markedHotels,
+      searchToken: createSearchToken({ sessionId: result.sessionId, searchParams: params }),
+    });
     setSessionCookie(response, result.sessionId);
 
     try {
