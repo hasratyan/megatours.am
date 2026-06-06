@@ -10,9 +10,10 @@ import type { Locale as DateFnsLocale } from "date-fns";
 import { enGB, hy, ru } from "date-fns/locale";
 import SearchForm from "@/components/search-form";
 import FeaturedHotelsMarquee from "@/components/featured-hotels-marquee";
+import { useCurrency } from "@/components/currency-provider";
 import { useLanguage } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
-import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
+import { formatCurrencyAmount, normalizeAmount, withDisplayCurrencyParam } from "@/lib/currency";
 import { mapEfesErrorMessage, resolveEfesErrorKind } from "@/lib/efes-errors";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { postJson } from "@/lib/api-helpers";
@@ -394,6 +395,7 @@ export default function PackageServiceClient({
   bookingAddonContext = null,
 }: Props) {
   const { locale, t } = useLanguage();
+  const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[locale] ?? "en-GB";
   const dateFnsLocale = dateFnsLocales[locale] ?? enGB;
   const pluralRules = useMemo(() => new Intl.PluralRules(intlLocale), [intlLocale]);
@@ -2258,7 +2260,10 @@ export default function PackageServiceClient({
   const pageCopy = t.packageBuilder.pages[serviceKey];
   const showFeaturedHotelsEmptyState = serviceKey === "hotel" && featuredHotels.length > 0;
   const bookingAddonsHref = bookingAddonContext
-    ? `/${locale}/profile/voucher/${encodeURIComponent(bookingAddonContext.bookingId)}/add-services`
+    ? withDisplayCurrencyParam(
+        `/${locale}/profile/voucher/${encodeURIComponent(bookingAddonContext.bookingId)}/add-services`,
+        displayCurrency
+      )
     : null;
   const bookingAddonsHotelLabel = bookingAddonContext?.hotelContext.hotelName?.trim() ?? null;
 
@@ -2748,11 +2753,11 @@ export default function PackageServiceClient({
 
   const formatServicePrice = useCallback(
     (amount: number | null | undefined, currency: string | null | undefined) => {
-      const normalized = normalizeAmount(amount, currency, amdRates);
+      const normalized = normalizeAmount(amount, currency, amdRates, displayCurrency);
       if (!normalized) return null;
       return formatCurrencyAmount(normalized.amount, normalized.currency, intlLocale);
     },
-    [amdRates, intlLocale]
+    [amdRates, displayCurrency, intlLocale]
   );
 
   const getStartingPrice = useCallback(
@@ -2760,7 +2765,7 @@ export default function PackageServiceClient({
       const normalized = options
         .map((transfer) => {
           const { price, currency } = getTransferPricing(transfer, includeReturnTransfer);
-          return normalizeAmount(price, currency, amdRates);
+          return normalizeAmount(price, currency, amdRates, displayCurrency);
         })
         .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
 
@@ -2773,7 +2778,7 @@ export default function PackageServiceClient({
       const minAmount = Math.min(...amounts);
       return formatCurrencyAmount(minAmount, currency, intlLocale);
     },
-    [amdRates, getTransferPricing, includeReturnTransfer, intlLocale]
+    [amdRates, displayCurrency, getTransferPricing, includeReturnTransfer, intlLocale]
   );
 
   const individualStarting = useMemo(
@@ -3347,11 +3352,11 @@ export default function PackageServiceClient({
             transferGuestCounts
           );
           const resolvedCurrency = currency ?? "USD";
-          const normalizedUnitPrice = normalizeAmount(unitPrice, resolvedCurrency, amdRates);
+          const normalizedUnitPrice = normalizeAmount(unitPrice, resolvedCurrency, amdRates, displayCurrency);
           const formattedUnitPrice = normalizedUnitPrice
             ? formatCurrencyAmount(normalizedUnitPrice.amount, normalizedUnitPrice.currency, intlLocale)
             : null;
-          const normalizedTotalPrice = normalizeAmount(totalPrice, resolvedCurrency, amdRates);
+          const normalizedTotalPrice = normalizeAmount(totalPrice, resolvedCurrency, amdRates, displayCurrency);
           const formattedTotalPrice = normalizedTotalPrice
             ? formatCurrencyAmount(normalizedTotalPrice.amount, normalizedTotalPrice.currency, intlLocale)
             : null;

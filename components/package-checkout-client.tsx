@@ -9,6 +9,7 @@ import Select, {
   type SingleValue,
   type StylesConfig,
 } from "react-select";
+import { useCurrency } from "@/components/currency-provider";
 import { useLanguage } from "@/components/language-provider";
 import { ApiError, postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
@@ -841,6 +842,7 @@ export default function PackageCheckoutClient({
   initialPaymentMethodFlags,
 }: PackageCheckoutClientProps) {
   const { locale, t } = useLanguage();
+  const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[locale] ?? "en-GB";
   const { data: session } = useSession();
   const { rates: hotelRates } = useAmdRates();
@@ -2867,7 +2869,7 @@ export default function PackageCheckoutClient({
     currency: string | null | undefined,
     rates: typeof baseRates
   ) => {
-    const normalized = normalizeAmount(amount ?? null, currency ?? null, rates);
+    const normalized = normalizeAmount(amount ?? null, currency ?? null, rates, displayCurrency);
     return normalized
       ? formatCurrencyAmount(normalized.amount, normalized.currency, intlLocale)
       : null;
@@ -3237,7 +3239,7 @@ export default function PackageCheckoutClient({
     ) => {
       if (!selected) return;
       selectedCount += 1;
-      const normalized = normalizeAmount(amount ?? null, currency ?? null, rates);
+      const normalized = normalizeAmount(amount ?? null, currency ?? null, rates, displayCurrency);
       if (!normalized) {
         missingPrice = true;
         missingSelectionCount += 1;
@@ -3606,9 +3608,11 @@ export default function PackageCheckoutClient({
       if (typeof premium !== "number" || !Number.isFinite(premium) || premium <= 0) return null;
       const currency = traveler.premiumCurrency ?? insuranceSelection?.currency ?? null;
       if (!currency) return null;
-      return formatCurrencyAmount(premium, currency, intlLocale);
+      const normalized = normalizeAmount(premium, currency, baseRates, displayCurrency);
+      if (!normalized) return null;
+      return formatCurrencyAmount(normalized.amount, normalized.currency, intlLocale);
     },
-    [insuranceQuoteError, insuranceSelection?.currency, intlLocale]
+    [baseRates, displayCurrency, insuranceQuoteError, insuranceSelection?.currency, intlLocale]
   );
 
   const canPay = Boolean(

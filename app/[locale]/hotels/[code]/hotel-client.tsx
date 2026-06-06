@@ -6,6 +6,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { signIn, useSession } from "@/lib/auth-compat/react";
 import SearchForm from "@/components/search-form";
 import Loader from "@/components/loader";
+import { useCurrency } from "@/components/currency-provider";
 import { ApiError, postJson } from "@/lib/api-helpers";
 import { parseSearchParams } from "@/lib/search-query";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
@@ -882,6 +883,7 @@ export default function HotelClient({
   );
   const t = useTranslations();
   const { locale } = useLanguage();
+  const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[locale] ?? "en-GB";
   const pluralRules = useMemo(() => new Intl.PluralRules(intlLocale), [intlLocale]);
   const formatPlural = (count: number, forms: PluralForms) => {
@@ -896,20 +898,20 @@ export default function HotelClient({
 
   const formatDisplayPrice = useCallback(
     (amount: number | null | undefined, currency: string | null | undefined) => {
-      const normalized = normalizeAmount(amount, currency, hotelRates);
+      const normalized = normalizeAmount(amount, currency, hotelRates, displayCurrency);
       if (!normalized) return null;
       return formatCurrencyAmount(normalized.amount, normalized.currency, intlLocale);
     },
-    [hotelRates, intlLocale]
+    [displayCurrency, hotelRates, intlLocale]
   );
 
   const formatAddonPrice = useCallback(
     (amount: number | null | undefined, currency: string | null | undefined) => {
-      const normalized = normalizeAmount(amount, currency, addonRates);
+      const normalized = normalizeAmount(amount, currency, addonRates, displayCurrency);
       if (!normalized) return null;
       return formatCurrencyAmount(normalized.amount, normalized.currency, intlLocale);
     },
-    [addonRates, intlLocale]
+    [addonRates, displayCurrency, intlLocale]
   );
 
   const hotelCode = Array.isArray(params.code) ? params.code[0] : params.code;
@@ -1003,6 +1005,7 @@ export default function HotelClient({
   const [resolvedDestinationCode, setResolvedDestinationCode] = useState<string | null>(null);
   const amenitiesRef = useRef<HTMLDivElement | null>(null);
   const bookingPopoverRef = useRef<HTMLDivElement | null>(null);
+  const roomOptionsErrorPopoverRef = useRef<HTMLDivElement | null>(null);
   const metaViewContentTrackedKeyRef = useRef<string | null>(null);
   const destinationCode =
     destinationCodeFromQuery ?? hotelInfo?.destinationId ?? resolvedDestinationCode ?? undefined;
@@ -1026,6 +1029,7 @@ export default function HotelClient({
       ...(searchTokenParam ? { searchToken: searchTokenParam } : {}),
     };
   }, [hotelCode, locale, parsed.payload, searchTokenParam]);
+  const showRoomOptionsErrorPopover = Boolean(roomDetailsPayload && !roomsLoading && roomsError);
 
   useEffect(() => {
     setMealFilter((current) => (current === mealFilterFromUrl ? current : mealFilterFromUrl));
@@ -1176,6 +1180,18 @@ export default function HotelClient({
       element.hidePopover();
     }
   }, [bookingOpen]);
+
+  useEffect(() => {
+    const element = roomOptionsErrorPopoverRef.current;
+    if (!element) return;
+    const isOpen = element.matches?.(":popover-open");
+
+    if (showRoomOptionsErrorPopover && element.showPopover && !isOpen) {
+      element.showPopover();
+    } else if (!showRoomOptionsErrorPopover && element.hidePopover && isOpen) {
+      element.hidePopover();
+    }
+  }, [showRoomOptionsErrorPopover]);
   const roundedRating = Math.round(hotelInfo?.rating ?? 0);
   const galleryImages = useMemo(() => {
     const unique = new Map<string, { url: string; score: number }>();
@@ -1219,6 +1235,7 @@ export default function HotelClient({
     const lon = toFinite(hotelInfo?.geoCode?.lon) ?? fallbackCoordinates?.lon ?? null;
     return lat !== null && lon !== null ? { lat, lon } : null;
   }, [fallbackCoordinates?.lat, fallbackCoordinates?.lon, hotelInfo?.geoCode?.lat, hotelInfo?.geoCode?.lon]);
+  const roomOptionsErrorPopoverId = "room-options-error-popover";
   const mapPopoverId = "hotel-map-popover";
   const mapEmbedSrc = hotelCoordinates
     ? `https://www.google.com/maps?q=${hotelCoordinates.lat},${hotelCoordinates.lon}&output=embed`
@@ -1570,7 +1587,7 @@ export default function HotelClient({
       rates: typeof hotelRates
     ) => {
       if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) return;
-      const normalized = normalizeAmount(amount, currency, rates);
+      const normalized = normalizeAmount(amount, currency, rates, displayCurrency);
       if (!normalized) return;
       totals.push({ amount: normalized.amount, currency: normalized.currency });
     };
@@ -1589,6 +1606,7 @@ export default function HotelClient({
   }, [
     roomsTotal,
     bookingCurrency,
+    displayCurrency,
     hotelRates,
     transferTotalPrice,
     transferCurrency,
@@ -2781,10 +2799,19 @@ export default function HotelClient({
                 {roomsLoading && (
                   <Loader text={t.hotel.roomOptions.loading} />
                 )}
-                {roomDetailsPayload && !roomsLoading && roomsError && (
-                  <div className="error-container">
-                    <Image src="/images/icons/error.gif" alt={t.results.errorAlt} width={100} height={100} unoptimized/>
-                    <p>{roomsError}</p>
+                {showRoomOptionsErrorPopover && (
+                  <div className="room-options-error-trigger" role="status" aria-live="polite">
+                    <span className="material-symbols-rounded" aria-hidden="true">
+                      error
+                    </span>
+                    <span>{t.hotel.roomOptions.loadErrorTitle}</span>
+                    <button
+                      type="button"
+                      className="room-options-error-trigger__button"
+                      popoverTarget={roomOptionsErrorPopoverId}
+                    >
+                      {t.hotel.roomOptions.loadErrorAction}
+                    </button>
                   </div>
                 )}
                 {roomDetailsPayload && !roomsLoading && !roomsError && groupedRoomOptions.length === 0 && (
@@ -2943,6 +2970,43 @@ export default function HotelClient({
                     )}
                   </>
                 )}
+              </div>
+            </div>
+          )}
+
+          {showRoomOptionsErrorPopover && roomsError && (
+            <div
+              id={roomOptionsErrorPopoverId}
+              popover="auto"
+              className="popover room-options-error-popover"
+              ref={roomOptionsErrorPopoverRef}
+              role="alertdialog"
+              aria-modal="true"
+              aria-live="assertive"
+              aria-labelledby={`${roomOptionsErrorPopoverId}-title`}
+              aria-describedby={`${roomOptionsErrorPopoverId}-description`}
+            >
+              <button
+                type="button"
+                className="close"
+                popoverTarget={roomOptionsErrorPopoverId}
+                popoverTargetAction="hide"
+                aria-label={t.common.close}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  close
+                </span>
+              </button>
+              <div className="room-options-error-popover__content">
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  error
+                </span>
+                <div>
+                  <h2 id={`${roomOptionsErrorPopoverId}-title`}>
+                    {t.hotel.roomOptions.loadErrorTitle}
+                  </h2>
+                  <p id={`${roomOptionsErrorPopoverId}-description`}>{roomsError}</p>
+                </div>
               </div>
             </div>
           )}

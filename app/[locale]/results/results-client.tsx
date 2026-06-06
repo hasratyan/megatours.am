@@ -8,9 +8,10 @@ import type { AoryxSearchParams, AoryxSearchResult } from "@/types/aoryx";
 import Image from "next/image";
 import SearchForm from "@/components/search-form";
 import Loader from "@/components/loader";
+import { useCurrency } from "@/components/currency-provider";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
-import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
+import { formatCurrencyAmount, normalizeAmount, withDisplayCurrencyParam, type AmdRates } from "@/lib/currency";
 import { resolveSafeErrorFromUnknown, resolveSafeErrorMessage } from "@/lib/error-utils";
 import { useAmdRates } from "@/lib/use-amd-rates";
 import { runResultsSearch } from "./actions";
@@ -50,7 +51,7 @@ type ResultsClientProps = {
   initialResult: SafeSearchResult | null;
   initialError: string | null;
   initialDestinations?: DestinationInfo[];
-  initialAmdRates?: { USD: number; EUR: number } | null;
+  initialAmdRates?: AmdRates | null;
 };
 
 export default function ResultsClient({
@@ -61,6 +62,7 @@ export default function ResultsClient({
 }: ResultsClientProps) {
   const t = useTranslations();
   const { locale } = useLanguage();
+  const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[locale] ?? "en-GB";
   const pluralRules = useMemo(() => new Intl.PluralRules(intlLocale), [intlLocale]);
   const formatPlural = (count: number, forms: PluralForms) => {
@@ -208,8 +210,8 @@ export default function ResultsClient({
   }>(() => ({ key: searchKey, value: null }));
   const { rates: amdRates } = useAmdRates(initialAmdRates);
   const resultsKey = searchKey;
-  const ratesKey = amdRates ? `${amdRates.USD}-${amdRates.EUR}` : "BASE";
-  const priceOverrideKey = `${searchKey}|${ratesKey}`;
+  const ratesKey = amdRates ? `${amdRates.USD}-${amdRates.EUR}-${amdRates.RUB}` : "BASE";
+  const priceOverrideKey = `${searchKey}|${ratesKey}|${displayCurrency}`;
   const selectedRatings = useMemo(
     () => (selectedRatingsState.key === resultsKey ? selectedRatingsState.values : []),
     [resultsKey, selectedRatingsState.key, selectedRatingsState.values]
@@ -231,13 +233,16 @@ export default function ResultsClient({
       }
       setFiltersOpen(false);
       const resultsPath = `/${locale}/results`;
-      const nextHref = nextQuery ? `${resultsPath}?${nextQuery}` : resultsPath;
+      const nextHref = withDisplayCurrencyParam(
+        nextQuery ? `${resultsPath}?${nextQuery}` : resultsPath,
+        displayCurrency
+      );
       document.cookie = "megatours-results-csr=1;path=/;max-age=5;SameSite=Lax";
       startTransition(() => {
         router.push(nextHref);
       });
     },
-    [locale, router, searchKey, startTransition]
+    [displayCurrency, locale, router, searchKey, startTransition]
   );
 
   const nightsCount = (() => {
@@ -361,20 +366,20 @@ export default function ResultsClient({
         typeof hotel.minPrice === "number" && !Number.isNaN(hotel.minPrice)
           ? hotel.minPrice
           : null;
-      const normalized = normalizeAmount(basePrice, baseCurrency, amdRates);
+      const normalized = normalizeAmount(basePrice, baseCurrency, amdRates, displayCurrency);
       const displayPrice = normalized
         ? Math.round(normalized.amount)
         : basePrice !== null
           ? Math.round(basePrice)
           : null;
-      const displayCurrency = normalized ? normalized.currency : baseCurrency ?? "USD";
+      const displayCurrencyCode = normalized ? normalized.currency : baseCurrency ?? "USD";
       return {
         ...hotel,
         displayPrice,
-        displayCurrency,
+        displayCurrency: displayCurrencyCode,
       };
     });
-  }, [amdRates, result?.currency, result?.hotels]);
+  }, [amdRates, displayCurrency, result?.currency, result?.hotels]);
   const mapHotelRates = useMemo(() => {
     const entries: Record<
       string,
@@ -541,14 +546,14 @@ export default function ResultsClient({
                   <span>
                     {formatCurrencyAmount(
                       priceMinValue,
-                      amdRates ? "AMD" : result?.currency ?? "USD",
+                      amdRates ? displayCurrency : result?.currency ?? "USD",
                       intlLocale
                     )}
                   </span>
                   <span>
                     {formatCurrencyAmount(
                       priceMaxValue,
-                      amdRates ? "AMD" : result?.currency ?? "USD",
+                      amdRates ? displayCurrency : result?.currency ?? "USD",
                       intlLocale
                     )}
                   </span>
@@ -733,9 +738,12 @@ export default function ResultsClient({
                     : null;
                 const detailHref =
                   detailQuery && hotel.code
-                    ? `/${locale}/hotels/${hotel.code}?${detailQuery}${
-                        result?.searchToken ? `&searchToken=${encodeURIComponent(result.searchToken)}` : ""
-                      }`
+                    ? withDisplayCurrencyParam(
+                        `/${locale}/hotels/${hotel.code}?${detailQuery}${
+                          result?.searchToken ? `&searchToken=${encodeURIComponent(result.searchToken)}` : ""
+                        }`,
+                        displayCurrency
+                      )
                     : null;
 
                 return (

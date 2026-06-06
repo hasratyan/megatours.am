@@ -5,7 +5,7 @@ import { getJson } from "@/lib/api-helpers";
 import { convertToAmd, type AmdRates } from "@/lib/currency";
 
 const isValidRates = (value: AmdRates | null | undefined): value is AmdRates =>
-  Boolean(value && Number.isFinite(value.USD) && Number.isFinite(value.EUR));
+  Boolean(value && Number.isFinite(value.USD) && Number.isFinite(value.EUR) && Number.isFinite(value.RUB));
 
 export { convertToAmd };
 
@@ -32,8 +32,8 @@ export function useAmdRates(initialRates?: AmdRates | null, options?: UseAmdRate
     getJson<AmdRates>(endpoint)
       .then((data) => {
         if (!active) return;
-        if (data && Number.isFinite(data.USD) && Number.isFinite(data.EUR)) {
-          setRates({ USD: data.USD, EUR: data.EUR });
+        if (data && Number.isFinite(data.USD) && Number.isFinite(data.EUR) && Number.isFinite(data.RUB)) {
+          setRates({ USD: data.USD, EUR: data.EUR, RUB: data.RUB });
         } else {
           setRates(null);
         }

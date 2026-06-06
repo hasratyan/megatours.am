@@ -3,6 +3,7 @@
 import type { FormEvent } from "react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCurrency } from "@/components/currency-provider";
 import { useLanguage } from "@/components/language-provider";
 import { ApiError, postJson } from "@/lib/api-helpers";
 import type {
@@ -304,6 +305,7 @@ export default function BookingAddonsClient({
   lastAddonPayment,
 }: BookingAddonsClientProps) {
   const { locale, t } = useLanguage();
+  const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[locale] ?? "en-GB";
   const { rates } = useAmdRates();
 
@@ -569,11 +571,11 @@ export default function BookingAddonsClient({
 
   const formatAmount = useCallback(
     (amount: number | null | undefined, currency: string | null | undefined) => {
-      const normalized = normalizeAmount(amount ?? null, currency ?? null, rates);
+      const normalized = normalizeAmount(amount ?? null, currency ?? null, rates, displayCurrency);
       if (!normalized) return null;
       return formatCurrencyAmount(normalized.amount, normalized.currency, intlLocale);
     },
-    [intlLocale, rates]
+    [displayCurrency, intlLocale, rates]
   );
 
   const resolveServiceLabel = useCallback(
@@ -896,7 +898,7 @@ export default function BookingAddonsClient({
     let totalCurrency: string | null = null;
 
     selectionSources.forEach((selection) => {
-      const normalized = normalizeAmount(selection.amount ?? null, selection.currency ?? null, rates);
+      const normalized = normalizeAmount(selection.amount ?? null, selection.currency ?? null, rates, displayCurrency);
       if (!normalized) return;
       if (!totalCurrency) {
         totalCurrency = normalized.currency;
@@ -915,6 +917,7 @@ export default function BookingAddonsClient({
     excursionSelection?.price,
     flightSelection?.currency,
     flightSelection?.price,
+    displayCurrency,
     insuranceSelection?.currency,
     insuranceSelection?.price,
     intlLocale,

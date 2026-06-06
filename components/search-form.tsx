@@ -3,9 +3,11 @@
 import { FormEvent, useState, useMemo, useCallback, useEffect, useRef, useId } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import { useCurrency } from "@/components/currency-provider";
 import { useLanguage } from "@/components/language-provider";
 import StarBorder from '@/components/StarBorder'
 import { postJson } from "@/lib/api-helpers";
+import { withDisplayCurrencyParam } from "@/lib/currency";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { sanitizeLeadingZeroNumberInput } from "@/lib/number-input";
 import type { AoryxSearchParams, HotelInfo } from "@/types/aoryx";
@@ -388,6 +390,7 @@ export default function SearchForm({
   const locationSelectInputId = `${locationSelectInstanceId}-input`;
   const router = useRouter();
   const { locale: appLocale } = useLanguage();
+  const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[appLocale];
 
   const presetDestinationOption: LocationOption | null = presetDestination
@@ -997,7 +1000,7 @@ export default function SearchForm({
           const query = params.toString();
           document.cookie = "megatours-results-csr=1;path=/;max-age=5;SameSite=Lax";
           // Navigate immediately - don't await, let loading.tsx show while server renders
-          router.push(query ? `${resultsPath}?${query}` : resultsPath);
+          router.push(withDisplayCurrencyParam(query ? `${resultsPath}?${query}` : resultsPath, displayCurrency));
         }
       } catch (err: unknown) {
         const message = resolveSafeErrorFromUnknown(err, copy.errors.submit);
@@ -1016,6 +1019,7 @@ export default function SearchForm({
       rooms,
       onSubmitSearch,
       appLocale,
+      displayCurrency,
       router,
     ]
   );
@@ -1084,8 +1088,7 @@ export default function SearchForm({
     // Close the popover after selection
     mapPopoverRef.current?.hidePopover?.();
     setIsMapOpen(false);
-    void executeSearchForLocation(hotel);
-  }, [executeSearchForLocation]);
+  }, []);
 
   useEffect(() => {
     onRoomCountChange?.(rooms.length);

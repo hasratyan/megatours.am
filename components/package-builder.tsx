@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-compat/react";
+import { useCurrency } from "@/components/currency-provider";
 import { useLanguage } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
-import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
+import { formatCurrencyAmount, normalizeAmount, withDisplayCurrencyParam } from "@/lib/currency";
 import { useAmdRates } from "@/lib/use-amd-rates";
 import { getJson } from "@/lib/api-helpers";
 import {
@@ -60,6 +61,7 @@ export default function PackageBuilder() {
   const router = useRouter();
   const { data: session, status: authStatus } = useSession();
   const intlLocale = intlLocales[locale] ?? "en-GB";
+  const { currency: displayCurrency } = useCurrency();
   const { rates: hotelRates } = useAmdRates();
   const baseRates = hotelRates;
   const [isOpen, setIsOpen] = useState(false);
@@ -228,7 +230,7 @@ export default function PackageBuilder() {
       checkOutDate: selection.checkOutDate,
       rooms,
     });
-    return `${base}?${query}`;
+    return withDisplayCurrencyParam(`${base}?${query}`, displayCurrency);
   })();
   const flightRedirect = useMemo(
     () => buildFlightRedirectFromHotel(builderState.hotel),
@@ -408,7 +410,7 @@ export default function PackageBuilder() {
     ) => {
       if (!selected) return;
       selectedCount += 1;
-      const normalized = normalizeAmount(price, currency, rates);
+      const normalized = normalizeAmount(price, currency, rates, displayCurrency);
       if (!normalized) {
         missingPrice = true;
         missingSelectionCount += 1;
@@ -593,7 +595,7 @@ export default function PackageBuilder() {
       setShowHotelWarning(true);
       setDisabledServiceId(null);
       setIsOpen(true);
-      router.push(`/${locale}#hero`);
+      router.push(withDisplayCurrencyParam(`/${locale}#hero`, displayCurrency));
       return;
     }
 
@@ -603,7 +605,7 @@ export default function PackageBuilder() {
     }
 
     const target = service.id === "hotel" ? `/${locale}` : `/${locale}/services/${service.id}`;
-    beginNavigation(service.id, target);
+    beginNavigation(service.id, withDisplayCurrencyParam(target, displayCurrency));
   };
 
   const handleRemove = (serviceId: PackageBuilderService) => {
@@ -634,7 +636,7 @@ export default function PackageBuilder() {
       setShowHotelWarning(true);
       return;
     }
-    beginNavigation(null, `/${locale}/checkout`);
+    beginNavigation(null, withDisplayCurrencyParam(`/${locale}/checkout`, displayCurrency));
   };
 
   const toggleLabel = hasAnySelection
@@ -746,7 +748,8 @@ export default function PackageBuilder() {
                     ? normalizeAmount(
                         serviceAmount,
                         serviceSelection?.currency ?? null,
-                        serviceRates
+                        serviceRates,
+                        displayCurrency
                       )
                     : null;
                 const formattedPrice = normalizedPrice

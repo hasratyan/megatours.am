@@ -13,10 +13,15 @@ const parseRate = (value: unknown): number | null => {
   return null;
 };
 
-const toAmdRate = (raw: unknown, adjustment = 0, precision = 1): number | null => {
+const toAmdRate = (
+  raw: unknown,
+  adjustment = 0,
+  precision = 1,
+  invertSmallRate = false
+): number | null => {
   const parsed = parseRate(raw);
   if (parsed === null) return null;
-  const amdPerUnit = parsed < 10 ? 1 / parsed : parsed;
+  const amdPerUnit = invertSmallRate && parsed < 10 ? 1 / parsed : parsed;
   const adjusted = amdPerUnit + adjustment;
   const rounded = Number(adjusted.toFixed(precision));
   return Number.isFinite(rounded) ? rounded : null;
@@ -107,27 +112,32 @@ async function fetchAmdRates(): Promise<AmdRates> {
   const data = await fetchRatesFrom(API_URL);
   let usd = toAmdRate(readRateValue(data, "USD"), 4, 1);
   let eur = toAmdRate(readRateValue(data, "EUR"), 8, 1);
+  let rub = toAmdRate(readRateValue(data, "RUB"), 0, 2);
 
-  if (usd === null || eur === null) {
+  if (usd === null || eur === null || rub === null) {
     const usdUrl = buildCurrencyUrl("USD");
     const eurUrl = buildCurrencyUrl("EUR");
+    const rubUrl = buildCurrencyUrl("RUB");
     if (usd === null && usdUrl) {
       usd = toAmdRate(readRateValue(await fetchRatesFrom(usdUrl), "USD"), 4, 1);
     }
     if (eur === null && eurUrl) {
       eur = toAmdRate(readRateValue(await fetchRatesFrom(eurUrl), "EUR"), 8, 1);
     }
+    if (rub === null && rubUrl) {
+      rub = toAmdRate(readRateValue(await fetchRatesFrom(rubUrl), "RUB"), 0, 2);
+    }
   }
 
-  if (usd === null || eur === null) {
-    if (usd !== null && eur === null) {
+  if (usd === null || eur === null || rub === null) {
+    if (usd !== null && eur === null && rub !== null) {
       console.warn("[ExchangeRates] Missing EUR rate, falling back to USD rate.");
-      return { USD: usd, EUR: usd };
+      return { USD: usd, EUR: usd, RUB: rub };
     }
     throw new Error("Missing required exchange rates in API response");
   }
 
-  return { USD: usd, EUR: eur };
+  return { USD: usd, EUR: eur, RUB: rub };
 }
 
 export async function getAmdRates(): Promise<AmdRates> {
@@ -140,9 +150,11 @@ export async function getAmdRateForCurrency(currency: string): Promise<number | 
   const normalized = currency.trim().toUpperCase();
   if (!normalized) return null;
   if (normalized === "AMD") return 1;
-  if (normalized === "USD" || normalized === "EUR") {
+  if (normalized === "USD" || normalized === "EUR" || normalized === "RUB") {
     const rates = await getAmdRates();
-    return normalized === "USD" ? rates.USD : rates.EUR;
+    if (normalized === "USD") return rates.USD;
+    if (normalized === "EUR") return rates.EUR;
+    return rates.RUB;
   }
   const url = buildCurrencyUrl(normalized);
   if (!url) return null;
@@ -260,6 +272,7 @@ export async function getEffectiveAmdRates(): Promise<AmdRates> {
   return {
     USD: Number((rates.USD * multiplier).toFixed(1)),
     EUR: Number((rates.EUR * multiplier).toFixed(1)),
+    RUB: Number((rates.RUB * multiplier).toFixed(2)),
   };
 }
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AuthActions from "@/components/auth-actions";
+import CurrencySwitcher from "@/components/currency-switcher";
 import GradualBlur from "@/components/GradualBlur";
 import LanguageSwitcher from "@/components/language-switcher";
 import { useLanguage } from "@/components/language-provider";
@@ -161,6 +162,7 @@ export default function Header() {
               ))}
             </nav>
             <LanguageSwitcher onAction={closeMobileMenu} />
+            <CurrencySwitcher onAction={closeMobileMenu} />
             <AuthActions onAction={closeMobileMenu} />
           </div>
         </div>
