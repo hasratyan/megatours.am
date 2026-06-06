@@ -77,6 +77,10 @@ export const localizeAoryxRoomOptions = async (
       textBucket.push(...extractTranslatableChunks(value));
     });
 
+    (room.price?.promotions ?? []).forEach((promotion) => {
+      textBucket.push(...extractTranslatableChunks(promotion?.text));
+    });
+
     (room.policies ?? []).forEach((policy) => {
       const conditionValues = [
         policy?.textCondition,
@@ -113,6 +117,17 @@ export const localizeAoryxRoomOptions = async (
     inclusions: Array.isArray(room.inclusions)
       ? room.inclusions.map((item) => applyTranslated(item, dictionary) ?? item)
       : room.inclusions,
+    price: room.price
+      ? {
+          ...room.price,
+          promotions: Array.isArray(room.price.promotions)
+            ? room.price.promotions.map((promotion) => ({
+                ...promotion,
+                text: applyTranslated(promotion.text, dictionary),
+              }))
+            : room.price.promotions,
+        }
+      : room.price,
     policies: Array.isArray(room.policies)
       ? room.policies.map((policy) => ({
           ...policy,

@@ -362,10 +362,21 @@ export interface AoryxRoomOption {
   remarks?: AoryxRoomRemark[];
 }
 
+export interface AoryxRoomPromotion {
+  code: string | null;
+  text: string | null;
+  amount: number | null;
+  supplierAmount: number | null;
+  percent?: number | null;
+}
+
 export interface AoryxRoomPrice {
   gross: number | null;
   net: number | null;
   tax: number | null;
+  discount?: number | null;
+  supplierDiscount?: number | null;
+  promotions?: AoryxRoomPromotion[];
 }
 
 export interface AoryxRoomPolicyCondition {

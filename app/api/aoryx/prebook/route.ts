@@ -131,6 +131,7 @@ export async function POST(request: NextRequest) {
     const resolvedSessionId = result.sessionId || sessionId;
     const rooms = localizedRooms.map((room) => ({
       roomIdentifier: typeof room.roomIdentifier === "number" ? room.roomIdentifier : null,
+      price: room.price ?? null,
       policies: Array.isArray(room.policies) ? room.policies : [],
       remarks: Array.isArray(room.remarks) ? room.remarks : [],
       cancellationPolicy: room.cancellationPolicy ?? null,

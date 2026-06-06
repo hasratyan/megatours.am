@@ -33,6 +33,7 @@ import type {
   AoryxRoomDetailItem,
   AoryxRoomDetailsResponse,
   AoryxRoomOption,
+  AoryxRoomPromotion,
   AoryxRoomDetailsResult,
   AoryxPreBookResult,
   AoryxBookingPayload,
@@ -685,20 +686,93 @@ function normalizeChildAges(value: unknown): { count: number | null; ages: numbe
 
 function normalizePriceDetails(
   value: unknown
-): { gross: number | null; net: number | null; tax: number | null } | null {
+): AoryxRoomOption["price"] {
   if (!value) return null;
   if (!isRecord(value)) {
     const money = extractMoney(value);
     if (money.amount === null) return null;
-    return { gross: money.amount, net: money.amount, tax: 0 };
+    return { gross: money.amount, net: money.amount, tax: 0, promotions: [] };
   }
   const gross = toNumber(value.Gross ?? value.TotalGross ?? value.Amount ?? value.TotalAmount ?? value.Price);
   const net = toNumber(value.Net ?? value.NetAmount ?? value.NetRate ?? value.TotalNet);
   const tax = toNumber(value.Tax ?? value.TotalTax ?? value.TaxAmount);
-  if (gross === null && net === null && tax === null) {
+  const discount = toNumber(value.Discount ?? value.discount);
+  const supplierDiscount = toNumber(value.SupplierDiscount ?? value.supplierDiscount);
+  const promotions = normalizePromotions(value.Promotions ?? value.Promotion ?? value.promotions ?? value.promotion);
+  if (gross === null && net === null && tax === null && discount === null && supplierDiscount === null && promotions.length === 0) {
     return null;
   }
-  return { gross, net, tax };
+  return { gross, net, tax, discount, supplierDiscount, promotions };
+}
+
+function normalizePromotions(value: unknown): AoryxRoomPromotion[] {
+  if (!value) return [];
+
+  const promotionNode =
+    isRecord(value) && "Promotion" in value
+      ? value.Promotion
+      : isRecord(value) && "Promotions" in value
+        ? value.Promotions
+        : isRecord(value) && Array.isArray(value.items)
+          ? value.items
+          : value;
+
+  const seen = new Set<string>();
+  const promotions: AoryxRoomPromotion[] = [];
+  const add = (promotion: AoryxRoomPromotion) => {
+    const key = [
+      promotion.code,
+      promotion.text,
+      promotion.amount,
+      promotion.supplierAmount,
+      promotion.percent,
+    ].join("|");
+    if (seen.has(key)) return;
+    seen.add(key);
+    promotions.push(promotion);
+  };
+
+  normalizeArray(promotionNode).forEach((entry) => {
+    if (typeof entry === "string" || typeof entry === "number") {
+      const text = toStringValue(entry);
+      if (text) {
+        add({ code: null, text, amount: null, supplierAmount: null, percent: null });
+      }
+      return;
+    }
+    if (!isRecord(entry)) return;
+    const text = toStringValue(
+      entry.Text ?? entry.text ?? entry.Description ?? entry.description ?? entry.Remark ?? entry.remark
+    );
+    const code = toStringValue(entry.Code ?? entry.code ?? entry.Name ?? entry.name);
+    const amount = toNumber(entry.Amount ?? entry.amount ?? entry.Discount ?? entry.discount);
+    const supplierAmount = toNumber(
+      entry.SupplierAmount ?? entry.supplierAmount ?? entry.SupplierDiscount ?? entry.supplierDiscount
+    );
+    const percent = toNumber(entry.Percent ?? entry.percent ?? entry.Percentage ?? entry.percentage);
+    if (!text && !code && amount === null && supplierAmount === null && percent === null) return;
+    add({ code, text, amount, supplierAmount, percent });
+  });
+
+  return promotions;
+}
+
+function mergePromotions(...groups: Array<AoryxRoomPromotion[] | null | undefined>): AoryxRoomPromotion[] {
+  const seen = new Set<string>();
+  const merged: AoryxRoomPromotion[] = [];
+  groups.flatMap((group) => group ?? []).forEach((promotion) => {
+    const key = [
+      promotion.code,
+      promotion.text,
+      promotion.amount,
+      promotion.supplierAmount,
+      promotion.percent,
+    ].join("|");
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(promotion);
+  });
+  return merged;
 }
 
 function normalizePolicies(value: unknown) {
@@ -942,6 +1016,24 @@ function normalizeRoomOptions(response: AoryxRoomDetailsResponse | Record<string
     const rateType = toStringValue(room.RateType ?? room.ContractType ?? room.RateCategory);
     const childInfo = normalizeChildAges(room.Children);
     const priceDetails = normalizePriceDetails(room.Price);
+    const roomDiscount = toNumber(room.Discount ?? room.discount);
+    const roomSupplierDiscount = toNumber(room.SupplierDiscount ?? room.supplierDiscount);
+    const roomPromotions = normalizePromotions(
+      room.Promotions ?? room.Promotion ?? room.RoomPromotion ?? room.PromotionDetails
+    );
+    const hasRoomLevelPriceDetails =
+      roomDiscount !== null || roomSupplierDiscount !== null || roomPromotions.length > 0;
+    const resolvedPriceDetails =
+      priceDetails || hasRoomLevelPriceDetails
+        ? {
+            gross: priceDetails?.gross ?? null,
+            net: priceDetails?.net ?? null,
+            tax: priceDetails?.tax ?? null,
+            discount: priceDetails?.discount ?? roomDiscount,
+            supplierDiscount: priceDetails?.supplierDiscount ?? roomSupplierDiscount,
+            promotions: mergePromotions(priceDetails?.promotions, roomPromotions),
+          }
+        : null;
     const bedTypes = normalizeBedTypes(room.BedTypes);
     const inclusions = normalizeInclusions(room.Inclusions ?? room.Inclusion);
     const policies = normalizePolicies(room.Policies);
@@ -1008,7 +1100,7 @@ function normalizeRoomOptions(response: AoryxRoomDetailsResponse | Record<string
       groupCode,
       roomIdentifier,
       rateType,
-      price: priceDetails,
+      price: resolvedPriceDetails,
       adultCount,
       childCount,
       childAges,

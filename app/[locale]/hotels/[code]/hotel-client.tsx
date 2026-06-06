@@ -407,11 +407,7 @@ type BookingRoomState = {
   remarks: NonNullable<AoryxRoomOption["remarks"]>;
   cancellationPolicy: string | null;
   displayTotalPrice?: number | null;
-  price: {
-    gross: number | null;
-    net: number | null;
-    tax: number | null;
-  };
+  price: NonNullable<AoryxRoomOption["price"]>;
   guests: GuestForm[];
   childAges: number[];
 };
@@ -451,9 +447,16 @@ type PrebookContext = {
 
 type PrebookRoomSnapshot = {
   roomIdentifier: number | null;
+  price?: AoryxRoomOption["price"] | null;
   policies: NonNullable<AoryxRoomOption["policies"]>;
   remarks: NonNullable<AoryxRoomOption["remarks"]>;
   cancellationPolicy: string | null;
+};
+
+type RoomDiscountSource = {
+  price?: AoryxRoomOption["price"] | null;
+  remarks?: AoryxRoomOption["remarks"] | null;
+  currency?: string | null;
 };
 
 type PrebookSummary = {
@@ -607,6 +610,9 @@ const getPolicyMeta = (
 const isFiniteNumber = (value: number | null | undefined): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
+const isPositiveNumber = (value: number | null | undefined): value is number =>
+  isFiniteNumber(value) && value > 0;
+
 const buildBookingGuests = (
   selectedRooms: AoryxRoomOption[],
   rooms: AoryxRoomSearch[] | null
@@ -679,6 +685,9 @@ const buildBookingGuests = (
         gross: prebookRoom?.price?.gross ?? null,
         net: prebookRoom?.price?.net ?? null,
         tax: prebookRoom?.price?.tax ?? null,
+        discount: prebookRoom?.price?.discount ?? null,
+        supplierDiscount: prebookRoom?.price?.supplierDiscount ?? null,
+        promotions: prebookRoom?.price?.promotions ?? [],
       },
       guests,
       childAges,
@@ -704,6 +713,7 @@ const mergePrebookExtras = (
     if (!matched) return room;
     return {
       ...room,
+      price: matched.price ?? room.price ?? null,
       policies: matched.policies.length > 0 ? matched.policies : room.policies ?? [],
       remarks: matched.remarks.length > 0 ? matched.remarks : room.remarks ?? [],
       cancellationPolicy: matched.cancellationPolicy ?? room.cancellationPolicy ?? null,
@@ -903,6 +913,63 @@ export default function HotelClient({
       return formatCurrencyAmount(normalized.amount, normalized.currency, intlLocale);
     },
     [displayCurrency, hotelRates, intlLocale]
+  );
+
+  const resolveRoomDiscountMessages = useCallback(
+    (rooms: RoomDiscountSource[], fallbackCurrencyValue?: string | null) => {
+      const messages: string[] = [];
+      const seen = new Set<string>();
+      const addMessage = (value: string | null | undefined) => {
+        const normalized = value?.trim();
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        messages.push(normalized);
+      };
+      const formatAmount = (value: number, currency: string | null | undefined) =>
+        formatDisplayPrice(value, currency) ?? (currency ? `${currency} ${value.toFixed(2)}` : value.toFixed(2));
+
+      rooms.forEach((room) => {
+        const roomCurrency = room.currency ?? fallbackCurrencyValue;
+        (room.price?.promotions ?? []).forEach((promotion) => {
+          const text = promotion.text?.trim();
+          if (text) {
+            addMessage(`${t.hotel.roomOptions.promotionLabel}: ${text}`);
+            return;
+          }
+          if (isPositiveNumber(promotion.percent)) {
+            addMessage(`${t.hotel.roomOptions.promotionLabel}: ${promotion.percent}%`);
+            return;
+          }
+          const amount = isPositiveNumber(promotion.amount)
+            ? promotion.amount
+            : isPositiveNumber(promotion.supplierAmount)
+              ? promotion.supplierAmount
+              : null;
+          if (amount !== null) {
+            addMessage(`${t.hotel.roomOptions.promotionLabel}: ${formatAmount(amount, roomCurrency)}`);
+          }
+        });
+
+        (room.remarks ?? []).forEach((remark) => {
+          if (normalizeRemarkType(remark.type) !== "ROOMPROMOTION") return;
+          if (remark.text) {
+            addMessage(`${t.hotel.roomOptions.promotionLabel}: ${remark.text}`);
+          }
+        });
+
+        const discount = isPositiveNumber(room.price?.discount)
+          ? room.price.discount
+          : isPositiveNumber(room.price?.supplierDiscount)
+            ? room.price.supplierDiscount
+            : null;
+        if (discount !== null) {
+          addMessage(`${t.hotel.roomOptions.discountLabel}: ${formatAmount(discount, roomCurrency)}`);
+        }
+      });
+
+      return messages;
+    },
+    [formatDisplayPrice, t.hotel.roomOptions.discountLabel, t.hotel.roomOptions.promotionLabel]
   );
 
   const formatAddonPrice = useCallback(
@@ -2873,12 +2940,28 @@ export default function HotelClient({
                           const rateKeys = group.items
                             .map((item) => item.rateKey)
                             .filter((key): key is string => typeof key === "string" && key.length > 0);
+                          const discountMessages = resolveRoomDiscountMessages(
+                            group.items,
+                            group.currency ?? fallbackCurrency
+                          );
                           const canBook = rateKeys.length > 0;
                           const isPrebooking = prebookingKey === group.key;
                           return (
                             <div key={group.key} className="room-card">
                               <div className="room-card-main">
                                 <h3>{group.option.name ?? t.hotel.roomOptions.roomOptionFallback}</h3>
+                                {discountMessages.length > 0 && (
+                                  <ul className="room-discounts" aria-label={t.hotel.roomOptions.promotionLabel}>
+                                    {discountMessages.map((message) => (
+                                      <li key={message}>
+                                        <span className="material-symbols-rounded" aria-hidden="true">
+                                          local_offer
+                                        </span>
+                                        <span>{message}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
                                 <div className="room-meta">
                                   {mealPlanLabel && (
                                     <span className="room-chip">{mealPlanLabel}</span>
@@ -3075,6 +3158,10 @@ export default function HotelClient({
                     const roomNonRefundable = resolveRoomNonRefundable(room);
                     const rateTypeRefundability = parseNonRefundableFromText(room.rateType);
                     const shouldShowRateTypeLabel = Boolean(rateTypeLabel) && rateTypeRefundability === null;
+                    const discountMessages = resolveRoomDiscountMessages(
+                      [room],
+                      bookingCurrency ?? fallbackCurrency
+                    );
                     return (
                       <fieldset key={room.roomIdentifier} className="booking-room">
                       <legend>
@@ -3093,6 +3180,12 @@ export default function HotelClient({
                               ) ?? t.common.contact}
                             </span>
                           )}
+                          {discountMessages.map((message) => (
+                            <span key={message} className="booking-discount-detail">
+                              <span className="material-symbols-rounded" aria-hidden="true">local_offer</span>
+                              {message}
+                            </span>
+                          ))}
                           {mealPlanLabel && <span><span className="material-symbols-rounded" aria-hidden="true">restaurant</span>{t.hotel.booking.mealPlanLabel}: {mealPlanLabel}</span>}
                           {shouldShowRateTypeLabel && <span><span className="material-symbols-rounded" aria-hidden="true">star</span>{t.hotel.booking.rateTypeLabel}: {rateTypeLabel}</span>}
                           {roomNonRefundable !== null && (
