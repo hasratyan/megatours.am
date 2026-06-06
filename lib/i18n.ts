@@ -3226,7 +3226,7 @@ const translations: Record<Locale, Translation> = {
         },
         {
           title: "What payment options are available?",
-          body: "You can pay securely via Idram or use RocketLine to spread your payment over up to 60 months.",
+          body: "You can pay securely via bank card, Idram or use RocketLine to spread your payment over up to 60 months.",
         },
         {
           title: "How can I contact customer support?",
@@ -4757,7 +4757,7 @@ const translations: Record<Locale, Translation> = {
         },
         {
           title: "Какие способы оплаты доступны?",
-          body: "Вы можете оплатить бронирование через Idram или воспользоваться RocketLine и распределить оплату на срок до 60 месяцев.",
+          body: "Вы можете оплатить бронирование через банковскую карту, через Idram или воспользоваться RocketLine и распределить оплату на срок до 60 месяцев.",
         },
         {
           title: "Как связаться со службой поддержки?",
