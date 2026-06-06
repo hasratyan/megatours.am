@@ -1029,7 +1029,8 @@ export default function HotelClient({
       ...(searchTokenParam ? { searchToken: searchTokenParam } : {}),
     };
   }, [hotelCode, locale, parsed.payload, searchTokenParam]);
-  const showRoomOptionsErrorPopover = Boolean(roomDetailsPayload && !roomsLoading && roomsError);
+  const roomOptionsSurfaceError =
+    (roomDetailsPayload && !roomsLoading ? roomsError : null) ?? (!bookingOpen ? bookingError : null);
 
   useEffect(() => {
     setMealFilter((current) => (current === mealFilterFromUrl ? current : mealFilterFromUrl));
@@ -1186,12 +1187,12 @@ export default function HotelClient({
     if (!element) return;
     const isOpen = element.matches?.(":popover-open");
 
-    if (showRoomOptionsErrorPopover && element.showPopover && !isOpen) {
+    if (roomOptionsSurfaceError && element.showPopover && !isOpen) {
       element.showPopover();
-    } else if (!showRoomOptionsErrorPopover && element.hidePopover && isOpen) {
+    } else if (!roomOptionsSurfaceError && element.hidePopover && isOpen) {
       element.hidePopover();
     }
-  }, [showRoomOptionsErrorPopover]);
+  }, [roomOptionsSurfaceError]);
   const roundedRating = Math.round(hotelInfo?.rating ?? 0);
   const galleryImages = useMemo(() => {
     const unique = new Map<string, { url: string; score: number }>();
@@ -2799,21 +2800,6 @@ export default function HotelClient({
                 {roomsLoading && (
                   <Loader text={t.hotel.roomOptions.loading} />
                 )}
-                {showRoomOptionsErrorPopover && (
-                  <div className="room-options-error-trigger" role="status" aria-live="polite">
-                    <span className="material-symbols-rounded" aria-hidden="true">
-                      error
-                    </span>
-                    <span>{t.hotel.roomOptions.loadErrorTitle}</span>
-                    <button
-                      type="button"
-                      className="room-options-error-trigger__button"
-                      popoverTarget={roomOptionsErrorPopoverId}
-                    >
-                      {t.hotel.roomOptions.loadErrorAction}
-                    </button>
-                  </div>
-                )}
                 {roomDetailsPayload && !roomsLoading && !roomsError && groupedRoomOptions.length === 0 && (
                   // <p className="room-options-empty">{t.hotel.roomOptions.empty}</p>
                   <div className="results-empty">
@@ -2861,9 +2847,6 @@ export default function HotelClient({
                         </label>
                       </div>
                     </div>
-                    {!bookingOpen && bookingError && (
-                      <p className="room-options-error booking-error">{bookingError}</p>
-                    )}
                     {visibleRoomOptions.length === 0 ? (
                       <p className="room-options-empty">{t.hotel.roomOptions.noMatch}</p>
                     ) : (
@@ -2974,7 +2957,7 @@ export default function HotelClient({
             </div>
           )}
 
-          {showRoomOptionsErrorPopover && roomsError && (
+          {roomOptionsSurfaceError && (
             <div
               id={roomOptionsErrorPopoverId}
               popover="auto"
@@ -3005,7 +2988,7 @@ export default function HotelClient({
                   <h2 id={`${roomOptionsErrorPopoverId}-title`}>
                     {t.hotel.roomOptions.loadErrorTitle}
                   </h2>
-                  <p id={`${roomOptionsErrorPopoverId}-description`}>{roomsError}</p>
+                  <p id={`${roomOptionsErrorPopoverId}-description`}>{roomOptionsSurfaceError}</p>
                 </div>
               </div>
             </div>

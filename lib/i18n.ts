@@ -1091,7 +1091,6 @@ export type Translation = {
       empty: string;
       noMatch: string;
       loadErrorTitle: string;
-      loadErrorAction: string;
       count: PluralForms;
       of: string;
       filterMeal: string;
@@ -2591,7 +2590,6 @@ const translations: Record<Locale, Translation> = {
         empty: "Սենյակների տարբերակներ չեն գտնվել, խնդրում ենք կրկին անգամ իրականացնել որոնում։",
         noMatch: "Ֆիլտրերին համապատասխան տարբերակ չի գտնվել։",
         loadErrorTitle: "Սենյակների տարբերակները հասանելի չեն",
-        loadErrorAction: "Դիտել մանրամասները",
         count: {
           one: "{count} տարբերակ",
           other: "{count} տարբերակ",
@@ -4118,7 +4116,6 @@ const translations: Record<Locale, Translation> = {
         empty: "No room options available, please perform search again.",
         noMatch: "No room options match your selected filters.",
         loadErrorTitle: "Room options unavailable",
-        loadErrorAction: "View details",
         count: {
           one: "{count} room option found",
           other: "{count} room options found",
@@ -5653,7 +5650,6 @@ const translations: Record<Locale, Translation> = {
         empty: "Варианты номеров отсутствуют. Пожалуйста, повторите поиск.",
         noMatch: "Нет вариантов, соответствующих фильтрам.",
         loadErrorTitle: "Варианты номеров недоступны",
-        loadErrorAction: "Подробнее",
         count: {
           one: "{count} вариант номера",
           few: "{count} варианта номера",

@@ -3590,38 +3590,6 @@ main.details{
       margin-bottom: 3em;
     }
 
-    .room-options-error-trigger{
-      width: fit-content;
-      max-width: 100%;
-      margin: 0 auto 3em;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-      gap: .7em;
-      color: #fecaca;
-      text-align: center;
-
-      > .material-symbols-rounded{
-        font-size: 1.35em;
-      }
-    }
-
-    .room-options-error-trigger__button{
-      border: 1px solid rgba(254, 202, 202, 0.45);
-      border-radius: 999px;
-      background: rgba(254, 202, 202, 0.12);
-      color: #fff;
-      padding: .55em .95em;
-      font-weight: 600;
-      transition: background .2s ease, border-color .2s ease;
-
-      &:hover{
-        background: rgba(254, 202, 202, 0.2);
-        border-color: rgba(254, 202, 202, 0.75);
-      }
-    }
-
     .room-options-header{
       display: flex;
       align-items: center;
