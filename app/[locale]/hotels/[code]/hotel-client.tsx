@@ -272,6 +272,8 @@ const resolveRoomNonRefundable = (room: RefundabilitySignalSource): boolean | nu
   if (room.refundable === true) return false;
 
   const conditionSignals: Array<{ status: boolean; from: number | null; to: number | null }> = [];
+  let hasFutureNonRefundablePolicy = false;
+  let hasRefundableConditionSignal = false;
   for (const policy of room.policies ?? []) {
     if (!policy) continue;
     for (const condition of policy.conditions ?? []) {
@@ -292,7 +294,13 @@ const resolveRoomNonRefundable = (room: RefundabilitySignalSource): boolean | nu
     for (const signal of conditionSignals) {
       const startsBeforeNow = signal.from === null || signal.from <= now;
       const endsAfterNow = signal.to === null || signal.to > now;
-      if (!startsBeforeNow || !endsAfterNow) continue;
+      if (!startsBeforeNow) {
+        if (signal.status) {
+          hasFutureNonRefundablePolicy = true;
+        }
+        continue;
+      }
+      if (!endsAfterNow) continue;
       if (signal.status) {
         activeNonRefundable = true;
       } else {
@@ -301,8 +309,7 @@ const resolveRoomNonRefundable = (room: RefundabilitySignalSource): boolean | nu
     }
     if (activeNonRefundable) return true;
     if (activeRefundable) return false;
-    if (conditionSignals.some((signal) => signal.status === false)) return false;
-    if (conditionSignals.some((signal) => signal.status === true)) return true;
+    hasRefundableConditionSignal = conditionSignals.some((signal) => signal.status === false);
   }
 
   const textCandidates: Array<string | null | undefined> = [room.rateType, room.cancellationPolicy];
@@ -324,7 +331,9 @@ const resolveRoomNonRefundable = (room: RefundabilitySignalSource): boolean | nu
     if (parsed === false) hasRefundableSignal = true;
   }
 
-  return hasRefundableSignal ? false : null;
+  return hasRefundableSignal || hasRefundableConditionSignal || hasFutureNonRefundablePolicy
+    ? false
+    : null;
 };
 
 const summarizeNonRefundable = (statuses: Array<boolean | null | undefined>): boolean | null => {

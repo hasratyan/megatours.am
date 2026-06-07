@@ -4386,7 +4386,6 @@ main.details{
       gap: .5em;
       line-height: normal;
       display: flex;
-      flex: 1 1 180px;
       min-width: 0;
       max-width: 100%;
       overflow-wrap: anywhere;
@@ -4401,7 +4400,6 @@ main.details{
     }
 
     .booking-discount-detail{
-      flex-basis: 240px;
       color: #bbf7d0;
       border: 1px solid rgba(134, 239, 172, 0.24);
       background: rgba(34, 197, 94, 0.12);
