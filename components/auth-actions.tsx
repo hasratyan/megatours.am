@@ -2,8 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useCurrency } from "@/components/currency-provider";
 import { signIn, signOut, useSession } from "@/lib/auth-compat/react";
 import { useLanguage } from "@/components/language-provider";
+import { withDisplayCurrencyParam } from "@/lib/currency";
 
 const initials = (name?: string | null, fallback = "Guest") =>
   (name || fallback)
@@ -20,7 +22,10 @@ type AuthActionsProps = {
 export default function AuthActions({ onAction }: AuthActionsProps) {
   const { data: session, status } = useSession();
   const { locale, t } = useLanguage();
+  const { currency: displayCurrency } = useCurrency();
   const loading = status === "loading";
+  const homeHref = withDisplayCurrencyParam(`/${locale}`, displayCurrency);
+  const profileHref = withDisplayCurrencyParam(`/${locale}/profile`, displayCurrency);
 
   if (loading) {
     return (
@@ -34,7 +39,7 @@ export default function AuthActions({ onAction }: AuthActionsProps) {
   if (session?.user) {
     return (
       <div className="auth-user">
-        <Link href={`/${locale}/profile`} className="auth-profile" onClick={onAction}>
+        <Link href={profileHref} className="auth-profile" onClick={onAction}>
           <div className="avatar">
             {session.user.image ? (
               <Image src={session.user.image} alt={session.user.name || t.auth.signedIn} fill sizes="48px" />
@@ -47,7 +52,7 @@ export default function AuthActions({ onAction }: AuthActionsProps) {
         <button
           onClick={() => {
             onAction?.();
-            void signOut({ callbackUrl: `/${locale}` });
+            void signOut({ callbackUrl: homeHref });
           }}
           type="button"
           aria-label={t.auth.signOut}
@@ -63,7 +68,7 @@ export default function AuthActions({ onAction }: AuthActionsProps) {
     <button
       onClick={() => {
         onAction?.();
-        void signIn("google");
+        void signIn("google", { callbackUrl: homeHref });
       }}
       type="button"
       className="login"

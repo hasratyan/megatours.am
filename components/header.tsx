@@ -6,10 +6,13 @@ import AuthActions from "@/components/auth-actions";
 import CurrencySwitcher from "@/components/currency-switcher";
 import GradualBlur from "@/components/GradualBlur";
 import LanguageSwitcher from "@/components/language-switcher";
+import { useCurrency } from "@/components/currency-provider";
 import { useLanguage } from "@/components/language-provider";
+import { withDisplayCurrencyParam } from "@/lib/currency";
 
 export default function Header() {
   const { locale, t } = useLanguage();
+  const { currency: displayCurrency } = useCurrency();
   const menuId = "mobile-menu";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileHeaderHidden, setMobileHeaderHidden] = useState(false);
@@ -93,7 +96,7 @@ export default function Header() {
         opacity={1}
       />
       <div className="header-inner container">
-        <Link href={`/${locale}`} className="logo">
+        <Link href={withDisplayCurrencyParam(`/${locale}`, displayCurrency)} className="logo">
           <svg width="100%" height="100%" viewBox="0 0 1091 143" version="1.1" xmlns="http://www.w3.org/2000/svg">
             <g transform="matrix(1,0,0,1,-2523.92,-3265.57)">
                 <g transform="matrix(1,0,0,1,-8406,2337)">
@@ -156,7 +159,11 @@ export default function Header() {
           <div id={menuId} className="header-menu" data-open={mobileMenuOpen ? "true" : "false"}>
             <nav aria-label={t.header.primaryNav}>
               {t.nav.map((item) => (
-                <Link key={item.href} href={`/${locale}/${item.href}`} onClick={closeMobileMenu}>
+                <Link
+                  key={item.href}
+                  href={withDisplayCurrencyParam(`/${locale}/${item.href}`, displayCurrency)}
+                  onClick={closeMobileMenu}
+                >
                   {item.label}
                 </Link>
               ))}
