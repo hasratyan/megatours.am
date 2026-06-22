@@ -20,6 +20,7 @@ import type {
   AoryxTransferVehicle,
   BookingInsuranceTraveler,
 } from "@/types/aoryx";
+import type { MealPlanKey } from "@/lib/meal-plans";
 
 export type PackageBuilderHotelSelection = {
   selected: boolean;
@@ -34,6 +35,7 @@ export type PackageBuilderHotelSelection = {
   roomCount?: number | null;
   guestCount?: number | null;
   mealPlan?: string | null;
+  mealPlanKeys?: MealPlanKey[] | null;
   nonRefundable?: boolean | null;
   rooms?: AoryxRoomSearch[] | null;
   roomSelections?: Array<{

@@ -16,6 +16,12 @@ import { trackMetaPixelViewContent } from "@/components/meta-pixel";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
 import { metaViewContentType } from "@/lib/meta-pixel-config";
 import { formatCurrencyAmount, normalizeAmount, type AmdRates } from "@/lib/currency";
+import {
+  localizeMealPlan,
+  resolveMealPlanKey,
+  resolveMealPlanKeys,
+  type MealPlanKey,
+} from "@/lib/meal-plans";
 import { useAmdRates } from "@/lib/use-amd-rates";
 import Image from "next/image";
 import ImageGallery from "./ImageGallery";
@@ -59,21 +65,12 @@ const ALL_MEALS_FILTER = "all";
 const normalizeMealFilterValue = (value: string) =>
   value.trim().toLowerCase().replace(/\s+/g, "-");
 
-type MealPlanLabels = {
-  roomOnly: string;
-  breakfast: string;
-  halfBoard: string;
-  fullBoard: string;
-  allInclusive: string;
-  ultraAllInclusive: string;
-};
-
 type RefundabilityLabels = {
   refundable: string;
   nonRefundable: string;
 };
 
-const mealPlanFilterValues: Record<keyof MealPlanLabels, string> = {
+const mealPlanFilterValues: Record<MealPlanKey, string> = {
   roomOnly: "room-only",
   breakfast: "breakfast",
   halfBoard: "half-board",
@@ -82,61 +79,9 @@ const mealPlanFilterValues: Record<keyof MealPlanLabels, string> = {
   ultraAllInclusive: "ultra-all-inclusive",
 };
 
-const getMealPlanLabelKey = (value: string | null): keyof MealPlanLabels | null => {
-  if (!value) return null;
-  const tokens = value
-    .trim()
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
-  if (tokens.length === 0) return null;
-  const tokenSet = new Set(tokens);
-
-  const has = (token: string) => tokenSet.has(token);
-
-  if (has("uai") || has("ultraallinclusive") || (has("ultra") && has("all") && has("inclusive"))) {
-    return "ultraAllInclusive";
-  }
-  if (has("ai") || has("allinclusive") || (has("all") && has("inclusive"))) {
-    return "allInclusive";
-  }
-  if (has("fb") || has("fullboard") || (has("full") && has("board"))) {
-    return "fullBoard";
-  }
-  if (has("hb") || has("halfboard") || (has("half") && has("board"))) {
-    return "halfBoard";
-  }
-  if (has("breakfast") && has("lunch") && has("dinner")) {
-    return "fullBoard";
-  }
-  if ((has("breakfast") && has("dinner")) || (has("lunch") && has("dinner"))) {
-    return "halfBoard";
-  }
-  if (
-    has("bb") ||
-    has("bedbreakfast") ||
-    has("bedandbreakfast") ||
-    (has("bed") && has("breakfast")) ||
-    has("breakfast")
-  ) {
-    return "breakfast";
-  }
-  if (has("ro") || has("roomonly") || (has("room") && has("only"))) {
-    return "roomOnly";
-  }
-  return null;
-};
-
-const localizeMealPlan = (value: string | null, labels: MealPlanLabels) => {
-  if (!value) return null;
-  const labelKey = getMealPlanLabelKey(value);
-  if (labelKey) return labels[labelKey];
-  return value;
-};
-
 const getMealFilterValue = (value: string | null): string | null => {
   if (!value) return null;
-  const labelKey = getMealPlanLabelKey(value);
+  const labelKey = resolveMealPlanKey(value);
   if (labelKey) return mealPlanFilterValues[labelKey];
   const normalized = normalizeMealFilterValue(value);
   return normalized.length > 0 ? normalized : null;
@@ -2260,6 +2205,7 @@ export default function HotelClient({
       const selectionNationality = parsed.payload?.nationality ?? null;
       const selectionRooms = parsed.payload?.rooms ?? null;
       const selectionMealPlan = getGroupMealLabel(group);
+      const selectionMealPlanKeys = resolveMealPlanKeys(selectionMealPlan);
       const selectionKey = rateKeys.join("|");
       const selectionBasePrice =
         typeof group.totalPrice === "number" && Number.isFinite(group.totalPrice)
@@ -2331,6 +2277,7 @@ export default function HotelClient({
         roomCount,
         guestCount,
         mealPlan: selectionMealPlan,
+        mealPlanKeys: selectionMealPlanKeys.length > 0 ? selectionMealPlanKeys : null,
         nonRefundable: selectionNonRefundable,
         rooms: selectionRooms,
         roomSelections: selectionRoomSelections,
@@ -2655,11 +2602,13 @@ export default function HotelClient({
       )
     );
     const mealPlan = mealPlans.length > 0 ? mealPlans.join(" / ") : null;
+    const mealPlanKeys = Array.from(new Set(mealPlans.flatMap((mealPlanValue) => resolveMealPlanKeys(mealPlanValue))));
 
     const payload: BookingPayloadInput = {
       hotelCode,
       hotelName: hotelInfo?.name,
       mealPlan,
+      mealPlanKeys: mealPlanKeys.length > 0 ? mealPlanKeys : null,
       checkInDate: parsed.payload?.checkInDate,
       checkOutDate: parsed.payload?.checkOutDate,
       destinationCode: destination,

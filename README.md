@@ -49,7 +49,7 @@ EFES_PASSWORD=your-efes-password
 EFES_COMPANY_ID=your-efes-company-id
 EFES_POLICY_TEMPLATE_DESCRIPTION=229
 EFES_TIMEOUT_MS_RAW=15000
-NEXT_PUBLIC_ZOHO_SALESIQ_SCRIPT_URL=https://salesiq.zohopublic.com/widget?wc=your-widget-code
+NEXT_PUBLIC_ZOHO_SALESIQ_SCRIPT_URL=https://salesiq.zohopublic.com/widget?wc=siq657d85d750568ce61ba86101c97b51d0aef0d66250c369dfc4432295129ed78a
 NEXT_PUBLIC_ZOHO_SALESIQ_FALLBACK_URL=https://your-support-page-or-salesiq-link
 ```
 

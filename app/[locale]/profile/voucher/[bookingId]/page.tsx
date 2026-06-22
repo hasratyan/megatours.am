@@ -10,6 +10,7 @@ import { resolveBookingDisplayTotal } from "@/lib/booking-total";
 import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
 import { applyMarkup } from "@/lib/pricing-utils";
 import { getAmdRates, getAoryxHotelPlatformFee } from "@/lib/pricing";
+import { localizeMealPlan } from "@/lib/meal-plans";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { resolveBookingStatusKey } from "@/lib/booking-status";
@@ -46,15 +47,6 @@ type ServiceCard = {
   title: string;
   price: string;
   details: string[];
-};
-
-type MealPlanLabels = {
-  roomOnly: string;
-  breakfast: string;
-  halfBoard: string;
-  fullBoard: string;
-  allInclusive: string;
-  ultraAllInclusive: string;
 };
 
 type StoredEfesPolicy = {
@@ -208,61 +200,6 @@ const toOptionalText = (value: unknown): string | null => {
     return String(value);
   }
   return null;
-};
-
-const localizeSingleMealPlan = (value: string, labels: MealPlanLabels) => {
-  const tokens = value
-    .trim()
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
-  if (tokens.length === 0) return value;
-  const tokenSet = new Set(tokens);
-
-  const has = (token: string) => tokenSet.has(token);
-
-  if (has("uai") || has("ultraallinclusive") || (has("ultra") && has("all") && has("inclusive"))) {
-    return labels.ultraAllInclusive;
-  }
-  if (has("ai") || has("allinclusive") || (has("all") && has("inclusive"))) {
-    return labels.allInclusive;
-  }
-  if (has("fb") || has("fullboard") || (has("full") && has("board"))) {
-    return labels.fullBoard;
-  }
-  if (has("hb") || has("halfboard") || (has("half") && has("board"))) {
-    return labels.halfBoard;
-  }
-  if (has("breakfast") && has("lunch") && has("dinner")) {
-    return labels.fullBoard;
-  }
-  if ((has("breakfast") && has("dinner")) || (has("lunch") && has("dinner"))) {
-    return labels.halfBoard;
-  }
-  if (
-    has("bb") ||
-    has("bedbreakfast") ||
-    has("bedandbreakfast") ||
-    (has("bed") && has("breakfast")) ||
-    has("breakfast")
-  ) {
-    return labels.breakfast;
-  }
-  if (has("ro") || has("roomonly") || (has("room") && has("only"))) {
-    return labels.roomOnly;
-  }
-
-  return value;
-};
-
-const localizeMealPlan = (value: string | null, labels: MealPlanLabels) => {
-  if (!value) return null;
-  const parts = value
-    .split("/")
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (parts.length === 0) return value;
-  return parts.map((part) => localizeSingleMealPlan(part, labels)).join(" / ");
 };
 
 const parseStoredEfesPolicies = (value: unknown): StoredEfesPolicy[] => {
@@ -516,7 +453,11 @@ export default async function VoucherPage({ params }: PageProps) {
     ? t.profile.voucher.addons.helper
     : t.profile.voucher.addons.unavailableHelper;
   const manageAddonsHref = `/${resolvedLocale}/profile/voucher/${encodeURIComponent(bookingId)}/add-services`;
-  const mealPlanLabel = localizeMealPlan(payload.mealPlan ?? null, t.hotel.roomOptions.mealPlans);
+  const mealPlanLabel = localizeMealPlan(
+    payload.mealPlan ?? null,
+    t.hotel.roomOptions.mealPlans,
+    payload.mealPlanKeys ?? null
+  );
 
   const serviceCards: ServiceCard[] = [
     {

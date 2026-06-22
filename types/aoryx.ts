@@ -1,4 +1,5 @@
 // Aoryx API Types
+import type { MealPlanKey } from "@/lib/meal-plans";
 
 // Room search configuration
 export interface AoryxRoomSearch {
@@ -598,6 +599,7 @@ export interface AoryxBookingPayload {
   hotelCode: string;
   hotelName?: string | null;
   mealPlan?: string | null;
+  mealPlanKeys?: MealPlanKey[] | null;
   checkInDate?: string | null;
   checkOutDate?: string | null;
   destinationCode: string;

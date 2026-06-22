@@ -1,6 +1,7 @@
 import type { AoryxBookingPayload, AoryxTransferChargeType, AoryxTransferType } from "@/types/aoryx";
 import type { StoredPrebookState } from "@/app/api/aoryx/_shared";
 import { decodeRateToken, hashRateKey, isRateToken } from "@/lib/aoryx-rate-tokens";
+import { resolveMealPlanKey, resolveMealPlanKeys, type MealPlanKey } from "@/lib/meal-plans";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -17,6 +18,27 @@ const sanitizeString = (value: unknown): string | undefined => {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const parseMealPlanKeys = (value: unknown, fallbackMealPlan?: string | null): MealPlanKey[] | null => {
+  if (Array.isArray(value)) {
+    const keys = Array.from(
+      new Set(
+        value
+          .map((item) => (typeof item === "string" ? resolveMealPlanKey(item) : null))
+          .filter((key): key is MealPlanKey => Boolean(key))
+      )
+    );
+    if (keys.length > 0) return keys;
+  }
+
+  if (typeof value === "string") {
+    const keys = resolveMealPlanKeys(value);
+    if (keys.length > 0) return keys;
+  }
+
+  const fallbackKeys = resolveMealPlanKeys(fallbackMealPlan);
+  return fallbackKeys.length > 0 ? fallbackKeys : null;
 };
 
 const normalizeGender = (value: unknown): "M" | "F" | null => {
@@ -635,6 +657,7 @@ export const parseBookingPayload = (body: unknown, sessionId?: string): AoryxBoo
 
   const hotelName = sanitizeString(record.hotelName);
   const mealPlan = sanitizeString(record.mealPlan);
+  const mealPlanKeys = parseMealPlanKeys(record.mealPlanKeys, mealPlan);
   const checkInDate = sanitizeString(record.checkInDate);
   const checkOutDate = sanitizeString(record.checkOutDate);
 
@@ -670,6 +693,7 @@ export const parseBookingPayload = (body: unknown, sessionId?: string): AoryxBoo
     hotelCode,
     hotelName,
     mealPlan,
+    mealPlanKeys,
     checkInDate,
     checkOutDate,
     destinationCode,

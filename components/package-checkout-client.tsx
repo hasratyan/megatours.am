@@ -15,6 +15,7 @@ import { ApiError, postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { Locale as AppLocale } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
+import { localizeMealPlan, resolveMealPlanKeys } from "@/lib/meal-plans";
 import { resolveCountryAlpha2 } from "@/lib/countries";
 import { sanitizeLeadingZeroNumberInput } from "@/lib/number-input";
 import { buildSearchQuery } from "@/lib/search-query";
@@ -551,61 +552,6 @@ const serializeInsuranceTravelers = (
     | null
     | undefined
 ) => JSON.stringify((travelers ?? []).map((traveler) => serializeInsuranceTraveler(traveler)));
-
-type MealPlanLabels = {
-  roomOnly: string;
-  breakfast: string;
-  halfBoard: string;
-  fullBoard: string;
-  allInclusive: string;
-  ultraAllInclusive: string;
-};
-
-const localizeMealPlan = (value: string | null, labels: MealPlanLabels) => {
-  if (!value) return null;
-  const tokens = value
-    .trim()
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
-  if (tokens.length === 0) return value;
-  const tokenSet = new Set(tokens);
-
-  const has = (token: string) => tokenSet.has(token);
-
-  if (has("uai") || has("ultraallinclusive") || (has("ultra") && has("all") && has("inclusive"))) {
-    return labels.ultraAllInclusive;
-  }
-  if (has("ai") || has("allinclusive") || (has("all") && has("inclusive"))) {
-    return labels.allInclusive;
-  }
-  if (has("fb") || has("fullboard") || (has("full") && has("board"))) {
-    return labels.fullBoard;
-  }
-  if (has("hb") || has("halfboard") || (has("half") && has("board"))) {
-    return labels.halfBoard;
-  }
-  if (has("breakfast") && has("lunch") && has("dinner")) {
-    return labels.fullBoard;
-  }
-  if ((has("breakfast") && has("dinner")) || (has("lunch") && has("dinner"))) {
-    return labels.halfBoard;
-  }
-  if (
-    has("bb") ||
-    has("bedbreakfast") ||
-    has("bedandbreakfast") ||
-    (has("bed") && has("breakfast")) ||
-    has("breakfast")
-  ) {
-    return labels.breakfast;
-  }
-  if (has("ro") || has("roomonly") || (has("room") && has("only"))) {
-    return labels.roomOnly;
-  }
-
-  return value;
-};
 
 const splitNameParts = (fullName: string | null | undefined) => {
   const parts = fullName?.trim().split(/\s+/).filter(Boolean) ?? [];
@@ -2537,6 +2483,13 @@ export default function PackageCheckoutClient({
         hotelCode,
         hotelName: hotelSelection.hotelName ?? null,
         mealPlan: hotelSelection.mealPlan ?? null,
+        mealPlanKeys:
+          hotelSelection.mealPlanKeys && hotelSelection.mealPlanKeys.length > 0
+            ? hotelSelection.mealPlanKeys
+            : (() => {
+                const resolvedKeys = resolveMealPlanKeys(hotelSelection.mealPlan);
+                return resolvedKeys.length > 0 ? resolvedKeys : null;
+              })(),
         checkInDate: hotelSelection.checkInDate ?? null,
         checkOutDate: hotelSelection.checkOutDate ?? null,
         destinationCode,
@@ -2914,7 +2867,11 @@ export default function PackageCheckoutClient({
       typeof hotel?.roomCount === "number" ? hotel.roomCount.toString() : null
     );
     if (roomLine) hotelDetails.push(roomLine);
-    const mealPlanLabel = localizeMealPlan(hotel?.mealPlan ?? null, t.hotel.roomOptions.mealPlans);
+    const mealPlanLabel = localizeMealPlan(
+      hotel?.mealPlan ?? null,
+      t.hotel.roomOptions.mealPlans,
+      hotel?.mealPlanKeys ?? null
+    );
     const mealPlanLine = buildDetailLine(t.hotel.booking.mealPlanLabel, mealPlanLabel);
     if (mealPlanLine) hotelDetails.push(mealPlanLine);
     const refundabilityLabel =

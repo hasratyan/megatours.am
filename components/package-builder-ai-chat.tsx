@@ -4,6 +4,7 @@ import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useS
 import { getJson, postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { Locale as AppLocale } from "@/lib/i18n";
+import { resolveMealPlanKeys } from "@/lib/meal-plans";
 import type {
   PackageBuilderHotelSelection,
   PackageBuilderState,
@@ -329,6 +330,10 @@ const buildPackageStateFromDraft = (draft: PackageAssistantDraft): PackageBuilde
       roomCount,
       guestCount,
       mealPlan: draft.hotel.mealPlan ?? null,
+      mealPlanKeys: (() => {
+        const mealPlanKeys = resolveMealPlanKeys(draft.hotel.mealPlan);
+        return mealPlanKeys.length > 0 ? mealPlanKeys : null;
+      })(),
       nonRefundable: draft.hotel.nonRefundable ?? null,
       price: draft.hotel.price ?? null,
       currency: draft.hotel.currency ?? null,
