@@ -9507,13 +9507,24 @@ select:focus-visible {
   border: 1px solid #fff3;
   padding: 0.75em 1em;
   border-radius: 0.75em;
+  cursor: pointer;
+
+  &:has(input[value="idram"]):hover{
+    background: #f973161f;
+  }
 
   &:has(input[value="idram"]:checked){
     border-color: #f97316;
+    background: #f973161f;
+  }
+
+  &:has(input[value="idbank_card"]):hover{
+    background: #38bdf81f;
   }
 
   &:has(input[value="idbank_card"]:checked){
     border-color: #38bdf8;
+    background: #38bdf81f;
   }
 
   input[value="idram"]{
