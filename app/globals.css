@@ -9493,7 +9493,7 @@ select:focus-visible {
 
 .checkout-payment{
   display: grid;
-  gap: 0.8rem;
+  gap: 1rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid #94a3b833;
 }
@@ -9503,6 +9503,19 @@ select:focus-visible {
   align-items: center;
   gap: 0.5rem;
   color: rgba(226, 232, 240, 0.9);
+  display: flex;
+  border: 1px solid #fff3;
+  padding: 0.75em 1em;
+  border-radius: 0.75em;
+
+  &:has(input[value="idram"]:checked){
+    border-color: #f97316;
+  }
+
+  &:has(input[value="card"]:checked){
+    border-color: #38bdf8;
+  }
+
   input[value="idram"]{
     accent-color: #f97316;
   }
