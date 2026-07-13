@@ -15,12 +15,36 @@ type AoryxEndpointErrorLogInput = {
   context?: Record<string, unknown>;
 };
 
+type AoryxEndpointErrorLogEntry = {
+  loggedAt: string;
+  requestId: string;
+  endpoint: string;
+  phase: string | null;
+  statusCode: number | null;
+  code: string | null;
+  message: string;
+  context: unknown;
+  payload: unknown;
+  response: unknown;
+  error: unknown;
+};
+
 const AORYX_ERROR_LOG_PATH = path.join(process.cwd(), "logs", "aoryx-erros.log");
 const AORYX_ERROR_EMAIL_TO = "contracting8@aoryx.ae";
 const AORYX_ERROR_EMAIL_FROM = "MEGATOURS | Support <support@megatours.am>";
 const MAX_STRING_LENGTH = 500;
 const MAX_ARRAY_ITEMS = 8;
 const MAX_DEPTH = 4;
+
+const INTERNAL_REQUEST_ERROR_PATTERNS = [
+  /checkindate\s+is\s+less\s+than\s+current\s+date/i,
+  /checkoutdate\s+is\s+less\s+than\s+current\s+date/i,
+  /check\s+in\s+date\s+is\s+less\s+than\s+current\s+date/i,
+  /check\s+out\s+date\s+is\s+less\s+than\s+current\s+date/i,
+  /check\s+in\s+date\s+cannot\s+be\s+in\s+the\s+past/i,
+  /check\s+out\s+date\s+cannot\s+be\s+in\s+the\s+past/i,
+  /check\s+out\s+date\s+must\s+be\s+after\s+check\s+in\s+date/i,
+];
 
 const shouldRedactKey = (key: string) =>
   /api[-_]?key|authorization|password|secret|token|email|phone|first[-_]?name|last[-_]?name|guest/i.test(key);
@@ -90,20 +114,36 @@ const shouldSendAoryxErrorEmail = () => {
   return process.env.NODE_ENV === "production";
 };
 
-const sendAoryxErrorEmail = (entry: {
-  loggedAt: string;
-  requestId: string;
-  endpoint: string;
-  phase: string | null;
-  statusCode: number | null;
-  code: string | null;
-  message: string;
-  context: unknown;
-  payload: unknown;
-  response: unknown;
-  error: unknown;
-}) => {
+const errorTextMatches = (value: unknown, pattern: RegExp) => {
+  if (typeof value !== "string" || value.trim().length === 0) return false;
+  const normalized = value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim();
+  return pattern.test(value) || pattern.test(normalized);
+};
+
+const shouldSuppressAoryxErrorEmail = (entry: AoryxEndpointErrorLogEntry) => {
+  const values = [
+    entry.message,
+    entry.code,
+    entry.response ? JSON.stringify(entry.response) : "",
+    entry.error ? JSON.stringify(entry.error) : "",
+  ];
+
+  return values.some((value) => INTERNAL_REQUEST_ERROR_PATTERNS.some((pattern) => errorTextMatches(value, pattern)));
+};
+
+const sendAoryxErrorEmail = (entry: AoryxEndpointErrorLogEntry) => {
   if (!shouldSendAoryxErrorEmail()) return;
+  if (shouldSuppressAoryxErrorEmail(entry)) {
+    console.info("[Aoryx][error-email] Suppressed vendor email for internal request validation error", {
+      requestId: entry.requestId,
+      endpoint: entry.endpoint,
+      message: entry.message,
+    });
+    return;
+  }
   if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_SUPPORT_USER || !process.env.SMTP_SUPPORT_PASS) {
     console.error("[Aoryx][error-email] Missing support SMTP configuration; cannot send Aoryx error email");
     return;
