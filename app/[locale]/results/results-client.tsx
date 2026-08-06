@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildSearchQuery, parseSearchParams } from "@/lib/search-query";
@@ -236,7 +237,7 @@ export default function ResultsClient({
       const nextHref = withDisplayCurrencyParam(
         nextQuery ? `${resultsPath}?${nextQuery}` : resultsPath,
         displayCurrency
-      );
+      ) as Route;
       document.cookie = "megatours-results-csr=1;path=/;max-age=5;SameSite=Lax";
       startTransition(() => {
         router.push(nextHref);
@@ -651,7 +652,7 @@ export default function ResultsClient({
         <div className="error-container">
           <Image src="/images/icons/error.gif" alt={t.results.errorAlt} width={100} height={100} unoptimized/>
           <p>{finalError}</p>
-          <Link href="/"><span className="material-symbols-rounded">arrow_back</span>{t.common.backToSearch}</Link>
+          <Link href={`/${locale}` as Route}><span className="material-symbols-rounded">arrow_back</span>{t.common.backToSearch}</Link>
         </div>
       ) : (
         <div className="container">
@@ -738,12 +739,12 @@ export default function ResultsClient({
                     : null;
                 const detailHref =
                   detailQuery && hotel.code
-                    ? withDisplayCurrencyParam(
+                    ? (withDisplayCurrencyParam(
                         `/${locale}/hotels/${hotel.code}?${detailQuery}${
                           result?.searchToken ? `&searchToken=${encodeURIComponent(result.searchToken)}` : ""
                         }`,
                         displayCurrency
-                      )
+                      ) as Route)
                     : null;
 
                 return (

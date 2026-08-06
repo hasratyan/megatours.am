@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { cookies } from "next/headers";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
@@ -9,6 +10,23 @@ import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
 import { calculateBookingTotal } from "@/lib/booking-total";
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { formatCurrencyAmount } from "@/lib/currency";
+import type { AoryxBookingPayload } from "@/types/aoryx";
+
+type PaymentRecord = {
+  userId?: string | null;
+  payload?: AoryxBookingPayload | null;
+  amount?: {
+    value?: number | null;
+    currency?: string | null;
+    currencyCode?: string | null;
+  } | null;
+};
+
+type DestinationSearchRecord = {
+  resultSummary?: {
+    destinationName?: string | null;
+  } | null;
+};
 
 const resolveLocaleFromParam = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
@@ -75,7 +93,7 @@ export default async function PaymentFailPage({
   const session = await getServerSession(authOptions);
   const sessionUserId = session?.user?.id ?? null;
 
-  let bookingRecord: any = null;
+  let bookingRecord: PaymentRecord | null = null;
   let hotelName = null;
   let destinationName: string | null = null;
   let errorKey: keyof typeof t.payment.errors | null = null;
@@ -85,11 +103,11 @@ export default async function PaymentFailPage({
   } else {
     const db = await getDb();
     if (typeof EDP_BILL_NO === "string") {
-      bookingRecord = await db.collection("idram_payments").findOne({ billNo: EDP_BILL_NO });
+      bookingRecord = await db.collection<PaymentRecord>("idram_payments").findOne({ billNo: EDP_BILL_NO });
     } else if (orderIdParam) {
-      bookingRecord = await db.collection("vpos_payments").findOne({ orderId: orderIdParam });
+      bookingRecord = await db.collection<PaymentRecord>("vpos_payments").findOne({ orderId: orderIdParam });
     } else if (orderNumberParam) {
-      bookingRecord = await db.collection("vpos_payments").findOne({ orderNumber: orderNumberParam });
+      bookingRecord = await db.collection<PaymentRecord>("vpos_payments").findOne({ orderNumber: orderNumberParam });
     }
 
     if (!bookingRecord) {
@@ -112,7 +130,7 @@ export default async function PaymentFailPage({
           ? bookingRecord.payload.destinationCode.trim()
           : "";
       if (destinationCode && sessionUserId) {
-        const destinationSearch = await db.collection("user_searches").findOne(
+        const destinationSearch = await db.collection<DestinationSearchRecord>("user_searches").findOne(
           {
             userIdString: sessionUserId,
             "resultSummary.destinationCode": destinationCode,
@@ -122,10 +140,9 @@ export default async function PaymentFailPage({
             projection: { resultSummary: 1 },
           }
         );
+        const destinationNameValue = destinationSearch?.resultSummary?.destinationName;
         const resolvedDestination =
-          typeof (destinationSearch as any)?.resultSummary?.destinationName === "string"
-            ? (destinationSearch as any).resultSummary.destinationName.trim()
-            : "";
+          typeof destinationNameValue === "string" ? destinationNameValue.trim() : "";
         destinationName = resolvedDestination || null;
       }
     }
@@ -137,7 +154,7 @@ export default async function PaymentFailPage({
         <span className="material-symbols-rounded">error</span>
         <h1>{t.profile.errors.title}</h1>
         <p>{t.payment.errors[errorKey]}</p>
-        <Link href="/" className="payment-link">
+        <Link href={`/${locale}` as Route} className="payment-link">
           <span className="material-symbols-rounded">home</span>
           {t.payment.failure.cta}
         </Link>
@@ -188,7 +205,7 @@ export default async function PaymentFailPage({
             <span>{t.profile.bookings.labels.guests}</span>
             <strong>
               {payload?.rooms.reduce(
-                (acc: number, r: any) => acc + r.adults + (r.childrenAges?.length || 0),
+                (acc, room) => acc + room.adults + (room.childrenAges?.length || 0),
                 0
               )}
             </strong>
@@ -201,7 +218,7 @@ export default async function PaymentFailPage({
         </div>
       </div>
 
-      <Link href="/" className="payment-link">
+      <Link href={`/${locale}` as Route} className="payment-link">
         <span className="material-symbols-rounded">home</span>
         {t.payment.failure.cta}
       </Link>

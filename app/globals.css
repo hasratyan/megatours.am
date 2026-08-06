@@ -8567,6 +8567,12 @@ select:focus-visible {
   align-items: center;
 }
 
+.route-loading-shell {
+  min-height: clamp(24rem, 65vh, 48rem);
+  display: grid;
+  place-items: center;
+}
+
 .loader {
   display: flex;
   flex-direction: column;

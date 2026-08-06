@@ -2,6 +2,7 @@
 
 import type { FormEvent } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCurrency } from "@/components/currency-provider";
 import { useLanguage } from "@/components/language-provider";
@@ -56,7 +57,7 @@ type BookingAddonPaymentSnapshot = {
 
 type BookingAddonsClientProps = {
   bookingId: string;
-  voucherHref: string;
+  voucherHref: Route;
   hotelContext: BookingAddonHotelContext;
   existingServices: AddonServiceKey[];
   serviceFlags: Record<AddonServiceKey, boolean>;
@@ -69,7 +70,7 @@ type ServiceCardDefinition = {
   label: string;
   description: string;
   icon: string;
-  href: string;
+  href: Route;
 };
 
 type SelectedServiceCard = {
@@ -935,7 +936,7 @@ export default function BookingAddonsClient({
         icon: serviceIconMap[serviceKey],
         href: `/${locale}/services/${serviceKey}?flow=booking_addons&bookingId=${encodeURIComponent(
           bookingId
-        )}`,
+        )}` as Route,
       })),
     [bookingId, locale, resolveServiceLabel, t]
   );

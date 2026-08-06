@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import type { Route } from "next";
 import { useSyncExternalStore } from "react";
 import { buildSearchQuery } from "@/lib/search-query";
 import type { AoryxBookingPayload, AoryxBookingResult, AoryxSearchParams } from "@/types/aoryx";
@@ -219,11 +220,17 @@ export default function ProfileView({
   const memberSince = profile?.createdAt ? formatDateSafe(profile.createdAt) : null;
   const latestBookingLabel = latestBooking ? formatDateSafe(latestBooking) : null;
 
-  const actionItems = [
+  const actionItems: Array<{
+    key: string;
+    icon: string;
+    href: Route | null;
+    disabled: boolean;
+    copy: (typeof t.profile.actions.items)[keyof typeof t.profile.actions.items];
+  }> = [
     {
       key: "newSearch",
       icon: "search",
-      href: `/${locale}#hero`,
+      href: `/${locale}#hero` as Route,
       disabled: false,
       copy: t.profile.actions.items.newSearch,
     },

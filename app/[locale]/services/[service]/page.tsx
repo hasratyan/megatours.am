@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { notFound } from "next/navigation";
 import { getServerSession } from "@/lib/auth-compat/server";
 import PackageServiceClient from "@/components/package-service-client";
@@ -136,7 +137,7 @@ export default async function ServicePage({ params, searchParams }: PageProps) {
       const hotelContext = resolveBookingAddonHotelContext(payload);
 
       if (confirmed && !canceled && modificationClosed) {
-        const voucherHref = `/${resolvedLocale}/profile/voucher/${encodeURIComponent(bookingId)}`;
+        const voucherHref = `/${resolvedLocale}/profile/voucher/${encodeURIComponent(bookingId)}` as Route;
         return (
           <main className="container payment-status failure">
             <span className="material-symbols-rounded">error</span>

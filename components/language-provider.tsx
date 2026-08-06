@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo } from "react";
+import type { Route } from "next";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { Locale, defaultLocale, locales, getTranslations } from "@/lib/i18n";
 
@@ -28,7 +29,7 @@ export function LanguageProvider({ children, initialLocale }: LanguageProviderPr
     ? paramLocale 
     : (initialLocale ?? defaultLocale);
 
-  const setLocale = (newLocale: Locale) => {
+  const setLocale = useCallback((newLocale: Locale) => {
     // Set cookie for proxy to use on next navigation
     document.cookie = `megatours-locale=${newLocale};path=/;max-age=31536000`;
     
@@ -43,10 +44,10 @@ export function LanguageProvider({ children, initialLocale }: LanguageProviderPr
     
     const queryString = typeof window !== "undefined" ? window.location.search : "";
     const newPath = segments.join("/") || `/${newLocale}`;
-    const destination = `${newPath}${queryString}`;
+    const destination = `${newPath}${queryString}` as Route;
     
     router.push(destination);
-  };
+  }, [pathname, router]);
 
   // Update document lang attribute when locale changes
   useEffect(() => {
@@ -55,7 +56,7 @@ export function LanguageProvider({ children, initialLocale }: LanguageProviderPr
 
   const value = useMemo<LanguageContextValue>(
     () => ({ locale, setLocale, t: getTranslations(locale) }),
-    [locale, pathname],
+    [locale, setLocale],
   );
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;

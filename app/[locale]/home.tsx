@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import type { Route } from "next";
 import FeaturedHotelsMarquee from "@/components/featured-hotels-marquee";
 import SearchForm from "@/components/search-form";
 import DeferredCurvedLoop from "@/components/deferred-curved-loop";
@@ -18,12 +19,12 @@ type HomeProps = {
 export default function Home({ featuredHotels, locale }: HomeProps) {
   const t = getTranslations(locale);
 
-  const resolveServiceHref = (icon: string) => {
-    if (icon === "hotel") return `/${locale}/services/hotel`;
-    if (icon === "flight") return `/${locale}/services/flight`;
-    if (icon === "directions_car") return `/${locale}/services/transfer`;
-    if (icon === "tour" || icon === "attractions") return `/${locale}/services/excursion`;
-    if (icon === "shield_with_heart") return `/${locale}/services/insurance`;
+  const resolveServiceHref = (icon: string): Route | null => {
+    if (icon === "hotel") return `/${locale}/services/hotel` as Route;
+    if (icon === "flight") return `/${locale}/services/flight` as Route;
+    if (icon === "directions_car") return `/${locale}/services/transfer` as Route;
+    if (icon === "tour" || icon === "attractions") return `/${locale}/services/excursion` as Route;
+    if (icon === "shield_with_heart") return `/${locale}/services/insurance` as Route;
     return null;
   };
 

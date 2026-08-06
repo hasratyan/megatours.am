@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signIn, useSession } from "@/lib/auth-compat/react";
@@ -1072,7 +1073,7 @@ export default function HotelClient({
       const nextQuery = nextParams.toString();
       if (nextQuery === searchParamsString) return;
 
-      const nextHref = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+      const nextHref = (nextQuery ? `${pathname}?${nextQuery}` : pathname) as Route;
       router.replace(nextHref, { scroll: false });
     },
     [pathname, router, searchParamsString]
@@ -1941,7 +1942,7 @@ export default function HotelClient({
         params.set("destinationCode", destinationCode);
       }
       const query = params.toString();
-      const nextHref = query ? `${pathname}?${query}` : pathname;
+      const nextHref = (query ? `${pathname}?${query}` : pathname) as Route;
       router.replace(nextHref, { scroll: false });
     },
     [destinationCode, hotelCode, pathname, resolveDestinationCode, router]
@@ -2761,7 +2762,7 @@ export default function HotelClient({
             <div className="results-error">
               <p>{finalError}</p>
               <div className="results-error-actions">
-                <Link href="/" className="btn btn-primary">{t.common.backToSearch}</Link>
+                <Link href={`/${locale}` as Route} className="btn btn-primary">{t.common.backToSearch}</Link>
               </div>
             </div>
           )}

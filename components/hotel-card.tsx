@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import type { Route } from "next";
 import type { FeaturedHotelCard } from "@/lib/featured-hotels";
 import type { Locale } from "@/lib/i18n";
 
@@ -25,7 +26,7 @@ type Props = {
 
 export default function HotelCard({ hotel, copy, locale }: Props) {
   const hasOldPrice = typeof hotel.oldPrice === "number" && hotel.oldPrice > 0;
-  const hotelHref = `/${locale}/hotels/${encodeURIComponent(hotel.hotelCode)}`;
+  const hotelHref = `/${locale}/hotels/${encodeURIComponent(hotel.hotelCode)}` as Route;
 
   return (
     <div className="hotel-card">

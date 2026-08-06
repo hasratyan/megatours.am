@@ -212,8 +212,11 @@ export default async function ProfilePage() {
   const serializedBookings = bookings.map((item) => {
     const payload = sanitizeBookingPayload(item.payload ?? null);
     const destinationCode = normalizeText(payload?.destinationCode);
+    const mappedDestinationName = destinationCode
+      ? destinationNameByCode.get(destinationCode)
+      : undefined;
     const destinationName =
-      (destinationCode ? destinationNameByCode.get(destinationCode) ?? null : null) ??
+      mappedDestinationName ??
       normalizeText(payload?.transferSelection?.destination?.name);
     const displayTotal =
       payload && rates

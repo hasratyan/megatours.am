@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState, useMemo, useCallback, useEffect, useRef, useId } from "react";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useCurrency } from "@/components/currency-provider";
@@ -1000,7 +1001,7 @@ export default function SearchForm({
           const query = params.toString();
           document.cookie = "megatours-results-csr=1;path=/;max-age=5;SameSite=Lax";
           // Navigate immediately - don't await, let loading.tsx show while server renders
-          router.push(withDisplayCurrencyParam(query ? `${resultsPath}?${query}` : resultsPath, displayCurrency));
+          router.push(withDisplayCurrencyParam(query ? `${resultsPath}?${query}` : resultsPath, displayCurrency) as Route);
         }
       } catch (err: unknown) {
         const message = resolveSafeErrorFromUnknown(err, copy.errors.submit);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-compat/react";
 import { useCurrency } from "@/components/currency-provider";
@@ -218,7 +219,7 @@ export default function PackageBuilder() {
     const base = `/${locale}/hotels/${selection.hotelCode}`;
     const rooms = selection.rooms ?? null;
     if (!selection.checkInDate || !selection.checkOutDate || !rooms || rooms.length === 0) {
-      return base;
+      return base as Route;
     }
     const query = buildSearchQuery({
       destinationCode: selection.destinationCode ?? undefined,
@@ -230,7 +231,7 @@ export default function PackageBuilder() {
       checkOutDate: selection.checkOutDate,
       rooms,
     });
-    return withDisplayCurrencyParam(`${base}?${query}`, displayCurrency);
+    return withDisplayCurrencyParam(`${base}?${query}`, displayCurrency) as Route;
   })();
   const flightRedirect = useMemo(
     () => buildFlightRedirectFromHotel(builderState.hotel),
@@ -540,7 +541,7 @@ export default function PackageBuilder() {
     setIsOpen((prev) => !prev);
   };
 
-  const beginNavigation = (serviceId: PackageBuilderService | null, target: string) => {
+  const beginNavigation = (serviceId: PackageBuilderService | null, target: Route) => {
     if (isPendingNavigation) return;
     setShowHotelWarning(false);
     setDisabledServiceId(null);
@@ -595,7 +596,7 @@ export default function PackageBuilder() {
       setShowHotelWarning(true);
       setDisabledServiceId(null);
       setIsOpen(true);
-      router.push(withDisplayCurrencyParam(`/${locale}#hero`, displayCurrency));
+      router.push(withDisplayCurrencyParam(`/${locale}#hero`, displayCurrency) as Route);
       return;
     }
 
@@ -605,7 +606,7 @@ export default function PackageBuilder() {
     }
 
     const target = service.id === "hotel" ? `/${locale}` : `/${locale}/services/${service.id}`;
-    beginNavigation(service.id, withDisplayCurrencyParam(target, displayCurrency));
+    beginNavigation(service.id, withDisplayCurrencyParam(target, displayCurrency) as Route);
   };
 
   const handleRemove = (serviceId: PackageBuilderService) => {
@@ -636,7 +637,7 @@ export default function PackageBuilder() {
       setShowHotelWarning(true);
       return;
     }
-    beginNavigation(null, withDisplayCurrencyParam(`/${locale}/checkout`, displayCurrency));
+    beginNavigation(null, withDisplayCurrencyParam(`/${locale}/checkout`, displayCurrency) as Route);
   };
 
   const toggleLabel = hasAnySelection
@@ -783,8 +784,8 @@ export default function PackageBuilder() {
                           : service.id === "excursion"
                             ? selectedExcursionLabel
                         : null;
-                const viewHref =
-                  service.id === "hotel" ? hotelViewHref : `/${locale}/services/${service.id}`;
+                const viewHref: Route | null =
+                  service.id === "hotel" ? hotelViewHref : `/${locale}/services/${service.id}` as Route;
                 const showView = isSelected && Boolean(viewHref);
                 const showChange = service.id === "hotel" && isSelected;
                 const canRemove = isSelected;
@@ -865,7 +866,7 @@ export default function PackageBuilder() {
                                 disabled={isPendingNavigation}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  beginNavigation(service.id, `/${locale}`);
+                                  beginNavigation(service.id, `/${locale}` as Route);
                                 }}
                               >
                                 {t.packageBuilder.changeHotel}

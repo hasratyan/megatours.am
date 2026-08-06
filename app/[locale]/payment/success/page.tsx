@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { cookies } from "next/headers";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
@@ -226,7 +227,7 @@ export default async function PaymentSuccessPage({
         <span className="material-symbols-rounded">error</span>
         <h1>{t.profile.errors.title}</h1>
         <p>{t.payment.errors[errorKey]}</p>
-        <Link href="/" className="payment-link">
+        <Link href={`/${locale}` as Route} className="payment-link">
           <span className="material-symbols-rounded">home</span>
           {t.payment.failure.cta}
         </Link>

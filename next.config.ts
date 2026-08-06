@@ -7,6 +7,13 @@ const withBundleAnalyzer = bundleAnalyzer({
 });
 
 const nextConfig: NextConfig = {
+  typedRoutes: true,
+  reactCompiler: {
+    compilationMode: "annotation",
+  },
+  experimental: {
+    turbopackRustReactCompiler: true,
+  },
   turbopack: {
     root: path.resolve(process.cwd()),
   },

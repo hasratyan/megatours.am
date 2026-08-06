@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Images from "next/image";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
-import { toAbsoluteUrl } from "@/lib/metadata";
 
 type FooterProps = {
   locale?: string;
@@ -91,8 +90,8 @@ const contactLinks = [
 export default function Footer({ locale }: FooterProps) {
   const resolvedLocale = resolveLocale(locale);
   const t = getTranslations(resolvedLocale);
-  const refundPolicyUrl = toAbsoluteUrl(`/${resolvedLocale}/refund-policy`);
-  const privacyPolicyUrl = toAbsoluteUrl(`/${resolvedLocale}/privacy-policy`);
+  const refundPolicyUrl = `/${resolvedLocale}/refund-policy` as const;
+  const privacyPolicyUrl = `/${resolvedLocale}/privacy-policy` as const;
 
   return (
     <footer>

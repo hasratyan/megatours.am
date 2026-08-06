@@ -3,6 +3,7 @@
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { useSession } from "@/lib/auth-compat/react";
 import Select, {
   type CSSObjectWithLabel,
@@ -1092,7 +1093,7 @@ export default function PackageCheckoutClient({
       };
     });
   }, [transfer?.includeReturn]);
-  const prebookReturnHref = useMemo(() => {
+  const prebookReturnHref = useMemo<Route | null>(() => {
     if (!hotel?.selected) return null;
     const hotelCode = hotel.hotelCode?.trim() ?? "";
     const checkInDate = hotel.checkInDate?.trim() ?? "";
@@ -1111,7 +1112,7 @@ export default function PackageCheckoutClient({
       rooms,
     });
 
-    return `/${locale}/hotels/${encodeURIComponent(hotelCode)}?${query}`;
+    return `/${locale}/hotels/${encodeURIComponent(hotelCode)}?${query}` as Route;
   }, [hotel, locale]);
   const leadGuestId =
     guestDetails.flatMap((room) => room.guests).find((guest) => guest.type === "Adult")?.id ??

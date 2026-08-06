@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { notFound } from "next/navigation";
 import { getServerSession } from "@/lib/auth-compat/server";
 import BookingAddonsClient from "@/components/booking-addons-client";
@@ -148,7 +149,7 @@ export default async function BookingAddonsPage({ params }: PageProps) {
   const confirmed = isBookingConfirmed(booking);
   const canceled = isBookingCanceled(booking);
   const modificationClosed = isBookingModificationClosed(payload.checkOutDate);
-  const voucherHref = `/${resolvedLocale}/profile/voucher/${encodeURIComponent(bookingId)}`;
+  const voucherHref = `/${resolvedLocale}/profile/voucher/${encodeURIComponent(bookingId)}` as Route;
 
   if (!confirmed || canceled || modificationClosed) {
     return (

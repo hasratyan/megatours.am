@@ -956,6 +956,7 @@ export type Translation = {
     locationSearchCta: string;
   };
   common: {
+    loading: string;
     backToSearch: string;
     scrollTop: string;
     contact: string;
@@ -2448,6 +2449,7 @@ const translations: Record<Locale, Translation> = {
     locationSearchCta: "Փաթեթ դեպի Աբու Դաբի",
   },
   common: {
+      loading: "Բեռնվում է...",
       backToSearch: "Վերադառնալ որոնմանը",
       scrollTop: "Վերև գնալ",
       contact: "Կապվել",
@@ -3976,6 +3978,7 @@ const translations: Record<Locale, Translation> = {
     locationSearchCta: "Package for Abu Dhabi",
   },
   common: {
+      loading: "Loading...",
       backToSearch: "Back to Search",
       scrollTop: "Scroll to top",
       contact: "Contact",
@@ -5510,6 +5513,7 @@ const translations: Record<Locale, Translation> = {
     locationSearchCta: "Пакет для Абу-Даби",
   },
   common: {
+      loading: "Загрузка...",
       backToSearch: "Вернуться к поиску",
       scrollTop: "Наверх",
       contact: "Связаться",

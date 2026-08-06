@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import type { Route } from "next";
 import { useCurrency } from "@/components/currency-provider";
 import { signIn, signOut, useSession } from "@/lib/auth-compat/react";
 import { useLanguage } from "@/components/language-provider";
@@ -20,12 +21,14 @@ type AuthActionsProps = {
 };
 
 export default function AuthActions({ onAction }: AuthActionsProps) {
+  "use memo";
+
   const { data: session, status } = useSession();
   const { locale, t } = useLanguage();
   const { currency: displayCurrency } = useCurrency();
   const loading = status === "loading";
-  const homeHref = withDisplayCurrencyParam(`/${locale}`, displayCurrency);
-  const profileHref = withDisplayCurrencyParam(`/${locale}/profile`, displayCurrency);
+  const homeHref = withDisplayCurrencyParam(`/${locale}`, displayCurrency) as Route;
+  const profileHref = withDisplayCurrencyParam(`/${locale}/profile`, displayCurrency) as Route;
 
   if (loading) {
     return (

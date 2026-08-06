@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
+import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type VoucherActionsProps = {
   downloadLabel: string;
   backLabel: string;
-  profileHref: string;
+  profileHref: Route;
 };
 
 export default function VoucherActions({

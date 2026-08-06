@@ -1,5 +1,5 @@
 import RouteLoading from "@/components/route-loading";
 
-export default function ResultsLoading() {
+export default function HotelLoading() {
   return <RouteLoading className="results" />;
 }

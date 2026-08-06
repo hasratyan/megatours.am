@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { Route } from "next";
 import { getServerSession } from "@/lib/auth-compat/server";
 import ProfileSignIn from "@/components/profile-signin";
 import VoucherActions from "@/components/voucher-actions";
@@ -452,7 +453,7 @@ export default async function VoucherPage({ params }: PageProps) {
   const addonHelperText = canManageAddons
     ? t.profile.voucher.addons.helper
     : t.profile.voucher.addons.unavailableHelper;
-  const manageAddonsHref = `/${resolvedLocale}/profile/voucher/${encodeURIComponent(bookingId)}/add-services`;
+  const manageAddonsHref = `/${resolvedLocale}/profile/voucher/${encodeURIComponent(bookingId)}/add-services` as Route;
   const mealPlanLabel = localizeMealPlan(
     payload.mealPlan ?? null,
     t.hotel.roomOptions.mealPlans,
@@ -758,7 +759,7 @@ export default async function VoucherPage({ params }: PageProps) {
           <VoucherActions
             downloadLabel={t.profile.voucher.downloadPdf}
             backLabel={t.profile.voucher.backToProfile}
-            profileHref={`/${resolvedLocale}/profile`}
+            profileHref={`/${resolvedLocale}/profile` as Route}
           />
         </Suspense>
 

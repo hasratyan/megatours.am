@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import type { Route } from "next";
 import { DateRange, type Range, type RangeKeyDict } from "react-date-range";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
@@ -2260,10 +2261,10 @@ export default function PackageServiceClient({
   const pageCopy = t.packageBuilder.pages[serviceKey];
   const showFeaturedHotelsEmptyState = serviceKey === "hotel" && featuredHotels.length > 0;
   const bookingAddonsHref = bookingAddonContext
-    ? withDisplayCurrencyParam(
+    ? (withDisplayCurrencyParam(
         `/${locale}/profile/voucher/${encodeURIComponent(bookingAddonContext.bookingId)}/add-services`,
         displayCurrency
-      )
+      ) as Route)
     : null;
   const bookingAddonsHotelLabel = bookingAddonContext?.hotelContext.hotelName?.trim() ?? null;
 
