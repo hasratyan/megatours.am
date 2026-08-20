@@ -4,7 +4,12 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Select, {
+  type CSSObjectWithLabel,
+  type SingleValue,
+  type StylesConfig,
+} from "react-select";
 import { useCurrency } from "@/components/currency-provider";
 import { useLanguage } from "@/components/language-provider";
 import { ApiError, postJson } from "@/lib/api-helpers";
@@ -18,6 +23,18 @@ import {
   resolveBookingAddonPaymentMethods,
   type BookingAddonPaymentMethod,
 } from "@/lib/booking-addon-payment-methods";
+import { resolveCountryAlpha2 } from "@/lib/countries";
+import {
+  EFES_DEFAULT_COUNTRY_ID,
+  EFES_DEFAULT_REGION_ID,
+  fetchEfesCountries,
+  fetchEfesCountryLocations,
+  getEfesCityOptions,
+  getEfesCountryOptions,
+  getEfesRegionOptions,
+  type EfesCountry,
+  type EfesCountryLocation,
+} from "@/lib/efes-locations";
 import type { PaymentMethodFlags } from "@/lib/payment-method-flags";
 import {
   PACKAGE_BUILDER_SESSION_MS,
@@ -109,6 +126,14 @@ type InsuranceTravelerFieldErrors = {
   passportExpiryDate?: string;
 };
 
+type AddressSelectOption = {
+  value: string;
+  label: string;
+  flag?: string;
+  alpha2?: string | null;
+  alpha3?: string | null;
+};
+
 const intlLocales = {
   hy: "hy-AM",
   en: "en-GB",
@@ -121,6 +146,82 @@ const DEFAULT_INSURANCE_CHILD_AGE = 8;
 const MAX_INSURANCE_AGE_YEARS = 100;
 const MAX_INSURANCE_CHILD_AGE_YEARS = 18;
 const ISO_DATE_INPUT_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const checkoutAddressSelectStyles: StylesConfig<AddressSelectOption, false> = {
+  container: (base: CSSObjectWithLabel) => ({
+    ...base,
+    width: "100%",
+  }),
+  control: (base: CSSObjectWithLabel, state) => ({
+    ...base,
+    minHeight: "42px",
+    borderRadius: "0.75rem",
+    borderColor: state.isFocused ? "rgba(124, 242, 212, 0.7)" : "#fff4",
+    background: "#ffffff1f",
+    color: "#f8fafc",
+    boxShadow: state.isFocused ? "0 0 0 5px rgba(124, 242, 212, 0.15)" : "none",
+    "&:hover": {
+      borderColor: state.isFocused ? "rgba(124, 242, 212, 0.7)" : "#fff6",
+    },
+  }),
+  valueContainer: (base: CSSObjectWithLabel) => ({
+    ...base,
+    padding: "0.2rem 0.8rem",
+  }),
+  singleValue: (base: CSSObjectWithLabel) => ({
+    ...base,
+    color: "#f8fafc",
+  }),
+  input: (base: CSSObjectWithLabel) => ({
+    ...base,
+    color: "#f8fafc",
+  }),
+  placeholder: (base: CSSObjectWithLabel) => ({
+    ...base,
+    color: "rgba(226, 232, 240, 0.75)",
+  }),
+  menu: (base: CSSObjectWithLabel) => ({
+    ...base,
+    zIndex: 40,
+    borderRadius: "0.75rem",
+    overflow: "hidden",
+    background: "#0f172a",
+    border: "1px solid rgba(148, 163, 184, 0.45)",
+  }),
+  menuList: (base: CSSObjectWithLabel) => ({
+    ...base,
+    padding: "0.35rem",
+  }),
+  option: (base: CSSObjectWithLabel, state) => ({
+    ...base,
+    borderRadius: "0.55rem",
+    backgroundColor: state.isSelected
+      ? "rgba(124, 242, 212, 0.28)"
+      : state.isFocused
+        ? "rgba(148, 163, 184, 0.16)"
+        : "transparent",
+    color: "#f8fafc",
+    cursor: "pointer",
+    padding: "0.45rem 0.7rem",
+  }),
+  indicatorSeparator: () => ({
+    display: "none",
+  }),
+  dropdownIndicator: (base: CSSObjectWithLabel) => ({
+    ...base,
+    color: "rgba(226, 232, 240, 0.8)",
+    "&:hover": {
+      color: "#f8fafc",
+    },
+  }),
+  clearIndicator: (base: CSSObjectWithLabel) => ({
+    ...base,
+    color: "rgba(226, 232, 240, 0.8)",
+    "&:hover": {
+      color: "#f8fafc",
+    },
+  }),
+};
 
 const serviceIconMap: Record<AddonServiceKey, string> = {
   transfer: "directions_car",
@@ -239,6 +340,107 @@ const parseDateInput = (value?: string | null) => {
 
 const getTodayDateInput = () => formatDateInput(new Date());
 
+const ARMENIAN_ALLOWED_REGEX = /[^\u0531-\u0556\u0561-\u0587\s-]/g;
+const ARMENIAN_ADDRESS_ALLOWED_REGEX = /[^\u0531-\u0556\u0561-\u0587\u0030-\u0039\s\p{P}\p{S}]/gu;
+const LATIN_ALLOWED_REGEX = /[^A-Za-z\s'-]/g;
+const ARMENIAN_TRANSLITERATION: Array<[string, string]> = [
+  ["dzh", "ջ"],
+  ["sh", "շ"],
+  ["ch", "չ"],
+  ["zh", "ժ"],
+  ["dz", "ձ"],
+  ["gh", "ղ"],
+  ["ts", "ց"],
+  ["ty", "թյ"],
+  ["rr", "ռ"],
+  ["ph", "ֆ"],
+  ["kh", "խ"],
+  ["th", "թ"],
+  ["a", "ա"],
+  ["b", "բ"],
+  ["g", "գ"],
+  ["d", "դ"],
+  ["e", "ե"],
+  ["z", "զ"],
+  ["i", "ի"],
+  ["l", "լ"],
+  ["x", "խ"],
+  ["k", "կ"],
+  ["h", "հ"],
+  ["j", "ջ"],
+  ["m", "մ"],
+  ["y", "յ"],
+  ["n", "ն"],
+  ["o", "ո"],
+  ["p", "պ"],
+  ["r", "ր"],
+  ["s", "ս"],
+  ["t", "տ"],
+  ["u", "ու"],
+  ["f", "ֆ"],
+  ["v", "վ"],
+  ["w", "վ"],
+  ["q", "ք"],
+  ["c", "ց"],
+];
+
+const sanitizeArmenianInput = (value: string) => value.replace(ARMENIAN_ALLOWED_REGEX, "");
+const sanitizeArmenianAddressInput = (value: string) =>
+  value.replace(ARMENIAN_ADDRESS_ALLOWED_REGEX, "");
+const sanitizeLatinInput = (value: string) => value.replace(LATIN_ALLOWED_REGEX, "");
+
+const applyArmenianCase = (value: string, source: string) => {
+  if (!source) return value;
+  if (source.toUpperCase() === source) return value.toUpperCase();
+  if (source[0] === source[0].toUpperCase()) {
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  }
+  return value;
+};
+
+const transliterateLatinToArmenian = (input: string) => {
+  if (!input) return "";
+  let result = "";
+  let index = 0;
+  while (index < input.length) {
+    const char = input[index];
+    if (/\s/.test(char)) {
+      result += char;
+      index += 1;
+      continue;
+    }
+    const remainder = input.slice(index).toLowerCase();
+    let matched = false;
+    for (const [latin, armenian] of ARMENIAN_TRANSLITERATION) {
+      if (remainder.startsWith(latin)) {
+        const raw = input.slice(index, index + latin.length);
+        result += applyArmenianCase(armenian, raw);
+        index += latin.length;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      result += char;
+      index += 1;
+    }
+  }
+  return sanitizeArmenianInput(result);
+};
+
+const normalizeNameSpacing = (value: string) => value.replace(/\s+/g, " ").trim();
+
+const shouldSyncArmenian = (
+  currentArmenian: string | null | undefined,
+  currentEnglish: string | null | undefined
+) => {
+  const armenianValue = normalizeNameSpacing(sanitizeArmenianInput(currentArmenian ?? ""));
+  if (!armenianValue) return true;
+  if (!currentEnglish) return true;
+  const expected = normalizeNameSpacing(transliterateLatinToArmenian(currentEnglish));
+  return armenianValue === expected;
+};
+
 const calculateAgeFromBirthDate = (birthDate?: string | null, referenceDate?: string | null) => {
   const birth = parseDateInput(birthDate);
   if (!birth) return null;
@@ -264,6 +466,16 @@ const resolveTravelerAge = (
   return typeof fallbackAge === "number" && Number.isFinite(fallbackAge) ? fallbackAge : null;
 };
 
+const resolveBirthDateRange = (
+  referenceDate?: string | null,
+  maxAgeYears = MAX_INSURANCE_AGE_YEARS
+) => {
+  const parsedReference = parseDateInput(referenceDate ?? null) ?? new Date();
+  const max = formatDateInput(parsedReference);
+  const min = addYearsToDateInput(max, -maxAgeYears) ?? "1900-01-01";
+  return { min, max };
+};
+
 const isBirthDateWithinAgeLimit = (
   birthDate?: string | null,
   referenceDate?: string | null,
@@ -276,10 +488,7 @@ const isBirthDateWithinAgeLimit = (
 const shouldUseInsuranceSocialCard = (
   citizenship: string | null | undefined,
   residency: boolean | null | undefined
-) => {
-  const normalized = normalizeOptional(citizenship)?.toUpperCase();
-  return (normalized === "AM" || normalized === "ARM" || normalized === "ARMENIA") && residency === true;
-};
+) => resolveCountryAlpha2(citizenship) === "AM" && residency === true;
 
 const buildInsuranceTravelerSeeds = (
   rooms: BookingAddonHotelContext["rooms"]
@@ -355,6 +564,7 @@ export default function BookingAddonsClient({
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [insuranceTermsAccepted, setInsuranceTermsAccepted] = useState(false);
   const [transferFlightDetails, setTransferFlightDetails] = useState<TransferFlightDetailsForm>({
     flightNumber: "",
     arrivalDateTime: "",
@@ -476,9 +686,78 @@ export default function BookingAddonsClient({
     builderState.insurance?.selected && !existingServiceSet.has("insurance")
       ? builderState.insurance
       : null;
+
+  useEffect(() => {
+    if (!insuranceSelection) {
+      setInsuranceTermsAccepted(false);
+    }
+  }, [insuranceSelection]);
   const todayDateInput = useMemo(() => getTodayDateInput(), []);
   const [activeInsuranceTravelerId, setActiveInsuranceTravelerId] = useState<string | null>(null);
   const [insuranceTravelers, setInsuranceTravelers] = useState<InsuranceTravelerForm[]>([]);
+  const [efesCountries, setEfesCountries] = useState<EfesCountry[]>([]);
+  const [efesCountriesLoading, setEfesCountriesLoading] = useState(false);
+  const [efesLocationsByCountry, setEfesLocationsByCountry] = useState<
+    Record<string, EfesCountryLocation[]>
+  >({});
+  const [efesLocationsLoading, setEfesLocationsLoading] = useState<Record<string, boolean>>({});
+  const efesCountriesLoadedRef = useRef(false);
+
+  const efesCountryOptions = useMemo(
+    () =>
+      getEfesCountryOptions(locale, efesCountries).map<AddressSelectOption>((option) => ({
+        value: option.code,
+        label: option.label,
+        flag: option.flag,
+        alpha2: option.alpha2,
+      })),
+    [efesCountries, locale]
+  );
+  const citizenshipSelectOptions = useMemo(() => {
+    const byAlpha2 = new Map<string, AddressSelectOption>();
+    efesCountryOptions.forEach((option) => {
+      const alpha2 = option.alpha2?.trim().toUpperCase();
+      if (!alpha2 || byAlpha2.has(alpha2)) return;
+      byAlpha2.set(alpha2, {
+        value: alpha2,
+        label: option.label,
+        flag: option.flag,
+        alpha2,
+      });
+    });
+    return Array.from(byAlpha2.values());
+  }, [efesCountryOptions]);
+  const efesCountryById = useMemo(
+    () => new Map(efesCountries.map((country) => [country.id, country])),
+    [efesCountries]
+  );
+  const efesCountryIdByAlpha2 = useMemo(() => {
+    const map = new Map<string, string>();
+    efesCountries.forEach((country) => {
+      const alpha2 = country.alpha2?.trim().toUpperCase();
+      if (alpha2 && !map.has(alpha2)) {
+        map.set(alpha2, country.id);
+      }
+    });
+    return map;
+  }, [efesCountries]);
+  const resolveTravelerCountryId = useCallback(
+    (
+      traveler:
+        | InsuranceTravelerForm
+        | Partial<InsuranceTravelerForm>
+        | BookingInsuranceTraveler
+    ) => {
+      const explicit = traveler.address?.countryId?.trim();
+      if (explicit && efesCountryById.has(explicit)) return explicit;
+      const alpha2 = resolveCountryAlpha2(traveler.address?.country);
+      if (alpha2 && efesCountryIdByAlpha2.has(alpha2)) {
+        return efesCountryIdByAlpha2.get(alpha2) ?? null;
+      }
+      return null;
+    },
+    [efesCountryById, efesCountryIdByAlpha2]
+  );
 
   const insuranceTravelerSeeds = useMemo(
     () => buildInsuranceTravelerSeeds(hotelContext.rooms),
@@ -494,6 +773,63 @@ export default function BookingAddonsClient({
         : insuranceTravelerSeeds.map((traveler) => traveler.id);
     return new Set(selectedIds);
   }, [insuranceSelection?.insuredGuestIds, insuranceTravelerSeeds]);
+
+  useEffect(() => {
+    if (!insuranceSelection) return;
+    if (efesCountriesLoadedRef.current) return;
+    if (efesCountries.length > 0) return;
+    let cancelled = false;
+    setEfesCountriesLoading(true);
+    fetchEfesCountries()
+      .then((countries) => {
+        if (!cancelled) setEfesCountries(countries);
+      })
+      .catch((error) => {
+        console.error("[EFES][booking-addons] Failed to load countries", error);
+        if (!cancelled) setEfesCountries([]);
+      })
+      .finally(() => {
+        if (!cancelled) setEfesCountriesLoading(false);
+        efesCountriesLoadedRef.current = true;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [efesCountries.length, insuranceSelection]);
+
+  const loadEfesCountryLocations = useCallback(
+    async (countryId: string) => {
+      const trimmedCountryId = countryId.trim();
+      if (!trimmedCountryId) return;
+      if (
+        efesLocationsByCountry[trimmedCountryId] ||
+        efesLocationsLoading[trimmedCountryId]
+      ) {
+        return;
+      }
+      setEfesLocationsLoading((prev) => ({ ...prev, [trimmedCountryId]: true }));
+      try {
+        const locations = await fetchEfesCountryLocations(trimmedCountryId);
+        setEfesLocationsByCountry((prev) => ({
+          ...prev,
+          [trimmedCountryId]: locations,
+        }));
+      } catch (error) {
+        console.error(
+          `[EFES][booking-addons] Failed to load country locations for ${trimmedCountryId}`,
+          error
+        );
+        setEfesLocationsByCountry((prev) => ({ ...prev, [trimmedCountryId]: [] }));
+      } finally {
+        setEfesLocationsLoading((prev) => {
+          const next = { ...prev };
+          delete next[trimmedCountryId];
+          return next;
+        });
+      }
+    },
+    [efesLocationsByCountry, efesLocationsLoading]
+  );
 
   useEffect(() => {
     if (!insuranceSelection) {
@@ -526,7 +862,7 @@ export default function BookingAddonsClient({
             gender: existing?.gender ?? null,
             birthDate: normalizeOptional(existing?.birthDate),
             residency:
-              typeof existing?.residency === "boolean" ? existing.residency : null,
+              typeof existing?.residency === "boolean" ? existing.residency : true,
             socialCard: normalizeOptional(existing?.socialCard),
             passportNumber: normalizeOptional(existing?.passportNumber),
             passportAuthority: normalizeOptional(existing?.passportAuthority),
@@ -543,8 +879,10 @@ export default function BookingAddonsClient({
               city: normalizeOptional(existing?.address?.city),
             },
             citizenship:
-              normalizeOptional(existing?.citizenship) ??
-              normalizeOptional(hotelContext.nationality),
+              resolveCountryAlpha2(
+                normalizeOptional(existing?.citizenship) ??
+                  normalizeOptional(hotelContext.nationality)
+              ) ?? "AM",
             premium:
               typeof existing?.premium === "number" && Number.isFinite(existing.premium)
                 ? existing.premium
@@ -573,6 +911,112 @@ export default function BookingAddonsClient({
     insuranceSelection,
     insuranceTravelerSeeds,
     selectedInsuranceGuestIdSet,
+  ]);
+
+  const selectedEfesCountryIds = useMemo(() => {
+    const ids = new Set<string>();
+    insuranceTravelers.forEach((traveler) => {
+      const countryId = resolveTravelerCountryId(traveler);
+      if (countryId) ids.add(countryId);
+    });
+    return Array.from(ids);
+  }, [insuranceTravelers, resolveTravelerCountryId]);
+
+  useEffect(() => {
+    if (!insuranceSelection || efesCountries.length === 0) return;
+    const idsToLoad =
+      selectedEfesCountryIds.length > 0
+        ? selectedEfesCountryIds
+        : [EFES_DEFAULT_COUNTRY_ID];
+    idsToLoad.forEach((countryId) => {
+      void loadEfesCountryLocations(countryId);
+    });
+  }, [
+    efesCountries.length,
+    insuranceSelection,
+    loadEfesCountryLocations,
+    selectedEfesCountryIds,
+  ]);
+
+  useEffect(() => {
+    if (!insuranceSelection || efesCountries.length === 0) return;
+    setInsuranceTravelers((prev) => {
+      let updated = false;
+      const fallbackCountry =
+        efesCountryById.get(EFES_DEFAULT_COUNTRY_ID) ?? efesCountries[0] ?? null;
+      const next = prev.map((traveler) => {
+        const address = traveler.address ?? {};
+        const currentCountryCode = resolveCountryAlpha2(address.country) ?? "";
+        const resolvedCountryId =
+          resolveTravelerCountryId(traveler) ??
+          fallbackCountry?.id ??
+          EFES_DEFAULT_COUNTRY_ID;
+        const selectedCountry = efesCountryById.get(resolvedCountryId) ?? fallbackCountry;
+        const selectedCountryCode =
+          selectedCountry?.alpha2?.trim().toUpperCase() ?? currentCountryCode;
+        const regionOptions = getEfesRegionOptions(
+          resolvedCountryId,
+          locale,
+          efesLocationsByCountry
+        );
+        const currentRegion = address.region?.trim() ?? "";
+        const currentCity = address.city?.trim() ?? "";
+        let nextRegion = currentRegion;
+        let nextCity = currentCity;
+        const preferredRegion =
+          resolvedCountryId === EFES_DEFAULT_COUNTRY_ID
+            ? regionOptions.find((option) => option.code === EFES_DEFAULT_REGION_ID)?.code ??
+              regionOptions[0]?.code ??
+              ""
+            : regionOptions[0]?.code ?? "";
+        if (
+          regionOptions.length > 0 &&
+          !regionOptions.some((option) => option.code === currentRegion)
+        ) {
+          nextRegion = preferredRegion;
+        }
+        if (nextRegion) {
+          const cityOptions = getEfesCityOptions(
+            resolvedCountryId,
+            nextRegion,
+            locale,
+            efesLocationsByCountry
+          );
+          if (
+            cityOptions.length > 0 &&
+            !cityOptions.some((option) => option.code === currentCity)
+          ) {
+            nextCity = cityOptions[0].code;
+          }
+        }
+        const countryIdChanged = (address.countryId?.trim() ?? "") !== resolvedCountryId;
+        const countryCodeChanged = currentCountryCode !== selectedCountryCode;
+        const regionChanged = currentRegion !== nextRegion;
+        const cityChanged = currentCity !== nextCity;
+        if (!countryIdChanged && !countryCodeChanged && !regionChanged && !cityChanged) {
+          return traveler;
+        }
+        updated = true;
+        return {
+          ...traveler,
+          address: {
+            ...address,
+            country: selectedCountryCode,
+            countryId: resolvedCountryId,
+            region: nextRegion,
+            city: nextCity,
+          },
+        };
+      });
+      return updated ? next : prev;
+    });
+  }, [
+    efesCountries,
+    efesCountryById,
+    efesLocationsByCountry,
+    insuranceSelection,
+    locale,
+    resolveTravelerCountryId,
   ]);
 
   useEffect(() => {
@@ -660,6 +1104,40 @@ export default function BookingAddonsClient({
       );
     },
     []
+  );
+
+  const copyLeadTravelerContactData = useCallback(
+    (travelerId: string) => {
+      const leadTraveler = insuranceTravelers[0];
+      if (!leadTraveler || leadTraveler.id === travelerId) return;
+      const leadAddress = leadTraveler.address ?? {};
+      const leadCountryId =
+        leadAddress.countryId?.trim() || resolveTravelerCountryId(leadTraveler) || "";
+      if (leadCountryId) {
+        void loadEfesCountryLocations(leadCountryId);
+      }
+      setInsuranceTravelers((prev) =>
+        prev.map((traveler) =>
+          traveler.id === travelerId
+            ? {
+                ...traveler,
+                mobilePhone: leadTraveler.mobilePhone ?? "",
+                email: leadTraveler.email ?? "",
+                address: {
+                  ...(traveler.address ?? {}),
+                  full: leadAddress.full ?? "",
+                  fullEn: leadAddress.fullEn ?? "",
+                  country: leadAddress.country ?? "",
+                  countryId: leadCountryId,
+                  region: leadAddress.region ?? "",
+                  city: leadAddress.city ?? "",
+                },
+              }
+            : traveler
+        )
+      );
+    },
+    [insuranceTravelers, loadEfesCountryLocations, resolveTravelerCountryId]
   );
 
   const insuranceTravelerIndexMap = useMemo(
@@ -755,6 +1233,99 @@ export default function BookingAddonsClient({
       return null;
     },
     [insuranceSelection?.subrisks, insuranceSelection?.subrisksByGuest]
+  );
+
+  const insuranceSubriskLabelMap = useMemo<Record<string, string>>(
+    () => ({
+      amateur_sport_expences: t.packageBuilder.insurance.subrisks.amateurSport.label,
+      baggage_expences: t.packageBuilder.insurance.subrisks.baggage.label,
+      travel_inconveniences: t.packageBuilder.insurance.subrisks.travelInconveniences.label,
+      house_insurance: t.packageBuilder.insurance.subrisks.houseInsurance.label,
+      trip_cancellation: t.packageBuilder.insurance.subrisks.tripCancellation.label,
+    }),
+    [t.packageBuilder.insurance.subrisks]
+  );
+  const resolveSubriskLabel = useCallback(
+    (subriskId: string) => insuranceSubriskLabelMap[subriskId.toLowerCase()] ?? subriskId,
+    [insuranceSubriskLabelMap]
+  );
+  const resolveInsuranceTravelerTabLabels = useCallback(
+    (traveler: InsuranceTravelerForm, index: number) => {
+      const fallbackLabel = t.packageBuilder.checkout.insuranceTravelerLabel.replace(
+        "{index}",
+        (index + 1).toString()
+      );
+      const nameParts = [
+        traveler.firstNameEn?.trim() ?? "",
+        traveler.lastNameEn?.trim() ?? "",
+      ].filter((part) => part.length > 0);
+      if (nameParts.length === 0) {
+        [traveler.firstName ?? "", traveler.lastName ?? ""].forEach((part) => {
+          const trimmed = part.trim();
+          if (trimmed.length > 0) nameParts.push(trimmed);
+        });
+      }
+      const nameLabel = nameParts.join(" ");
+      const typeLabel =
+        traveler.type === "Adult"
+          ? t.packageBuilder.checkout.guestAdultLabel
+          : t.packageBuilder.checkout.guestChildLabel;
+      const label = nameLabel || fallbackLabel;
+      const metaParts = [];
+      if (nameLabel) metaParts.push(fallbackLabel);
+      metaParts.push(typeLabel);
+      return { label, meta: metaParts.join(" • ") };
+    },
+    [
+      t.packageBuilder.checkout.guestAdultLabel,
+      t.packageBuilder.checkout.guestChildLabel,
+      t.packageBuilder.checkout.insuranceTravelerLabel,
+    ]
+  );
+  const formatInsuranceCoverageAmount = useCallback(
+    (amount: number, currency: string) => {
+      try {
+        return new Intl.NumberFormat(intlLocale, {
+          style: "currency",
+          currency,
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        }).format(amount);
+      } catch {
+        return `${new Intl.NumberFormat(intlLocale).format(amount)} ${currency}`;
+      }
+    },
+    [intlLocale]
+  );
+  const resolveTravelerCoverageLabel = useCallback(
+    (traveler: InsuranceTravelerForm) => {
+      const guestRisk = insuranceSelection?.riskByGuest?.[traveler.id];
+      const riskAmount =
+        typeof guestRisk === "number" && Number.isFinite(guestRisk) && guestRisk > 0
+          ? guestRisk
+          : typeof traveler.riskAmount === "number" &&
+              Number.isFinite(traveler.riskAmount) &&
+              traveler.riskAmount > 0
+            ? traveler.riskAmount
+            : typeof insuranceSelection?.riskAmount === "number" &&
+                Number.isFinite(insuranceSelection.riskAmount) &&
+                insuranceSelection.riskAmount > 0
+              ? insuranceSelection.riskAmount
+              : null;
+      const riskCurrency =
+        normalizeOptional(traveler.riskCurrency) ??
+        normalizeOptional(insuranceSelection?.riskCurrency);
+      if (riskAmount === null || !riskCurrency) return null;
+      const formattedCoverage = formatInsuranceCoverageAmount(riskAmount, riskCurrency);
+      return t.packageBuilder.insurance.coverageLabel.replace("{amount}", formattedCoverage);
+    },
+    [
+      formatInsuranceCoverageAmount,
+      insuranceSelection?.riskAmount,
+      insuranceSelection?.riskByGuest,
+      insuranceSelection?.riskCurrency,
+      t.packageBuilder.insurance.coverageLabel,
+    ]
   );
 
   const transferDetailsValid =
@@ -1123,6 +1694,7 @@ export default function BookingAddonsClient({
     event.preventDefault();
     if (paymentLoading || activeServiceCount === 0) return;
     if (!termsAccepted) return;
+    if (insuranceSelection && !insuranceTermsAccepted) return;
 
     const transferFieldValidation = resolveTransferFlightFieldErrors();
     if (Object.keys(transferFieldValidation).length > 0) {
@@ -1714,31 +2286,37 @@ export default function BookingAddonsClient({
                       aria-label={t.packageBuilder.checkout.insuranceTitle}
                     >
                       {insuranceTravelers.map((traveler, travelerIndex) => {
-                        const tabLabel = t.packageBuilder.checkout.insuranceTravelerLabel.replace(
-                          "{index}",
-                          (travelerIndex + 1).toString()
+                        const { label, meta } = resolveInsuranceTravelerTabLabels(
+                          traveler,
+                          travelerIndex
                         );
+                        const coverageLabel = resolveTravelerCoverageLabel(traveler);
                         const premium = resolveInsuranceTravelerPremium(traveler.id);
                         const premiumLabel = formatAmount(
                           premium,
                           insuranceSelection.currency ?? insuranceSelection.riskCurrency ?? null
                         );
                         const isActive = traveler.id === activeInsuranceTravelerId;
+                        const tabId = `insurance-traveler-tab-${traveler.id}`;
+                        const panelId = `insurance-traveler-panel-${traveler.id}`;
                         return (
                           <button
                             key={traveler.id}
+                            id={tabId}
                             type="button"
                             className={`insurance-traveler-tab${isActive ? " is-active" : ""}`}
                             onClick={() => setActiveInsuranceTravelerId(traveler.id)}
                             role="tab"
                             aria-selected={isActive}
+                            aria-controls={panelId}
                           >
-                            <span className="insurance-traveler-tab__label">{tabLabel}</span>
-                            <span className="insurance-traveler-tab__meta">
-                              {traveler.type === "Adult"
-                                ? t.packageBuilder.checkout.guestAdultLabel
-                                : t.packageBuilder.checkout.guestChildLabel}
-                            </span>
+                            <span className="insurance-traveler-tab__label">{label}</span>
+                            <span className="insurance-traveler-tab__meta">{meta}</span>
+                            {coverageLabel ? (
+                              <span className="insurance-traveler-tab__coverage">
+                                {coverageLabel}
+                              </span>
+                            ) : null}
                             {premiumLabel ? (
                               <span className="insurance-traveler-tab__rate">{premiumLabel}</span>
                             ) : null}
@@ -1750,22 +2328,85 @@ export default function BookingAddonsClient({
                   {visibleInsuranceTravelers.map((traveler) => {
                     const travelerIndex = insuranceTravelerIndexMap.get(traveler.id) ?? 0;
                     const travelerFieldErrors = localInsuranceTravelerFieldErrors[traveler.id] ?? {};
+                    const tabId = `insurance-traveler-tab-${traveler.id}`;
+                    const panelId = `insurance-traveler-panel-${traveler.id}`;
+                    const travelerCountryId =
+                      resolveTravelerCountryId(traveler) ??
+                      (efesCountryById.has(EFES_DEFAULT_COUNTRY_ID)
+                        ? EFES_DEFAULT_COUNTRY_ID
+                        : efesCountryOptions[0]?.value ?? "");
+                    const regionOptions = getEfesRegionOptions(
+                      travelerCountryId || null,
+                      locale,
+                      efesLocationsByCountry
+                    );
+                    const cityOptions = getEfesCityOptions(
+                      travelerCountryId || null,
+                      traveler.address?.region ?? null,
+                      locale,
+                      efesLocationsByCountry
+                    );
+                    const countrySelectValue =
+                      efesCountryOptions.find(
+                        (option) => option.value === travelerCountryId
+                      ) ?? null;
+                    const regionSelectOptions = regionOptions.map<AddressSelectOption>(
+                      (option) => ({ value: option.code, label: option.label })
+                    );
+                    const citySelectOptions = cityOptions.map<AddressSelectOption>((option) => ({
+                      value: option.code,
+                      label: option.label,
+                    }));
+                    const regionSelectValue =
+                      regionSelectOptions.find(
+                        (option) => option.value === (traveler.address?.region ?? "")
+                      ) ?? null;
+                    const citySelectValue =
+                      citySelectOptions.find(
+                        (option) => option.value === (traveler.address?.city ?? "")
+                      ) ?? null;
                     const birthDateReference =
                       insuranceSelection.startDate ?? hotelContext.checkInDate ?? null;
-                    const birthDateMax = todayDateInput;
-                    const maxAgeYears =
+                    const birthDateRange = resolveBirthDateRange(
+                      birthDateReference,
                       traveler.type === "Child"
                         ? MAX_INSURANCE_CHILD_AGE_YEARS
-                        : MAX_INSURANCE_AGE_YEARS;
-                    const birthDateMin =
-                      addYearsToDateInput(birthDateReference ?? todayDateInput, -maxAgeYears) ??
-                      "1900-01-01";
+                        : MAX_INSURANCE_AGE_YEARS
+                    );
+                    const birthDateMax =
+                      todayDateInput < birthDateRange.max
+                        ? todayDateInput
+                        : birthDateRange.max;
+                    const citizenshipCode = resolveCountryAlpha2(traveler.citizenship) ?? "";
+                    const citizenshipSelectValue =
+                      citizenshipSelectOptions.find(
+                        (option) => option.value === citizenshipCode
+                      ) ?? null;
+                    const countryLocationsLoading = travelerCountryId
+                      ? Boolean(efesLocationsLoading[travelerCountryId])
+                      : false;
+                    const useRegionSelect = regionOptions.length > 0;
+                    const useCitySelect = cityOptions.length > 0;
                     const shouldShowSocialCard = shouldUseInsuranceSocialCard(
                       traveler.citizenship,
                       traveler.residency
                     );
+                    const canCopyLeadTravelerContact = travelerIndex > 0;
+                    const rawSubrisks = resolveInsuranceTravelerSubrisks(traveler.id);
+                    const normalizedSubrisks = Array.isArray(rawSubrisks)
+                      ? rawSubrisks
+                          .map((value) => value.trim())
+                          .filter((value) => value.length > 0)
+                      : [];
+                    const subriskLabels = normalizedSubrisks.map(resolveSubriskLabel);
                     return (
-                      <div key={traveler.id} className="checkout-guest-card">
+                      <div
+                        key={traveler.id}
+                        id={panelId}
+                        className="checkout-guest-card"
+                        role={hasMultipleInsuranceTravelers ? "tabpanel" : undefined}
+                        aria-labelledby={hasMultipleInsuranceTravelers ? tabId : undefined}
+                      >
                         <div className="checkout-guest-card__heading">
                           <span>
                             {t.packageBuilder.checkout.insuranceTravelerLabel.replace(
@@ -1780,6 +2421,22 @@ export default function BookingAddonsClient({
                           </span>
                         </div>
 
+                        {subriskLabels.length > 0 ? (
+                          <div className="checkout-guest-card__subrisks">
+                            <span>{t.packageBuilder.insurance.subrisksTitle}</span>
+                            <div className="checkout-guest-card__subrisk-list">
+                              {subriskLabels.map((label, labelIndex) => (
+                                <span
+                                  key={`${traveler.id}-subrisk-${labelIndex}`}
+                                  className="checkout-guest-card__subrisk"
+                                >
+                                  {label}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
                         <div className="checkout-field-grid">
                           <label className="checkout-field">
                             <span>
@@ -1790,11 +2447,19 @@ export default function BookingAddonsClient({
                               className="checkout-input"
                               type="text"
                               value={traveler.firstNameEn ?? ""}
-                              onChange={(event) =>
-                                updateInsuranceTraveler(traveler.id, {
-                                  firstNameEn: event.target.value,
-                                })
-                              }
+                              onChange={(event) => {
+                                const value = sanitizeLatinInput(event.target.value);
+                                const updates: Partial<InsuranceTravelerForm> = {
+                                  firstNameEn: value,
+                                };
+                                if (shouldSyncArmenian(traveler.firstName, traveler.firstNameEn)) {
+                                  updates.firstName = transliterateLatinToArmenian(value);
+                                }
+                                updateInsuranceTraveler(traveler.id, updates);
+                              }}
+                              lang="en"
+                              inputMode="text"
+                              pattern="[A-Za-z\\s'-]*"
                               required
                             />
                           </label>
@@ -1807,12 +2472,52 @@ export default function BookingAddonsClient({
                               className="checkout-input"
                               type="text"
                               value={traveler.lastNameEn ?? ""}
+                              onChange={(event) => {
+                                const value = sanitizeLatinInput(event.target.value);
+                                const updates: Partial<InsuranceTravelerForm> = {
+                                  lastNameEn: value,
+                                };
+                                if (shouldSyncArmenian(traveler.lastName, traveler.lastNameEn)) {
+                                  updates.lastName = transliterateLatinToArmenian(value);
+                                }
+                                updateInsuranceTraveler(traveler.id, updates);
+                              }}
+                              lang="en"
+                              inputMode="text"
+                              pattern="[A-Za-z\\s'-]*"
+                              required
+                            />
+                          </label>
+                          <label className="checkout-field">
+                            <span>
+                              {t.packageBuilder.checkout.firstName}{" "}
+                              {t.packageBuilder.checkout.armenianHint}
+                            </span>
+                            <input
+                              className="checkout-input"
+                              type="text"
+                              value={traveler.firstName}
                               onChange={(event) =>
                                 updateInsuranceTraveler(traveler.id, {
-                                  lastNameEn: event.target.value,
+                                  firstName: sanitizeArmenianInput(event.target.value),
                                 })
                               }
-                              required
+                            />
+                          </label>
+                          <label className="checkout-field">
+                            <span>
+                              {t.packageBuilder.checkout.lastName}{" "}
+                              {t.packageBuilder.checkout.armenianHint}
+                            </span>
+                            <input
+                              className="checkout-input"
+                              type="text"
+                              value={traveler.lastName}
+                              onChange={(event) =>
+                                updateInsuranceTraveler(traveler.id, {
+                                  lastName: sanitizeArmenianInput(event.target.value),
+                                })
+                              }
                             />
                           </label>
                           <label className="checkout-field">
@@ -1847,7 +2552,7 @@ export default function BookingAddonsClient({
                               className={`checkout-input${travelerFieldErrors.birthDate ? " error" : ""}`}
                               type="date"
                               value={traveler.birthDate ?? ""}
-                              min={birthDateMin}
+                              min={birthDateRange.min}
                               max={birthDateMax}
                               onChange={(event) =>
                                 updateInsuranceTraveler(traveler.id, {
@@ -1961,33 +2666,49 @@ export default function BookingAddonsClient({
                               }
                               onChange={(event) =>
                                 updateInsuranceTraveler(traveler.id, {
-                                  residency:
-                                    event.target.value === "1"
-                                      ? true
-                                      : event.target.value === "0"
-                                        ? false
-                                        : null,
+                                  residency: event.target.value === "1",
+                                  ...(event.target.value === "1" &&
+                                  resolveCountryAlpha2(traveler.citizenship) === "AM"
+                                    ? {}
+                                    : { socialCard: "" }),
                                 })
                               }
                               required
                             >
-                              <option value="">{t.packageBuilder.checkout.insuranceFields.genderPlaceholder}</option>
                               <option value="1">{t.common.yes}</option>
                               <option value="0">{t.common.no}</option>
                             </select>
                           </label>
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.citizenship}</span>
-                            <input
-                              className="checkout-input"
-                              type="text"
-                              value={traveler.citizenship ?? ""}
-                              onChange={(event) =>
+                            <Select<AddressSelectOption>
+                              options={citizenshipSelectOptions}
+                              value={citizenshipSelectValue}
+                              onChange={(selected: SingleValue<AddressSelectOption>) => {
+                                const citizenship = selected?.value ?? "";
                                 updateInsuranceTraveler(traveler.id, {
-                                  citizenship: event.target.value,
-                                })
+                                  citizenship,
+                                  ...(shouldUseInsuranceSocialCard(
+                                    citizenship,
+                                    traveler.residency
+                                  )
+                                    ? {}
+                                    : { socialCard: "" }),
+                                });
+                              }}
+                              styles={checkoutAddressSelectStyles}
+                              placeholder={t.packageBuilder.checkout.countryPlaceholder}
+                              isClearable={false}
+                              isLoading={efesCountriesLoading}
+                              isDisabled={
+                                efesCountriesLoading || citizenshipSelectOptions.length === 0
                               }
-                              required
+                              formatOptionLabel={(option) =>
+                                option.flag ? `${option.flag} ${option.label}` : option.label
+                              }
+                              noOptionsMessage={() =>
+                                t.packageBuilder.checkout.countryPlaceholder
+                              }
                             />
                           </label>
                           {shouldShowSocialCard ? (
@@ -1996,18 +2717,35 @@ export default function BookingAddonsClient({
                               <input
                                 className="checkout-input"
                                 type="text"
+                                maxLength={10}
                                 value={traveler.socialCard ?? ""}
+                                placeholder={
+                                  traveler.type === "Adult"
+                                    ? undefined
+                                    : t.packageBuilder.checkout.insuranceFields.optionalPlaceholder
+                                }
                                 onChange={(event) =>
                                   updateInsuranceTraveler(traveler.id, {
                                     socialCard: event.target.value,
                                   })
                                 }
-                                required={traveler.type === "Adult"}
+                                required={traveler.type === "Adult" && shouldShowSocialCard}
                               />
                             </label>
                           ) : null}
                         </div>
 
+                        <h3>{t.packageBuilder.checkout.contactTitle}</h3>
+                        {canCopyLeadTravelerContact ? (
+                          <button
+                            type="button"
+                            className="checkout-insurance-copy"
+                            onClick={() => copyLeadTravelerContactData(traveler.id)}
+                          >
+                            <span className="material-symbols-rounded">content_copy</span>
+                            {t.packageBuilder.checkout.copyLeadTravelerContact}
+                          </button>
+                        ) : null}
                         <div className="checkout-field-grid">
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.mobilePhone}</span>
@@ -2015,6 +2753,7 @@ export default function BookingAddonsClient({
                               className="checkout-input"
                               type="tel"
                               value={traveler.mobilePhone ?? ""}
+                              placeholder="091000000"
                               onChange={(event) =>
                                 updateInsuranceTraveler(traveler.id, {
                                   mobilePhone: event.target.value,
@@ -2041,7 +2780,158 @@ export default function BookingAddonsClient({
 
                         <div className="checkout-field-grid addresses">
                           <label className="checkout-field">
-                            <span>{t.packageBuilder.checkout.insuranceFields.address}</span>
+                            <span>{t.packageBuilder.checkout.insuranceFields.country}</span>
+                            <Select<AddressSelectOption>
+                              options={efesCountryOptions}
+                              value={countrySelectValue}
+                              onChange={(selected: SingleValue<AddressSelectOption>) => {
+                                const countryId = selected?.value?.trim() ?? "";
+                                const countryCode =
+                                  selected?.alpha2?.trim().toUpperCase() ?? "";
+                                const nextRegionOptions = getEfesRegionOptions(
+                                  countryId || null,
+                                  locale,
+                                  efesLocationsByCountry
+                                );
+                                const nextRegion =
+                                  countryId === EFES_DEFAULT_COUNTRY_ID
+                                    ? nextRegionOptions.find(
+                                        (option) => option.code === EFES_DEFAULT_REGION_ID
+                                      )?.code ??
+                                      nextRegionOptions[0]?.code ??
+                                      ""
+                                    : nextRegionOptions[0]?.code ?? "";
+                                const nextCityOptions = getEfesCityOptions(
+                                  countryId || null,
+                                  nextRegion || null,
+                                  locale,
+                                  efesLocationsByCountry
+                                );
+                                const nextCity = nextCityOptions[0]?.code ?? "";
+                                if (countryId) {
+                                  void loadEfesCountryLocations(countryId);
+                                }
+                                updateInsuranceTraveler(traveler.id, {
+                                  address: {
+                                    ...(traveler.address ?? {}),
+                                    country: countryCode,
+                                    countryId,
+                                    region: nextRegion,
+                                    city: nextCity,
+                                  },
+                                });
+                              }}
+                              styles={checkoutAddressSelectStyles}
+                              placeholder={t.packageBuilder.checkout.countryPlaceholder}
+                              isClearable={false}
+                              isLoading={efesCountriesLoading}
+                              isDisabled={
+                                efesCountriesLoading || efesCountryOptions.length === 0
+                              }
+                              formatOptionLabel={(option) =>
+                                option.flag ? `${option.flag} ${option.label}` : option.label
+                              }
+                              noOptionsMessage={() =>
+                                t.packageBuilder.checkout.countryPlaceholder
+                              }
+                            />
+                          </label>
+                          <label className="checkout-field">
+                            <span>{t.packageBuilder.checkout.insuranceFields.region}</span>
+                            {useRegionSelect ? (
+                              <Select<AddressSelectOption>
+                                options={regionSelectOptions}
+                                value={regionSelectValue}
+                                onChange={(selected: SingleValue<AddressSelectOption>) => {
+                                  const region = selected?.value?.trim() ?? "";
+                                  const nextCityOptions = getEfesCityOptions(
+                                    travelerCountryId || null,
+                                    region || null,
+                                    locale,
+                                    efesLocationsByCountry
+                                  );
+                                  const nextCity = nextCityOptions[0]?.code ?? "";
+                                  updateInsuranceTraveler(traveler.id, {
+                                    address: {
+                                      ...(traveler.address ?? {}),
+                                      region,
+                                      city: nextCity,
+                                    },
+                                  });
+                                }}
+                                styles={checkoutAddressSelectStyles}
+                                placeholder={t.packageBuilder.checkout.countryPlaceholder}
+                                isClearable={false}
+                                isLoading={countryLocationsLoading}
+                                isDisabled={!travelerCountryId || countryLocationsLoading}
+                                noOptionsMessage={() =>
+                                  t.packageBuilder.checkout.countryPlaceholder
+                                }
+                              />
+                            ) : (
+                              <input
+                                className="checkout-input"
+                                type="text"
+                                value={traveler.address?.region ?? ""}
+                                onChange={(event) =>
+                                  updateInsuranceTraveler(traveler.id, {
+                                    address: {
+                                      ...(traveler.address ?? {}),
+                                      region: event.target.value,
+                                    },
+                                  })
+                                }
+                                required
+                              />
+                            )}
+                          </label>
+                          <label className="checkout-field">
+                            <span>{t.packageBuilder.checkout.insuranceFields.city}</span>
+                            {useCitySelect ? (
+                              <Select<AddressSelectOption>
+                                options={citySelectOptions}
+                                value={citySelectValue}
+                                onChange={(selected: SingleValue<AddressSelectOption>) =>
+                                  updateInsuranceTraveler(traveler.id, {
+                                    address: {
+                                      ...(traveler.address ?? {}),
+                                      city: selected?.value ?? "",
+                                    },
+                                  })
+                                }
+                                styles={checkoutAddressSelectStyles}
+                                placeholder={t.packageBuilder.checkout.countryPlaceholder}
+                                isClearable={false}
+                                isLoading={countryLocationsLoading}
+                                isDisabled={
+                                  !traveler.address?.region || countryLocationsLoading
+                                }
+                                noOptionsMessage={() =>
+                                  t.packageBuilder.checkout.countryPlaceholder
+                                }
+                              />
+                            ) : (
+                              <input
+                                className="checkout-input"
+                                type="text"
+                                value={traveler.address?.city ?? ""}
+                                onChange={(event) =>
+                                  updateInsuranceTraveler(traveler.id, {
+                                    address: {
+                                      ...(traveler.address ?? {}),
+                                      city: event.target.value,
+                                    },
+                                  })
+                                }
+                                required
+                              />
+                            )}
+                          </label>
+                          <label className="checkout-field checkout-field--full">
+                            <span>
+                              {t.packageBuilder.checkout.insuranceFields.address}{" "}
+                              {t.packageBuilder.checkout.armenianHint}
+                            </span>
                             <input
                               className="checkout-input"
                               type="text"
@@ -2050,62 +2940,33 @@ export default function BookingAddonsClient({
                                 updateInsuranceTraveler(traveler.id, {
                                   address: {
                                     ...(traveler.address ?? {}),
-                                    full: event.target.value,
+                                    full: sanitizeArmenianAddressInput(event.target.value),
                                   },
                                 })
                               }
                               required
                             />
                           </label>
-                          <label className="checkout-field">
-                            <span>{t.packageBuilder.checkout.insuranceFields.country}</span>
+                          <label className="checkout-field checkout-field--full">
+                            <span>
+                              {t.packageBuilder.checkout.insuranceFields.address}{" "}
+                              {t.packageBuilder.checkout.latinHint}
+                            </span>
                             <input
                               className="checkout-input"
                               type="text"
-                              value={traveler.address?.country ?? ""}
+                              value={traveler.address?.fullEn ?? ""}
+                              placeholder={
+                                t.packageBuilder.checkout.insuranceFields.optionalPlaceholder
+                              }
                               onChange={(event) =>
                                 updateInsuranceTraveler(traveler.id, {
                                   address: {
                                     ...(traveler.address ?? {}),
-                                    country: event.target.value,
+                                    fullEn: event.target.value,
                                   },
                                 })
                               }
-                              required
-                            />
-                          </label>
-                          <label className="checkout-field">
-                            <span>{t.packageBuilder.checkout.insuranceFields.region}</span>
-                            <input
-                              className="checkout-input"
-                              type="text"
-                              value={traveler.address?.region ?? ""}
-                              onChange={(event) =>
-                                updateInsuranceTraveler(traveler.id, {
-                                  address: {
-                                    ...(traveler.address ?? {}),
-                                    region: event.target.value,
-                                  },
-                                })
-                              }
-                              required
-                            />
-                          </label>
-                          <label className="checkout-field">
-                            <span>{t.packageBuilder.checkout.insuranceFields.city}</span>
-                            <input
-                              className="checkout-input"
-                              type="text"
-                              value={traveler.address?.city ?? ""}
-                              onChange={(event) =>
-                                updateInsuranceTraveler(traveler.id, {
-                                  address: {
-                                    ...(traveler.address ?? {}),
-                                    city: event.target.value,
-                                  },
-                                })
-                              }
-                              required
                             />
                           </label>
                         </div>
@@ -2133,6 +2994,27 @@ export default function BookingAddonsClient({
                   <Link href={`/${locale}/privacy-policy`}>{t.footer.securityPolicy}</Link>
                 </span>
               </label>
+              {insuranceSelection ? (
+                <label className="checkout-terms">
+                  <input
+                    type="checkbox"
+                    checked={insuranceTermsAccepted}
+                    onChange={(event) => setInsuranceTermsAccepted(event.target.checked)}
+                    disabled={paymentLoading}
+                  />
+                  <span>
+                    {t.packageBuilder.checkout.insuranceTerms.prefix}
+                    <Link
+                      href="https://online.efes.am/pdfs/04-11-01-Travel-insurance-rules-3-0-arm.pdf"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {t.packageBuilder.checkout.insuranceTerms.link}
+                    </Link>
+                    {t.packageBuilder.checkout.insuranceTerms.suffix}
+                  </span>
+                </label>
+              ) : null}
 
               {paymentError ? <p className="checkout-error">{paymentError}</p> : null}
               {!paymentError && blockedServiceMessages.length > 0 ? (
@@ -2179,6 +3061,7 @@ export default function BookingAddonsClient({
                   disabled={
                     paymentLoading ||
                     !termsAccepted ||
+                    Boolean(insuranceSelection && !insuranceTermsAccepted) ||
                     activeServiceCount === 0 ||
                     !allSelectedServicesReady ||
                     paymentMethod === null
