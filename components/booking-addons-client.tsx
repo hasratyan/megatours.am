@@ -3,6 +3,7 @@
 import type { FormEvent } from "react";
 import Link from "next/link";
 import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCurrency } from "@/components/currency-provider";
 import { useLanguage } from "@/components/language-provider";
@@ -13,7 +14,11 @@ import type {
 } from "@/lib/booking-addons";
 import { formatCurrencyAmount, normalizeAmount } from "@/lib/currency";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
-import type { CheckoutPaymentMethod, PaymentMethodFlags } from "@/lib/payment-method-flags";
+import {
+  resolveBookingAddonPaymentMethods,
+  type BookingAddonPaymentMethod,
+} from "@/lib/booking-addon-payment-methods";
+import type { PaymentMethodFlags } from "@/lib/payment-method-flags";
 import {
   PACKAGE_BUILDER_SESSION_MS,
   readPackageBuilderState,
@@ -45,6 +50,13 @@ type VposCheckoutResponse = {
   orderNumber: string;
 };
 
+type AdminCheckoutResponse = {
+  bookingId: string;
+  appliedServices: AddonServiceKey[];
+  skippedServices: AddonServiceKey[];
+  insuranceStatus: "not_requested" | "confirmed" | "failed";
+};
+
 type BookingAddonPaymentSnapshot = {
   at: string | null;
   provider: string | null;
@@ -62,6 +74,7 @@ type BookingAddonsClientProps = {
   existingServices: AddonServiceKey[];
   serviceFlags: Record<AddonServiceKey, boolean>;
   paymentMethodFlags: PaymentMethodFlags;
+  canUseAdminPayment: boolean;
   lastAddonPayment: BookingAddonPaymentSnapshot | null;
 };
 
@@ -102,7 +115,6 @@ const intlLocales = {
   ru: "ru-RU",
 } as const;
 
-const paymentMethodOrder: CheckoutPaymentMethod[] = ["idram", "idbank_card", "ameria_card"];
 const addonServiceKeys: AddonServiceKey[] = ["transfer", "excursion", "insurance", "flight"];
 const DEFAULT_INSURANCE_ADULT_AGE = 30;
 const DEFAULT_INSURANCE_CHILD_AGE = 8;
@@ -134,9 +146,10 @@ const normalizeTransferType = (
 };
 
 const resolveMethodPayLabel = (
-  method: CheckoutPaymentMethod,
+  method: BookingAddonPaymentMethod,
   t: ReturnType<typeof useLanguage>["t"]
 ) => {
+  if (method === "admin") return t.profile.voucher.addServices.adminPaymentSubmit;
   if (method === "idram") return t.packageBuilder.checkout.payIdram;
   if (method === "ameria_card") return t.packageBuilder.checkout.payCardAmeria;
   return t.packageBuilder.checkout.payCard;
@@ -303,8 +316,10 @@ export default function BookingAddonsClient({
   existingServices,
   serviceFlags,
   paymentMethodFlags,
+  canUseAdminPayment,
   lastAddonPayment,
 }: BookingAddonsClientProps) {
+  const router = useRouter();
   const { locale, t } = useLanguage();
   const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[locale] ?? "en-GB";
@@ -329,12 +344,12 @@ export default function BookingAddonsClient({
   const disabledServiceSet = useMemo(() => new Set(disabledServices), [disabledServices]);
   const bookingContextKey = useMemo(() => `booking-addon:${bookingId}`, [bookingId]);
   const enabledPaymentMethods = useMemo(
-    () => paymentMethodOrder.filter((method) => paymentMethodFlags[method] !== false),
-    [paymentMethodFlags]
+    () => resolveBookingAddonPaymentMethods(paymentMethodFlags, canUseAdminPayment),
+    [canUseAdminPayment, paymentMethodFlags]
   );
 
   const [builderState, setBuilderState] = useState<PackageBuilderState>({});
-  const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod | null>(
+  const [paymentMethod, setPaymentMethod] = useState<BookingAddonPaymentMethod | null>(
     enabledPaymentMethods[0] ?? null
   );
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -1292,6 +1307,15 @@ export default function BookingAddonsClient({
         addonServices,
       };
 
+      if (paymentMethod === "admin") {
+        const checkout = await postJson<AdminCheckoutResponse>(
+          "/api/payments/admin/checkout",
+          requestPayload
+        );
+        router.push(`/${locale}/profile/voucher/${encodeURIComponent(checkout.bookingId)}`);
+        return;
+      }
+
       if (paymentMethod === "idram") {
         const checkout = await postJson<IdramCheckoutResponse>(
           "/api/payments/idram/checkout",
@@ -2127,7 +2151,9 @@ export default function BookingAddonsClient({
                   <div className="checkout-payment">
                     {enabledPaymentMethods.map((method) => {
                       const label =
-                        method === "idram"
+                        method === "admin"
+                          ? t.profile.voucher.addServices.adminPaymentMethod
+                          : method === "idram"
                           ? t.packageBuilder.checkout.methodIdram
                           : method === "ameria_card"
                           ? t.packageBuilder.checkout.methodCardAmeria

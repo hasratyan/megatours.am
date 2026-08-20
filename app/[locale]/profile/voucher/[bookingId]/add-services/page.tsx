@@ -5,6 +5,7 @@ import { getServerSession } from "@/lib/auth-compat/server";
 import BookingAddonsClient from "@/components/booking-addons-client";
 import ProfileSignIn from "@/components/profile-signin";
 import { authOptions } from "@/lib/auth";
+import { isAdminUser } from "@/lib/admin";
 import { getDb } from "@/lib/db";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
@@ -134,6 +135,10 @@ export default async function BookingAddonsPage({ params }: PageProps) {
   }
 
   const userIdString = session.user.id;
+  const canUseAdminPayment = isAdminUser({
+    id: session.user.id,
+    email: session.user.email,
+  });
   const db = await getDb();
   const bookingRecord = (await db.collection("user_bookings").findOne({
     userIdString,
@@ -197,6 +202,7 @@ export default async function BookingAddonsPage({ params }: PageProps) {
         flight: serviceFlags.flight !== false,
       }}
       paymentMethodFlags={paymentMethodFlags}
+      canUseAdminPayment={canUseAdminPayment}
       lastAddonPayment={lastAddonPayment}
     />
   );

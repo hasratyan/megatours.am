@@ -508,6 +508,8 @@ export type Translation = {
         lastPaymentRequested: string;
         lastPaymentApplied: string;
         lastPaymentSkipped: string;
+        adminPaymentMethod: string;
+        adminPaymentSubmit: string;
         continueToTravelerDetails: string;
         continueToTravelerDetailsHint: string;
       };
@@ -2006,6 +2008,8 @@ const translations: Record<Locale, Translation> = {
           lastPaymentRequested: "Պահանջված ծառայություններ",
           lastPaymentApplied: "Կցված ծառայություններ",
           lastPaymentSkipped: "Բաց թողնված ծառայություններ",
+          adminPaymentMethod: "Ադմինի վճարում",
+          adminPaymentSubmit: "Ավելացնել ծառայությունները որպես ադմին",
           continueToTravelerDetails: "Շարունակել՝ լրացնել ուղևորների տվյալները և վճարել",
           continueToTravelerDetailsHint:
             "Ընտրեք ապահովագրության պլանը և սպասեք գնի հաշվարկին։ Հաջորդ քայլում լրացրեք յուրաքանչյուր ուղևորի տվյալները և ընտրեք վճարման եղանակը։",
@@ -3542,6 +3546,8 @@ const translations: Record<Locale, Translation> = {
           lastPaymentRequested: "Requested services",
           lastPaymentApplied: "Applied services",
           lastPaymentSkipped: "Skipped services",
+          adminPaymentMethod: "Admin payment",
+          adminPaymentSubmit: "Add services as admin",
           continueToTravelerDetails: "Continue to traveler details and payment",
           continueToTravelerDetailsHint:
             "Select an insurance plan and wait for its price. On the next step, complete each traveler's details and choose a payment method.",
@@ -5082,6 +5088,8 @@ const translations: Record<Locale, Translation> = {
           lastPaymentRequested: "Запрошенные услуги",
           lastPaymentApplied: "Добавленные услуги",
           lastPaymentSkipped: "Пропущенные услуги",
+          adminPaymentMethod: "Оплата администратором",
+          adminPaymentSubmit: "Добавить услуги как администратор",
           continueToTravelerDetails: "Перейти к данным путешественников и оплате",
           continueToTravelerDetailsHint:
             "Выберите страховой план и дождитесь расчета цены. На следующем шаге заполните данные каждого путешественника и выберите способ оплаты.",
