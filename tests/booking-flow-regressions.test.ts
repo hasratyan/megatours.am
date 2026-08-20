@@ -3,7 +3,7 @@ import test from "node:test";
 // @ts-expect-error Node's built-in TypeScript test runner requires the source extension.
 import { hasManualGuestNameInput, syncLeadGuestWithContact } from "../lib/checkout-guest-sync.ts";
 // @ts-expect-error Node's built-in TypeScript test runner requires the source extension.
-import { formatEfesPolicyCreationDate, resolveInsuranceIssuance } from "../lib/insurance-policy-status.ts";
+import { formatEfesPolicyCreationDate, hasIssuedEfesPolicy, resolveInsuranceIssuance } from "../lib/insurance-policy-status.ts";
 
 const roomGuests = (firstName: string, lastName: string) => [
   {
@@ -100,6 +100,29 @@ test("EFES policy responses require a returned policy number", () => {
 
   assert.equal(confirmed.status, "confirmed");
   assert.equal(missingNumber.status, "failed");
+});
+
+test("mixed EFES results retain knowledge of any issued policy", () => {
+  const policies = [
+    {
+      response: {
+        is_error: 0,
+        error_code: 0,
+        d_error_code: 0,
+        result: "POLICY-123",
+      },
+    },
+    {
+      response: {
+        is_error: 1,
+        error_code: 4,
+        result: "",
+      },
+    },
+  ];
+
+  assert.equal(resolveInsuranceIssuance({ insuranceSelected: true, insurancePolicies: policies }).status, "failed");
+  assert.equal(hasIssuedEfesPolicy(policies), true);
 });
 
 test("EFES creation date uses Yerevan's calendar day after local midnight", () => {

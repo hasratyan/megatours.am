@@ -5,6 +5,15 @@ import { authOptions } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin";
 import { getDb } from "@/lib/db";
 import { parseBookingAddonServices } from "@/lib/booking-addons";
+import {
+  BookingServiceRemovalError,
+  parseBookingServiceRemovalKeys,
+  removeBookingServices,
+} from "@/lib/admin-booking-service-removal";
+import {
+  hasIssuedEfesPolicy,
+  resolveInsuranceIssuance,
+} from "@/lib/insurance-policy-status";
 import type {
   AoryxBookingGuestPayload,
   AoryxBookingPayload,
@@ -23,8 +32,6 @@ type ManageAction =
   | "remove_local_services"
   | "update_contact";
 
-type LocalServiceKey = "transfer" | "excursion" | "flight";
-
 type AdminUserIdentity = {
   id: string | null;
   email: string | null;
@@ -34,6 +41,8 @@ type UserBookingRecord = {
   _id: ObjectId;
   userIdString?: string | null;
   payload?: AoryxBookingPayload | null;
+  insurancePolicies?: unknown[] | null;
+  insuranceError?: string | null;
 };
 
 const SUPPORT_LOCK_TTL_MS = 2 * 60 * 1000;
@@ -189,17 +198,6 @@ const parseAction = (value: unknown): ManageAction | null => {
     return normalized;
   }
   return null;
-};
-
-const parseLocalServiceKeys = (value: unknown): LocalServiceKey[] => {
-  if (!Array.isArray(value)) return [];
-  const normalized = value
-    .map((entry) => resolveString(entry).toLowerCase())
-    .filter(
-      (entry): entry is LocalServiceKey =>
-        entry === "transfer" || entry === "excursion" || entry === "flight"
-    );
-  return Array.from(new Set(normalized));
 };
 
 const buildSupportHistoryEntry = (
@@ -469,7 +467,7 @@ export async function POST(
 
       const parsed = parseBookingAddonServices(servicesInput);
       const nextPayload: AoryxBookingPayload = { ...payload };
-      const changedServices: LocalServiceKey[] = [];
+      const changedServices: Array<"transfer" | "excursion" | "flight"> = [];
 
       if (hasTransfer) {
         nextPayload.transferSelection = parsed.transferSelection ?? null;
@@ -518,51 +516,80 @@ export async function POST(
     }
 
     if (action === "remove_local_services") {
-      const serviceKeys = parseLocalServiceKeys(body.serviceKeys);
+      const serviceKeys = parseBookingServiceRemovalKeys(body.serviceKeys);
       if (serviceKeys.length === 0) {
         return NextResponse.json(
-          { error: "Select at least one local service to remove." },
+          { error: "Select at least one attached service to remove." },
           { status: 400 }
         );
       }
 
-      const nextPayload: AoryxBookingPayload = { ...payload };
-      serviceKeys.forEach((key) => {
-        if (key === "transfer") nextPayload.transferSelection = null;
-        if (key === "excursion") nextPayload.excursions = null;
-        if (key === "flight") nextPayload.airTickets = null;
-      });
+      let removal: ReturnType<typeof removeBookingServices>;
+      try {
+        removal = removeBookingServices({
+          payload,
+          serviceKeys,
+          insuranceStatus: resolveInsuranceIssuance({
+            insuranceSelected: Boolean(payload.insurance),
+            insurancePolicies: record.insurancePolicies,
+            insuranceError: record.insuranceError,
+          }).status,
+          insuranceHasIssuedPolicy: hasIssuedEfesPolicy(record.insurancePolicies),
+        });
+      } catch (error) {
+        if (error instanceof BookingServiceRemovalError) {
+          return NextResponse.json(
+            { error: error.message, code: error.code },
+            { status: 409 }
+          );
+        }
+        throw error;
+      }
 
       const historyEntry = buildSupportHistoryEntry(action, adminUser, {
-        removedServices: serviceKeys,
+        removedServices: removal.removedServices,
+        insuranceStatusBefore: removal.clearInsuranceMetadata
+          ? removal.insuranceStatusBefore
+          : null,
+        paymentRefund: "not_performed",
         aoryxSync: "not_sent",
         efesSync: "not_sent",
       });
+
+      const update: Document = {
+        $set: {
+          payload: removal.payload,
+          updatedAt: now,
+          supportUpdatedAt: now,
+        },
+        $push: {
+          supportHistory: {
+            $each: [historyEntry],
+            $slice: -MAX_HISTORY_ITEMS,
+          },
+        },
+      };
+      if (removal.clearInsuranceMetadata) {
+        update.$unset = {
+          insurancePolicies: "",
+          insuranceError: "",
+          insuranceUpdatedAt: "",
+        };
+      }
 
       await userBookingsCollection.updateOne(
         {
           _id: bookingObjectId,
           "supportLock.token": lockToken,
         },
-        ({
-          $set: {
-            payload: nextPayload,
-            updatedAt: now,
-            supportUpdatedAt: now,
-          },
-          $push: {
-            supportHistory: {
-              $each: [historyEntry],
-              $slice: -MAX_HISTORY_ITEMS,
-            },
-          },
-        } as Document)
+        update
       );
 
       return NextResponse.json({
         message:
-          "Selected local services were removed from DB. No update request was sent to Aoryx or EFES.",
-        payload: sanitizePayloadForAdmin(nextPayload),
+          "Selected services were removed from the booking. No supplier cancellation or payment refund was performed.",
+        payload: sanitizePayloadForAdmin(removal.payload),
+        insuranceStatus: removal.clearInsuranceMetadata ? "not_selected" : undefined,
       });
     }
 

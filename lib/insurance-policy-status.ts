@@ -58,6 +58,10 @@ export const resolveEfesPolicyResponseFailure = (value: unknown): string | null 
   return null;
 };
 
+export const hasIssuedEfesPolicy = (insurancePolicies: unknown): boolean =>
+  Array.isArray(insurancePolicies) &&
+  insurancePolicies.some((policy) => resolveEfesPolicyResponseFailure(policy) === null);
+
 export const resolveInsuranceIssuance = (input: {
   insuranceSelected: boolean;
   insurancePolicies?: unknown;

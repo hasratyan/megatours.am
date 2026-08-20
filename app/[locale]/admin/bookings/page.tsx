@@ -9,6 +9,11 @@ import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
 import { resolveBookingDisplayTotal } from "@/lib/booking-total";
 import { getAmdRates, getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { convertToAmd } from "@/lib/currency";
+import {
+  hasIssuedEfesPolicy,
+  resolveInsuranceIssuance,
+  type InsuranceIssuanceStatus,
+} from "@/lib/insurance-policy-status";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 import type { AppliedBookingCoupon } from "@/lib/user-data";
 
@@ -26,6 +31,8 @@ type BookingRecord = {
   payload?: AoryxBookingPayload | null;
   booking?: AoryxBookingResult | null;
   coupon?: AppliedBookingCoupon | null;
+  insurancePolicies?: unknown[] | null;
+  insuranceError?: string | null;
   cancellation?: {
     [key: string]: unknown;
     refund?: {
@@ -61,6 +68,8 @@ type AdminBookingRecord = {
   displayProfit?: number | null;
   displayProfitCurrency?: string | null;
   refundServices?: RefundServiceOption[];
+  insuranceStatus?: InsuranceIssuanceStatus;
+  insuranceRemovalAllowed?: boolean;
   payments?: Record<string, unknown>[];
 };
 
@@ -462,6 +471,11 @@ export default async function AdminBookingsPage({ params }: PageProps) {
   const bookings: AdminBookingRecord[] = bookingDocs.map((entry) => {
     const profile = entry.userIdString ? profileMap.get(entry.userIdString) ?? null : null;
     const customerRef = entry.payload?.customerRefNumber ?? entry.booking?.customerRefNumber ?? null;
+    const insuranceIssuance = resolveInsuranceIssuance({
+      insuranceSelected: Boolean(entry.payload?.insurance),
+      insurancePolicies: entry.insurancePolicies,
+      insuranceError: entry.insuranceError,
+    });
     return {
       id:
         (entry._id && typeof (entry._id as { toString?: () => string }).toString === "function"
@@ -475,6 +489,9 @@ export default async function AdminBookingsPage({ params }: PageProps) {
       payload: sanitizeBookingPayload(entry.payload ?? null),
       booking: sanitizeBookingResult(entry.booking ?? null),
       coupon: sanitizeAppliedCoupon(entry.coupon ?? null),
+      insuranceStatus: insuranceIssuance.status,
+      insuranceRemovalAllowed:
+        insuranceIssuance.status === "failed" && !hasIssuedEfesPolicy(entry.insurancePolicies),
       refundState: entry.cancellation?.refund?.status ?? null,
       cancellation: entry.cancellation ? sanitizeJson(entry.cancellation) : null,
       payments: customerRef ? paymentsByCustomerRef.get(customerRef) ?? [] : [],

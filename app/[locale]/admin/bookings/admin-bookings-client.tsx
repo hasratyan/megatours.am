@@ -8,10 +8,12 @@ import { resolveBookingStatusKey, type BookingStatusKey } from "@/lib/booking-st
 import { postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { sanitizeLeadingZeroNumberInput } from "@/lib/number-input";
+import type { BookingAddonServiceKey } from "@/lib/booking-addons";
+import type { InsuranceIssuanceStatus } from "@/lib/insurance-policy-status";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 import type { AppliedBookingCoupon } from "@/lib/user-data";
 
-type RefundServiceKey = "transfer" | "excursion" | "flight";
+type RefundServiceKey = Exclude<BookingAddonServiceKey, "insurance">;
 
 type RefundServiceOption = {
   key: RefundServiceKey;
@@ -38,6 +40,8 @@ type AdminBookingRecord = {
   displayProfit?: number | null;
   displayProfitCurrency?: string | null;
   refundServices?: RefundServiceOption[];
+  insuranceStatus?: InsuranceIssuanceStatus;
+  insuranceRemovalAllowed?: boolean;
   payments?: Record<string, unknown>[];
 };
 
@@ -71,6 +75,7 @@ type BookingActionResponse = {
 type BookingManageResponse = {
   message?: string;
   payload?: AoryxBookingPayload | null;
+  insuranceStatus?: InsuranceIssuanceStatus;
   contact?: {
     name?: string | null;
     email?: string | null;
@@ -193,6 +198,18 @@ const buildLocalServicesDraft = (payload: AoryxBookingPayload | null | undefined
   airTickets: payload?.airTickets ?? null,
 });
 
+const resolveAttachedServiceKeys = (
+  payload: AoryxBookingPayload | null | undefined
+): BookingAddonServiceKey[] => {
+  if (!payload) return [];
+  const keys: BookingAddonServiceKey[] = [];
+  if (payload.transferSelection) keys.push("transfer");
+  if (payload.excursions) keys.push("excursion");
+  if (payload.insurance) keys.push("insurance");
+  if (payload.airTickets) keys.push("flight");
+  return keys;
+};
+
 const filterRefundServiceOptionsByPayload = (
   options: RefundServiceOption[] | undefined,
   payload: AoryxBookingPayload | null | undefined
@@ -231,7 +248,7 @@ export default function AdminBookingsClient({
   const [guestDetailsDraftByBookingId, setGuestDetailsDraftByBookingId] = useState<Record<string, string>>({});
   const [localServicesDraftByBookingId, setLocalServicesDraftByBookingId] = useState<Record<string, string>>({});
   const [removeLocalServicesByBookingId, setRemoveLocalServicesByBookingId] = useState<
-    Record<string, RefundServiceKey[]>
+    Record<string, BookingAddonServiceKey[]>
   >({});
   const [contactDraftByBookingId, setContactDraftByBookingId] = useState<
     Record<string, { name: string; email: string }>
@@ -371,9 +388,10 @@ export default function AdminBookingsClient({
     });
   };
 
-  const resolveServiceLabel = (key: RefundServiceKey) => {
+  const resolveServiceLabel = (key: BookingAddonServiceKey) => {
     if (key === "flight") return t.packageBuilder.services.flight;
     if (key === "transfer") return t.packageBuilder.services.transfer;
+    if (key === "insurance") return t.packageBuilder.services.insurance;
     return t.packageBuilder.services.excursion;
   };
 
@@ -606,6 +624,11 @@ export default function AdminBookingsClient({
         return {
           ...entry,
           payload: response.payload ?? fallbackPayload ?? entry.payload,
+          insuranceStatus: response.insuranceStatus ?? entry.insuranceStatus,
+          insuranceRemovalAllowed:
+            response.insuranceStatus === "not_selected"
+              ? false
+              : entry.insuranceRemovalAllowed,
           userName: hasContactName ? (response.contact?.name ?? null) : entry.userName,
           userEmail: hasContactEmail ? (response.contact?.email ?? null) : entry.userEmail,
         };
@@ -751,7 +774,10 @@ export default function AdminBookingsClient({
     }
   };
 
-  const handleToggleRemoveLocalService = (bookingId: string, serviceKey: RefundServiceKey) => {
+  const handleToggleRemoveLocalService = (
+    bookingId: string,
+    serviceKey: BookingAddonServiceKey
+  ) => {
     setRemoveLocalServicesByBookingId((prev) => {
       const current = prev[bookingId] ?? [];
       const next = current.includes(serviceKey)
@@ -773,13 +799,15 @@ export default function AdminBookingsClient({
     if (selectedServices.length === 0) {
       setActionFeedback((prev) => ({
         ...prev,
-        [bookingId]: { ok: false, message: "Select at least one local service to remove." },
+        [bookingId]: { ok: false, message: "Select at least one attached service to remove." },
       }));
       return;
     }
 
     if (typeof window !== "undefined") {
-      const confirmed = window.confirm("Remove selected local services from this booking?");
+      const confirmed = window.confirm(
+        "Remove selected services from the booking database? This does not cancel a supplier service or refund its payment."
+      );
       if (!confirmed) return;
     }
 
@@ -813,7 +841,7 @@ export default function AdminBookingsClient({
           message:
             typeof response.message === "string" && response.message.trim().length > 0
               ? response.message
-              : "Selected local services were removed.",
+              : "Selected services were removed from the booking.",
         },
       }));
     } catch (error) {
@@ -821,7 +849,7 @@ export default function AdminBookingsClient({
         ...prev,
         [bookingId]: {
           ok: false,
-          message: resolveSafeErrorFromUnknown(error, "Failed to remove local services."),
+          message: resolveSafeErrorFromUnknown(error, "Failed to remove booking services."),
         },
       }));
     } finally {
@@ -1092,6 +1120,10 @@ export default function AdminBookingsClient({
                     item.entry.userEmail
                   );
                   const selectedLocalServicesToRemove = removeLocalServicesByBookingId[item.entry.id] ?? [];
+                  const attachedServiceKeys = resolveAttachedServiceKeys(payload);
+                  const insuranceStatus = item.entry.insuranceStatus ??
+                    (payload?.insurance ? "pending" : "not_selected");
+                  const insuranceRemovalAllowed = item.entry.insuranceRemovalAllowed === true;
                   return (
                     <Fragment key={item.entry.id}>
                       <tr>
@@ -1250,27 +1282,55 @@ export default function AdminBookingsClient({
                                     </button>
                                   </div>
                                   <div className="admin-refund-services">
-                                    <span>Remove local services</span>
-                                    <div className="admin-refund-service-list">
-                                      {(["transfer", "excursion", "flight"] as RefundServiceKey[]).map((serviceKey) => (
-                                        <label key={serviceKey} className="admin-refund-service-item">
-                                          <input
-                                            type="checkbox"
-                                            checked={selectedLocalServicesToRemove.includes(serviceKey)}
-                                            onChange={() => handleToggleRemoveLocalService(item.entry.id, serviceKey)}
-                                            disabled={Boolean(processingAction)}
-                                          />
-                                          <span>{resolveServiceLabel(serviceKey)}</span>
-                                        </label>
-                                      ))}
-                                    </div>
+                                    <span>Remove attached services from booking</span>
+                                    {attachedServiceKeys.length > 0 ? (
+                                      <div className="admin-refund-service-list">
+                                        {attachedServiceKeys.map((serviceKey) => {
+                                          const insuranceRemovalBlocked =
+                                            serviceKey === "insurance" && !insuranceRemovalAllowed;
+                                          const insuranceStatusLabel =
+                                            serviceKey !== "insurance"
+                                              ? null
+                                              : insuranceRemovalAllowed
+                                                ? "failed - removable"
+                                                : insuranceStatus === "confirmed"
+                                                  ? "issued - cancel with EFES first"
+                                                  : insuranceStatus === "failed"
+                                                    ? "one or more policies issued - cancel with EFES first"
+                                                  : "status unresolved - verify first";
+                                          return (
+                                            <label key={serviceKey} className="admin-refund-service-item">
+                                              <input
+                                                type="checkbox"
+                                                checked={selectedLocalServicesToRemove.includes(serviceKey)}
+                                                onChange={() =>
+                                                  handleToggleRemoveLocalService(item.entry.id, serviceKey)
+                                                }
+                                                disabled={Boolean(processingAction) || insuranceRemovalBlocked}
+                                              />
+                                              <span>
+                                                {resolveServiceLabel(serviceKey)}
+                                                {insuranceStatusLabel ? ` (${insuranceStatusLabel})` : ""}
+                                              </span>
+                                            </label>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <p className="admin-hint">No additional services are attached.</p>
+                                    )}
+                                    <p className="admin-hint">
+                                      This removes booking data only. It does not cancel suppliers or refund payment.
+                                    </p>
                                   </div>
                                   <div className="admin-action-row">
                                     <button
                                       type="button"
                                       className="admin-danger"
                                       onClick={() => handleRemoveLocalServices(item.entry.id, payload)}
-                                      disabled={Boolean(processingAction)}
+                                      disabled={
+                                        Boolean(processingAction) || selectedLocalServicesToRemove.length === 0
+                                      }
                                     >
                                       {isRemovingLocalServices ? "Removing..." : "Remove Selected Services"}
                                     </button>
