@@ -14,6 +14,7 @@ import {
   hasIssuedEfesPolicy,
   resolveInsuranceIssuance,
 } from "@/lib/insurance-policy-status";
+import { issueBookingAddonInsurance } from "@/lib/booking-addon-insurance-issuance";
 import type {
   AoryxBookingGuestPayload,
   AoryxBookingPayload,
@@ -30,6 +31,7 @@ type ManageAction =
   | "update_guest_details"
   | "update_local_services"
   | "remove_local_services"
+  | "retry_insurance"
   | "update_contact";
 
 type AdminUserIdentity = {
@@ -43,6 +45,7 @@ type UserBookingRecord = {
   payload?: AoryxBookingPayload | null;
   insurancePolicies?: unknown[] | null;
   insuranceError?: string | null;
+  addonLastPayment?: unknown;
 };
 
 const SUPPORT_LOCK_TTL_MS = 2 * 60 * 1000;
@@ -193,6 +196,7 @@ const parseAction = (value: unknown): ManageAction | null => {
     normalized === "update_guest_details" ||
     normalized === "update_local_services" ||
     normalized === "remove_local_services" ||
+    normalized === "retry_insurance" ||
     normalized === "update_contact"
   ) {
     return normalized;
@@ -590,6 +594,115 @@ export async function POST(
           "Selected services were removed from the booking. No supplier cancellation or payment refund was performed.",
         payload: sanitizePayloadForAdmin(removal.payload),
         insuranceStatus: removal.clearInsuranceMetadata ? "not_selected" : undefined,
+      });
+    }
+
+    if (action === "retry_insurance") {
+      if (!payload.insurance) {
+        return NextResponse.json(
+          {
+            error: "Insurance is not attached to this booking.",
+            code: "insurance_not_attached",
+          },
+          { status: 409 }
+        );
+      }
+
+      const insuranceStatusBefore = resolveInsuranceIssuance({
+        insuranceSelected: true,
+        insurancePolicies: record.insurancePolicies,
+        insuranceError: record.insuranceError,
+      }).status;
+      if (
+        insuranceStatusBefore === "confirmed" ||
+        hasIssuedEfesPolicy(record.insurancePolicies)
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "At least one EFES policy was already issued. Verify and manage it in EFES before retrying.",
+            code: "insurance_policy_already_issued",
+          },
+          { status: 409 }
+        );
+      }
+      if (insuranceStatusBefore !== "failed") {
+        return NextResponse.json(
+          {
+            error: "Insurance issuance is not in a failed state.",
+            code: "insurance_retry_not_failed",
+          },
+          { status: 409 }
+        );
+      }
+
+      const insuranceOutcome = await issueBookingAddonInsurance({
+        userBookings: userBookingsCollection,
+        bookingFilter: {
+          _id: bookingObjectId,
+          "supportLock.token": lockToken,
+        },
+        payload,
+        shouldIssue: true,
+        logContext: {
+          flow: "admin_insurance_retry",
+          bookingId: normalizedBookingId,
+          adminUserId: adminUser.id,
+        },
+      });
+      const retriedAt = new Date();
+      const historyEntry = {
+        id: new ObjectId().toString(),
+        action,
+        scope: "efes_policy_retry",
+        partnerSync: "sent",
+        partnerPolicy:
+          "The existing paid insurance selection was resent to EFES without collecting another payment.",
+        changedAt: retriedAt,
+        changedBy: {
+          id: adminUser.id,
+          email: adminUser.email,
+        },
+        details: {
+          insuranceStatusBefore,
+          insuranceStatusAfter: insuranceOutcome.status,
+          policyResultCount: insuranceOutcome.insurancePolicies.length,
+        },
+      };
+
+      await userBookingsCollection.updateOne(
+        {
+          _id: bookingObjectId,
+          "supportLock.token": lockToken,
+        },
+        ({
+          $set: {
+            updatedAt: retriedAt,
+            supportUpdatedAt: retriedAt,
+          },
+          $push: {
+            supportHistory: {
+              $each: [historyEntry],
+              $slice: -MAX_HISTORY_ITEMS,
+            },
+          },
+        } as Document)
+      );
+
+      if (insuranceOutcome.status === "failed") {
+        return NextResponse.json(
+          {
+            error: "EFES did not confirm the insurance policy.",
+            code: "insurance_retry_failed",
+            insuranceStatus: insuranceOutcome.status,
+          },
+          { status: 502 }
+        );
+      }
+
+      return NextResponse.json({
+        message: "Insurance was confirmed by EFES without collecting another payment.",
+        insuranceStatus: insuranceOutcome.status,
       });
     }
 

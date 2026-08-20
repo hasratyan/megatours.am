@@ -36,6 +36,7 @@ import {
   type EfesCountryLocation,
 } from "@/lib/efes-locations";
 import type { PaymentMethodFlags } from "@/lib/payment-method-flags";
+import type { InsuranceIssuanceSummary } from "@/lib/insurance-policy-status";
 import {
   PACKAGE_BUILDER_SESSION_MS,
   readPackageBuilderState,
@@ -70,6 +71,7 @@ type VposCheckoutResponse = {
 type AdminCheckoutResponse = {
   bookingId: string;
   appliedServices: AddonServiceKey[];
+  failedServices?: AddonServiceKey[];
   skippedServices: AddonServiceKey[];
   insuranceStatus: "not_requested" | "confirmed" | "failed";
 };
@@ -81,6 +83,7 @@ type BookingAddonPaymentSnapshot = {
   currency: string | null;
   requestedServices: AddonServiceKey[];
   appliedServices: AddonServiceKey[];
+  failedServices: AddonServiceKey[];
   skippedServices: AddonServiceKey[];
 };
 
@@ -92,6 +95,8 @@ type BookingAddonsClientProps = {
   serviceFlags: Record<AddonServiceKey, boolean>;
   paymentMethodFlags: PaymentMethodFlags;
   canUseAdminPayment: boolean;
+  adminBookingId: string | null;
+  insuranceIssuance: InsuranceIssuanceSummary;
   lastAddonPayment: BookingAddonPaymentSnapshot | null;
 };
 
@@ -526,6 +531,8 @@ export default function BookingAddonsClient({
   serviceFlags,
   paymentMethodFlags,
   canUseAdminPayment,
+  adminBookingId,
+  insuranceIssuance,
   lastAddonPayment,
 }: BookingAddonsClientProps) {
   const router = useRouter();
@@ -563,6 +570,8 @@ export default function BookingAddonsClient({
   );
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [insuranceRetryLoading, setInsuranceRetryLoading] = useState(false);
+  const [insuranceRetryError, setInsuranceRetryError] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [insuranceTermsAccepted, setInsuranceTermsAccepted] = useState(false);
   const [transferFlightDetails, setTransferFlightDetails] = useState<TransferFlightDetailsForm>({
@@ -1535,9 +1544,16 @@ export default function BookingAddonsClient({
       ),
     [disabledServiceSet, existingServiceSet, serviceDefinitions]
   );
+  const insuranceConfirmationFailed =
+    existingServiceSet.has("insurance") && insuranceIssuance.status === "failed";
   const includedServiceCards = useMemo(
-    () => serviceDefinitions.filter((service) => existingServiceSet.has(service.key)),
-    [existingServiceSet, serviceDefinitions]
+    () =>
+      serviceDefinitions.filter(
+        (service) =>
+          existingServiceSet.has(service.key) &&
+          !(service.key === "insurance" && insuranceConfirmationFailed)
+      ),
+    [existingServiceSet, insuranceConfirmationFailed, serviceDefinitions]
   );
   const unavailableServiceCards = useMemo(
     () =>
@@ -1550,6 +1566,7 @@ export default function BookingAddonsClient({
 
   const hasRemainingServices = includedServiceCards.length < addonServiceKeys.length;
   const hasAddableServices = actionableServices.length > 0;
+  const hasServiceActions = hasAddableServices || insuranceConfirmationFailed;
   const stayDates = useMemo(() => {
     const checkInLabel = resolveDateLabel(hotelContext.checkInDate, locale);
     const checkOutLabel = resolveDateLabel(hotelContext.checkOutDate, locale);
@@ -1935,6 +1952,34 @@ export default function BookingAddonsClient({
     }
   };
 
+  const handleInsuranceRetry = async () => {
+    if (!adminBookingId || insuranceRetryLoading) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(t.profile.voucher.addServices.insuranceRetryConfirm)
+    ) {
+      return;
+    }
+    setInsuranceRetryLoading(true);
+    setInsuranceRetryError(null);
+    try {
+      await postJson<{ insuranceStatus: "confirmed" }>(
+        `/api/admin/bookings/${encodeURIComponent(adminBookingId)}/manage`,
+        { action: "retry_insurance" }
+      );
+      router.refresh();
+    } catch (error) {
+      setInsuranceRetryError(
+        error instanceof ApiError && error.code === "insurance_policy_already_issued"
+          ? t.profile.voucher.addServices.insuranceRetryAlreadyIssued
+          : t.profile.voucher.addServices.insuranceRetryFailed
+      );
+      router.refresh();
+    } finally {
+      setInsuranceRetryLoading(false);
+    }
+  };
+
   const renderServicePills = useCallback(
     (services: AddonServiceKey[], tone: "default" | "success" | "warning" = "default") => {
       if (services.length === 0) return null;
@@ -2009,6 +2054,7 @@ export default function BookingAddonsClient({
       {lastAddonPayment &&
       (lastAddonPayment.requestedServices.length > 0 ||
         lastAddonPayment.appliedServices.length > 0 ||
+        lastAddonPayment.failedServices.length > 0 ||
         lastAddonPayment.skippedServices.length > 0) ? (
         <section className="profile-card booking-addons-last-payment">
           <div className="booking-addons-last-payment__header">
@@ -2035,6 +2081,12 @@ export default function BookingAddonsClient({
                 {renderServicePills(lastAddonPayment.appliedServices, "success")}
               </div>
             ) : null}
+            {lastAddonPayment.failedServices.length > 0 ? (
+              <div className="booking-addons-last-payment__group">
+                <span>{t.profile.voucher.addServices.lastPaymentFailed}</span>
+                {renderServicePills(lastAddonPayment.failedServices, "warning")}
+              </div>
+            ) : null}
             {lastAddonPayment.skippedServices.length > 0 ? (
               <div className="booking-addons-last-payment__group">
                 <span>{t.profile.voucher.addServices.lastPaymentSkipped}</span>
@@ -2051,7 +2103,7 @@ export default function BookingAddonsClient({
           <p className="checkout-section__hint">{t.profile.voucher.addServices.selectionHint}</p>
         </div>
 
-        {hasAddableServices ? (
+        {hasServiceActions ? (
           <div className="booking-addons-grid">
             {actionableServices.map((service) => {
               const selectedCard =
@@ -2105,6 +2157,52 @@ export default function BookingAddonsClient({
                 </article>
               );
             })}
+            {insuranceConfirmationFailed ? (
+              <article className="profile-card booking-addon-card is-failed">
+                <div className="booking-addon-card__icon">
+                  <span className="material-symbols-rounded">shield_with_heart</span>
+                </div>
+                <div className="booking-addon-card__body">
+                  <div className="booking-addon-card__header">
+                    <h3>{resolveServiceLabel("insurance")}</h3>
+                    <span className="booking-addon-status is-warning">
+                      {t.profile.voucher.addServices.insuranceFailedStatus}
+                    </span>
+                  </div>
+                  <p>{t.profile.voucher.addServices.insuranceFailedBody}</p>
+                  {canUseAdminPayment ? (
+                    <p className="checkout-section__hint">
+                      {t.profile.voucher.addServices.insuranceRetryHint}
+                    </p>
+                  ) : null}
+                  {canUseAdminPayment && insuranceIssuance.errorMessage ? (
+                    <p className="booking-addon-failure-detail">
+                      {insuranceIssuance.errorMessage}
+                    </p>
+                  ) : null}
+                  {insuranceRetryError ? (
+                    <p className="checkout-error" role="alert">
+                      {insuranceRetryError}
+                    </p>
+                  ) : null}
+                  {canUseAdminPayment && adminBookingId ? (
+                    <div className="booking-addon-card__footer">
+                      <button
+                        type="button"
+                        className="booking-addon-retry"
+                        disabled={insuranceRetryLoading}
+                        onClick={handleInsuranceRetry}
+                      >
+                        <span className="material-symbols-rounded">refresh</span>
+                        {insuranceRetryLoading
+                          ? t.profile.voucher.addServices.insuranceRetrying
+                          : t.profile.voucher.addServices.insuranceRetry}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </article>
+            ) : null}
           </div>
         ) : (
           <article className="profile-card booking-addons-empty">

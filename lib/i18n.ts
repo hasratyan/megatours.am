@@ -507,7 +507,16 @@ export type Translation = {
         lastPaymentTitle: string;
         lastPaymentRequested: string;
         lastPaymentApplied: string;
+        lastPaymentFailed: string;
         lastPaymentSkipped: string;
+        insuranceFailedStatus: string;
+        insuranceFailedBody: string;
+        insuranceRetryHint: string;
+        insuranceRetryConfirm: string;
+        insuranceRetry: string;
+        insuranceRetrying: string;
+        insuranceRetryFailed: string;
+        insuranceRetryAlreadyIssued: string;
         adminPaymentMethod: string;
         adminPaymentSubmit: string;
         continueToTravelerDetails: string;
@@ -2007,7 +2016,20 @@ const translations: Record<Locale, Translation> = {
           lastPaymentTitle: "Վերջին հավելյալ վճարում",
           lastPaymentRequested: "Պահանջված ծառայություններ",
           lastPaymentApplied: "Կցված ծառայություններ",
+          lastPaymentFailed: "Չհաստատված ծառայություններ",
           lastPaymentSkipped: "Բաց թողնված ծառայություններ",
+          insuranceFailedStatus: "Չհաստատված",
+          insuranceFailedBody:
+            "Վճարումը գրանցվել է, սակայն EFES-ը ապահովագրական պոլիս չի տրամադրել։ Հյուրանոցի ամրագրումը մնում է հաստատված։",
+          insuranceRetryHint:
+            "Կրկնելուց առաջ ստուգեք EFES-ում, որ պոլիս չի ստեղծվել՝ կրկնակի ապահովագրությունից խուսափելու համար։ Նոր վճարում չի գանձվի։",
+          insuranceRetryConfirm:
+            "Հաստատո՞ւմ եք, որ EFES-ում ստուգել եք՝ այս ուղևորների համար պոլիս չի ստեղծվել։",
+          insuranceRetry: "Կրկնել EFES հաստատումը",
+          insuranceRetrying: "Կրկին ուղարկվում է...",
+          insuranceRetryFailed: "EFES-ը կրկին չի հաստատել ապահովագրական պոլիսը։",
+          insuranceRetryAlreadyIssued:
+            "EFES-ում առնվազն մեկ պոլիս արդեն թողարկվել է։ Ստուգեք այն EFES-ում՝ կրկնելուց առաջ։",
           adminPaymentMethod: "Ադմինի վճարում",
           adminPaymentSubmit: "Ավելացնել ծառայությունները որպես ադմին",
           continueToTravelerDetails: "Շարունակել՝ լրացնել ուղևորների տվյալները և վճարել",
@@ -3545,7 +3567,20 @@ const translations: Record<Locale, Translation> = {
           lastPaymentTitle: "Last add-on payment",
           lastPaymentRequested: "Requested services",
           lastPaymentApplied: "Applied services",
+          lastPaymentFailed: "Failed services",
           lastPaymentSkipped: "Skipped services",
+          insuranceFailedStatus: "Not confirmed",
+          insuranceFailedBody:
+            "Payment was recorded, but EFES did not issue the insurance policy. The hotel booking remains confirmed.",
+          insuranceRetryHint:
+            "Before retrying, verify in EFES that no policy was created to avoid duplicate insurance. No new payment will be collected.",
+          insuranceRetryConfirm:
+            "Confirm that you checked EFES and no policy exists for these travelers.",
+          insuranceRetry: "Retry EFES confirmation",
+          insuranceRetrying: "Retrying EFES...",
+          insuranceRetryFailed: "EFES still did not confirm the insurance policy.",
+          insuranceRetryAlreadyIssued:
+            "At least one EFES policy was already issued. Verify it in EFES before retrying.",
           adminPaymentMethod: "Admin payment",
           adminPaymentSubmit: "Add services as admin",
           continueToTravelerDetails: "Continue to traveler details and payment",
@@ -5087,7 +5122,20 @@ const translations: Record<Locale, Translation> = {
           lastPaymentTitle: "Последний платеж за доп. услуги",
           lastPaymentRequested: "Запрошенные услуги",
           lastPaymentApplied: "Добавленные услуги",
+          lastPaymentFailed: "Неподтвержденные услуги",
           lastPaymentSkipped: "Пропущенные услуги",
+          insuranceFailedStatus: "Не подтверждено",
+          insuranceFailedBody:
+            "Платеж зарегистрирован, но EFES не оформил страховой полис. Бронирование отеля остается подтвержденным.",
+          insuranceRetryHint:
+            "Перед повторной отправкой проверьте в EFES, что полис не был создан, чтобы избежать дубликата. Новая оплата не списывается.",
+          insuranceRetryConfirm:
+            "Подтвердите, что вы проверили EFES и для этих путешественников полис не создан.",
+          insuranceRetry: "Повторить подтверждение EFES",
+          insuranceRetrying: "Повторная отправка в EFES...",
+          insuranceRetryFailed: "EFES снова не подтвердил страховой полис.",
+          insuranceRetryAlreadyIssued:
+            "В EFES уже оформлен как минимум один полис. Проверьте его перед повторной отправкой.",
           adminPaymentMethod: "Оплата администратором",
           adminPaymentSubmit: "Добавить услуги как администратор",
           continueToTravelerDetails: "Перейти к данным путешественников и оплате",

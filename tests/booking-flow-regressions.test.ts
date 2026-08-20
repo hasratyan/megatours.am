@@ -4,6 +4,8 @@ import test from "node:test";
 import { hasManualGuestNameInput, syncLeadGuestWithContact } from "../lib/checkout-guest-sync.ts";
 // @ts-expect-error Node's built-in TypeScript test runner requires the source extension.
 import { formatEfesPolicyCreationDate, hasIssuedEfesPolicy, resolveInsuranceIssuance } from "../lib/insurance-policy-status.ts";
+// @ts-expect-error Node's built-in TypeScript test runner requires the source extension.
+import { resolveBookingAddonPaymentServiceOutcome } from "../lib/booking-addon-payment-outcome.ts";
 
 const roomGuests = (firstName: string, lastName: string) => [
   {
@@ -130,4 +132,35 @@ test("EFES creation date uses Yerevan's calendar day after local midnight", () =
     formatEfesPolicyCreationDate(new Date("2026-08-19T20:27:55.731Z")),
     "2026-08-20"
   );
+});
+
+test("failed EFES insurance is not presented as an applied add-on service", () => {
+  const outcome = resolveBookingAddonPaymentServiceOutcome({
+    appliedServices: ["insurance", "transfer"],
+    insuranceStatus: "failed",
+  });
+
+  assert.deepEqual(outcome.appliedServices, ["transfer"]);
+  assert.deepEqual(outcome.failedServices, ["insurance"]);
+});
+
+test("confirmed EFES retry restores insurance to applied add-on services", () => {
+  const outcome = resolveBookingAddonPaymentServiceOutcome({
+    appliedServices: ["transfer"],
+    failedServices: ["insurance"],
+    insuranceStatus: "confirmed",
+  });
+
+  assert.deepEqual(outcome.appliedServices, ["transfer", "insurance"]);
+  assert.deepEqual(outcome.failedServices, []);
+});
+
+test("insurance status does not alter an unrelated latest add-on payment", () => {
+  const outcome = resolveBookingAddonPaymentServiceOutcome({
+    appliedServices: ["transfer"],
+    insuranceStatus: "failed",
+  });
+
+  assert.deepEqual(outcome.appliedServices, ["transfer"]);
+  assert.deepEqual(outcome.failedServices, []);
 });

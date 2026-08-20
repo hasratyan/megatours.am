@@ -23,6 +23,11 @@ import {
   resolveBookingAddonHotelContext,
   resolveExistingBookingAddonServiceKeys,
 } from "@/lib/booking-addons";
+import { resolveBookingAddonPaymentServiceOutcome } from "@/lib/booking-addon-payment-outcome";
+import {
+  resolveInsuranceIssuance,
+  type InsuranceIssuanceSummary,
+} from "@/lib/insurance-policy-status";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
 export const dynamic = "force-dynamic";
@@ -32,9 +37,12 @@ type PageProps = {
 };
 
 type BookingRecord = {
+  _id?: unknown;
   payload?: AoryxBookingPayload | null;
   booking?: AoryxBookingResult | null;
   addonLastPayment?: unknown;
+  insurancePolicies?: unknown;
+  insuranceError?: unknown;
 };
 
 type AddonLastPaymentSnapshot = {
@@ -44,6 +52,7 @@ type AddonLastPaymentSnapshot = {
   currency: string | null;
   requestedServices: BookingAddonServiceKey[];
   appliedServices: BookingAddonServiceKey[];
+  failedServices: BookingAddonServiceKey[];
   skippedServices: BookingAddonServiceKey[];
 };
 
@@ -80,6 +89,7 @@ const resolveAddonLastPaymentSnapshot = (value: unknown): AddonLastPaymentSnapsh
       : null;
   const requestedServices = resolveAddonServiceKeys(value.requestedServices);
   const appliedServices = resolveAddonServiceKeys(value.appliedServices);
+  const failedServices = resolveAddonServiceKeys(value.failedServices);
   const skippedServices = resolveAddonServiceKeys(value.skippedServices);
 
   if (
@@ -89,6 +99,7 @@ const resolveAddonLastPaymentSnapshot = (value: unknown): AddonLastPaymentSnapsh
     !currency &&
     requestedServices.length === 0 &&
     appliedServices.length === 0 &&
+    failedServices.length === 0 &&
     skippedServices.length === 0
   ) {
     return null;
@@ -101,6 +112,7 @@ const resolveAddonLastPaymentSnapshot = (value: unknown): AddonLastPaymentSnapsh
     currency,
     requestedServices,
     appliedServices,
+    failedServices,
     skippedServices,
   };
 };
@@ -183,7 +195,24 @@ export default async function BookingAddonsPage({ params }: PageProps) {
 
   const existingServices = resolveExistingBookingAddonServiceKeys(payload);
   const hotelContext = resolveBookingAddonHotelContext(payload);
-  const lastAddonPayment = resolveAddonLastPaymentSnapshot(bookingRecord.addonLastPayment ?? null);
+  const insuranceIssuance: InsuranceIssuanceSummary = resolveInsuranceIssuance({
+    insuranceSelected: Boolean(payload.insurance),
+    insurancePolicies: bookingRecord.insurancePolicies,
+    insuranceError: bookingRecord.insuranceError,
+  });
+  const lastAddonPaymentSnapshot = resolveAddonLastPaymentSnapshot(
+    bookingRecord.addonLastPayment ?? null
+  );
+  const lastAddonPayment = lastAddonPaymentSnapshot
+    ? {
+        ...lastAddonPaymentSnapshot,
+        ...resolveBookingAddonPaymentServiceOutcome({
+          appliedServices: lastAddonPaymentSnapshot.appliedServices,
+          failedServices: lastAddonPaymentSnapshot.failedServices,
+          insuranceStatus: insuranceIssuance.status,
+        }),
+      }
+    : null;
 
   if (!hotelContext) {
     notFound();
@@ -203,6 +232,10 @@ export default async function BookingAddonsPage({ params }: PageProps) {
       }}
       paymentMethodFlags={paymentMethodFlags}
       canUseAdminPayment={canUseAdminPayment}
+      adminBookingId={
+        canUseAdminPayment && bookingRecord._id ? String(bookingRecord._id) : null
+      }
+      insuranceIssuance={insuranceIssuance}
       lastAddonPayment={lastAddonPayment}
     />
   );

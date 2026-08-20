@@ -16,6 +16,8 @@ import {
   parseBookingAddonServices,
   resolveBookingAddonServiceKeys,
 } from "@/lib/booking-addons";
+import { issueBookingAddonInsurance } from "@/lib/booking-addon-insurance-issuance";
+import { resolveBookingAddonPaymentServiceOutcome } from "@/lib/booking-addon-payment-outcome";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
 export const runtime = "nodejs";
@@ -658,6 +660,7 @@ export async function POST(request: NextRequest) {
 
       const merged = mergeBookingAddonPayload(userBooking.payload, addonServices);
       const appliedAt = new Date();
+      const insuranceRequested = merged.appliedServiceKeys.includes("insurance");
       await userBookings.updateOne(
         { _id: bookingObjectId, userIdString: userId },
         {
@@ -678,9 +681,32 @@ export async function POST(request: NextRequest) {
               appliedServices: merged.appliedServiceKeys,
               skippedServices: merged.skippedServiceKeys,
             },
+            ...(insuranceRequested
+              ? {
+                  insurancePolicies: [],
+                  insuranceError: "Insurance policy issuance has not completed.",
+                  insuranceUpdatedAt: appliedAt,
+                }
+              : {}),
           },
         }
       );
+
+      const insuranceOutcome = await issueBookingAddonInsurance({
+        userBookings,
+        bookingFilter: { _id: bookingObjectId, userIdString: userId },
+        payload: merged.payload,
+        shouldIssue: insuranceRequested,
+        logContext: {
+          flow: "idram_booking_addons",
+          billNo,
+          bookingId: targetBookingId,
+        },
+      });
+      const serviceOutcome = resolveBookingAddonPaymentServiceOutcome({
+        appliedServices: merged.appliedServiceKeys,
+        insuranceStatus: insuranceOutcome.status,
+      });
 
       await collection.updateOne(
         { billNo },
@@ -693,8 +719,10 @@ export async function POST(request: NextRequest) {
             addonApply: {
               targetBookingId,
               requestedServices: requestedServiceKeys,
-              appliedServices: merged.appliedServiceKeys,
+              appliedServices: serviceOutcome.appliedServices,
+              failedServices: serviceOutcome.failedServices,
               skippedServices: merged.skippedServiceKeys,
+              insuranceStatus: insuranceOutcome.status,
             },
             updatedAt: appliedAt,
             "diagnostics.lastApplicationResult": {
@@ -703,8 +731,10 @@ export async function POST(request: NextRequest) {
               flow: "booking_addons",
               targetBookingId,
               requestedServices: requestedServiceKeys,
-              appliedServices: merged.appliedServiceKeys,
+              appliedServices: serviceOutcome.appliedServices,
+              failedServices: serviceOutcome.failedServices,
               skippedServices: merged.skippedServiceKeys,
+              insuranceStatus: insuranceOutcome.status,
             },
             "diagnostics.updatedAt": appliedAt,
           },
@@ -714,8 +744,10 @@ export async function POST(request: NextRequest) {
                 buildDiagnosticEvent("application", "info", "addon_booking_applied", {
                   targetBookingId,
                   requestedServices: requestedServiceKeys,
-                  appliedServices: merged.appliedServiceKeys,
+                  appliedServices: serviceOutcome.appliedServices,
+                  failedServices: serviceOutcome.failedServices,
                   skippedServices: merged.skippedServiceKeys,
+                  insuranceStatus: insuranceOutcome.status,
                 }),
               ],
               $slice: -50,
@@ -727,8 +759,10 @@ export async function POST(request: NextRequest) {
         billNo,
         targetBookingId,
         requestedServices: requestedServiceKeys,
-        appliedServices: merged.appliedServiceKeys,
+        appliedServices: serviceOutcome.appliedServices,
+        failedServices: serviceOutcome.failedServices,
         skippedServices: merged.skippedServiceKeys,
+        insuranceStatus: insuranceOutcome.status,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to apply booking add-ons";

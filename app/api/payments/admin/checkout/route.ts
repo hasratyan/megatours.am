@@ -22,6 +22,8 @@ import {
   type BookingAddonCheckoutRequest,
   type BookingAddonServiceKey,
 } from "@/lib/booking-addons";
+import { issueBookingAddonInsurance } from "@/lib/booking-addon-insurance-issuance";
+import { resolveBookingAddonPaymentServiceOutcome } from "@/lib/booking-addon-payment-outcome";
 import {
   validateInsuranceDetailsForBooking,
   validateTransferFlightDetailsForBooking,
@@ -293,55 +295,36 @@ const handleAdminAddonCheckout = async (
     );
   }
 
-  let insuranceStatus: "not_requested" | "confirmed" | "failed" = "not_requested";
-  if (merged.appliedServiceKeys.includes("insurance")) {
-    try {
-      const insurancePolicies = await createEfesPoliciesFromBooking(merged.payload);
-      insuranceStatus = "confirmed";
-      await userBookings.updateOne(
-        { _id: userBooking._id, userIdString: userId },
-        {
-          $set: {
-            insurancePolicies,
-            insuranceUpdatedAt: new Date(),
-          },
-          $unset: { insuranceError: "" },
-        }
-      );
-    } catch (error) {
-      const insurancePolicies =
-        error instanceof EfesPolicyIssuanceError ? error.policyResults : [];
-      const insuranceError =
-        error instanceof Error ? error.message : "Failed to create EFES policies";
-      insuranceStatus = "failed";
-      await userBookings.updateOne(
-        { _id: userBooking._id, userIdString: userId },
-        {
-          $set: {
-            insurancePolicies,
-            insuranceError,
-            insuranceUpdatedAt: new Date(),
-          },
-        }
-      );
-      console.error("[AdminCheckout][addons] EFES policy creation failed", {
-        bookingId: addonRequest.bookingId,
-        message: insuranceError,
-      });
-    }
-  }
+  const insuranceOutcome = await issueBookingAddonInsurance({
+    userBookings,
+    bookingFilter: { _id: userBooking._id, userIdString: userId },
+    payload: merged.payload,
+    shouldIssue: merged.appliedServiceKeys.includes("insurance"),
+    logContext: {
+      flow: "admin_checkout",
+      bookingId: addonRequest.bookingId,
+      userId,
+    },
+  });
+  const insuranceStatus = insuranceOutcome.status;
+  const serviceOutcome = resolveBookingAddonPaymentServiceOutcome({
+    appliedServices: merged.appliedServiceKeys,
+    insuranceStatus,
+  });
 
   console.info("[AdminCheckout][addons] Services applied", {
     bookingId: addonRequest.bookingId,
     userId,
     requestedServices: addonRequest.serviceKeys,
-    appliedServices: merged.appliedServiceKeys,
+    appliedServices: serviceOutcome.appliedServices,
+    failedServices: serviceOutcome.failedServices,
     insuranceStatus,
   });
 
   return NextResponse.json({
     bookingId: addonRequest.bookingId,
-    appliedServices: merged.appliedServiceKeys,
+    appliedServices: serviceOutcome.appliedServices,
+    failedServices: serviceOutcome.failedServices,
     skippedServices: merged.skippedServiceKeys,
     insuranceStatus,
   });

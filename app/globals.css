@@ -6965,6 +6965,17 @@ main.payment-status{
   box-shadow: 0 24px 48px -30px rgba(124, 242, 212, 0.58);
 }
 
+.booking-addon-card.is-failed{
+  border-color: rgba(248, 113, 113, 0.38);
+  box-shadow: 0 24px 48px -34px rgba(248, 113, 113, 0.48);
+
+  .booking-addon-card__icon{
+    color: #fca5a5;
+    border-color: rgba(248, 113, 113, 0.28);
+    background: rgba(127, 29, 29, 0.24);
+  }
+}
+
 .booking-addon-card__icon{
   display: grid;
   place-items: center;
@@ -6997,7 +7008,7 @@ main.payment-status{
 
   h3{
     color: #fff;
-    font-size: 1.08rem;
+    font-size: 1.15rem;
     font-weight: 650;
   }
 }
@@ -7015,6 +7026,46 @@ main.payment-status{
   color: #f8fafc;
   font-weight: 650;
   font-size: 1rem;
+}
+
+.booking-addon-failure-detail{
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(248, 113, 113, 0.22);
+  background: rgba(127, 29, 29, 0.18);
+  color: #fecaca !important;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.booking-addon-retry{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.65rem 1rem;
+  border: 1px solid rgba(252, 165, 165, 0.36);
+  border-radius: 999px;
+  background: rgba(127, 29, 29, 0.38);
+  color: #fee2e2;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover:not(:disabled){
+    border-color: rgba(252, 165, 165, 0.62);
+    background: rgba(153, 27, 27, 0.52);
+  }
+
+  &:disabled{
+    cursor: wait;
+    opacity: 0.65;
+  }
+
+  .material-symbols-rounded{
+    font-size: 1.05rem;
+  }
 }
 
 .booking-addon-status{

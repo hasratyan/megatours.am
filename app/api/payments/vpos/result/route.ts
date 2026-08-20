@@ -21,6 +21,8 @@ import {
   parseBookingAddonServices,
   resolveBookingAddonServiceKeys,
 } from "@/lib/booking-addons";
+import { issueBookingAddonInsurance } from "@/lib/booking-addon-insurance-issuance";
+import { resolveBookingAddonPaymentServiceOutcome } from "@/lib/booking-addon-payment-outcome";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
 export const runtime = "nodejs";
@@ -1317,6 +1319,7 @@ const handleResultCallback = async (request: NextRequest) => {
 
       const merged = mergeBookingAddonPayload(userBooking.payload, addonServices);
       const appliedAt = new Date();
+      const insuranceRequested = merged.appliedServiceKeys.includes("insurance");
       const paymentCurrency =
         lockedRecord.amount?.currency ?? lockedRecord.amount?.currencyCode ?? null;
       await userBookings.updateOne(
@@ -1340,9 +1343,33 @@ const handleResultCallback = async (request: NextRequest) => {
               appliedServices: merged.appliedServiceKeys,
               skippedServices: merged.skippedServiceKeys,
             },
+            ...(insuranceRequested
+              ? {
+                  insurancePolicies: [],
+                  insuranceError: "Insurance policy issuance has not completed.",
+                  insuranceUpdatedAt: appliedAt,
+                }
+              : {}),
           },
         }
       );
+
+      const insuranceOutcome = await issueBookingAddonInsurance({
+        userBookings,
+        bookingFilter: { _id: bookingObjectId, userIdString: userId },
+        payload: merged.payload,
+        shouldIssue: insuranceRequested,
+        logContext: {
+          flow: "vpos_booking_addons",
+          provider,
+          orderId,
+          bookingId: targetBookingId,
+        },
+      });
+      const serviceOutcome = resolveBookingAddonPaymentServiceOutcome({
+        appliedServices: merged.appliedServiceKeys,
+        insuranceStatus: insuranceOutcome.status,
+      });
 
       await collection.updateOne(
         { orderId },
@@ -1355,8 +1382,10 @@ const handleResultCallback = async (request: NextRequest) => {
             addonApply: {
               targetBookingId,
               requestedServices: requestedServiceKeys,
-              appliedServices: merged.appliedServiceKeys,
+              appliedServices: serviceOutcome.appliedServices,
+              failedServices: serviceOutcome.failedServices,
               skippedServices: merged.skippedServiceKeys,
+              insuranceStatus: insuranceOutcome.status,
             },
             updatedAt: appliedAt,
             "diagnostics.lastApplicationResult": {
@@ -1364,6 +1393,10 @@ const handleResultCallback = async (request: NextRequest) => {
               reason: "booking_addons_applied",
               requestedServiceKeys,
               targetBookingId,
+              appliedServices: serviceOutcome.appliedServices,
+              failedServices: serviceOutcome.failedServices,
+              skippedServices: merged.skippedServiceKeys,
+              insuranceStatus: insuranceOutcome.status,
             },
           },
         }
@@ -1375,6 +1408,9 @@ const handleResultCallback = async (request: NextRequest) => {
         orderNumber,
         requestedServiceKeys,
         targetBookingId,
+        appliedServices: serviceOutcome.appliedServices,
+        failedServices: serviceOutcome.failedServices,
+        insuranceStatus: insuranceOutcome.status,
       });
       return logRedirect(
         "info",
@@ -1383,7 +1419,12 @@ const handleResultCallback = async (request: NextRequest) => {
         "/payment/success",
         { orderId, orderNumber },
         "booking_addons_applied",
-        { provider, requestedServiceKeys, targetBookingId }
+        {
+          provider,
+          requestedServiceKeys,
+          targetBookingId,
+          insuranceStatus: insuranceOutcome.status,
+        }
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to apply booking add-ons";
