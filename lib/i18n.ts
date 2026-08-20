@@ -508,6 +508,8 @@ export type Translation = {
         lastPaymentRequested: string;
         lastPaymentApplied: string;
         lastPaymentSkipped: string;
+        continueToTravelerDetails: string;
+        continueToTravelerDetailsHint: string;
       };
       sections: {
         stay: string;
@@ -2004,6 +2006,9 @@ const translations: Record<Locale, Translation> = {
           lastPaymentRequested: "Պահանջված ծառայություններ",
           lastPaymentApplied: "Կցված ծառայություններ",
           lastPaymentSkipped: "Բաց թողնված ծառայություններ",
+          continueToTravelerDetails: "Շարունակել՝ լրացնել ուղևորների տվյալները և վճարել",
+          continueToTravelerDetailsHint:
+            "Ընտրեք ապահովագրության պլանը և սպասեք գնի հաշվարկին։ Հաջորդ քայլում լրացրեք յուրաքանչյուր ուղևորի տվյալները և ընտրեք վճարման եղանակը։",
         },
         sections: {
           stay: "Հյուրանոցային տվյալներ",
@@ -3537,6 +3542,9 @@ const translations: Record<Locale, Translation> = {
           lastPaymentRequested: "Requested services",
           lastPaymentApplied: "Applied services",
           lastPaymentSkipped: "Skipped services",
+          continueToTravelerDetails: "Continue to traveler details and payment",
+          continueToTravelerDetailsHint:
+            "Select an insurance plan and wait for its price. On the next step, complete each traveler's details and choose a payment method.",
         },
         sections: {
           stay: "Hotel stay",
@@ -5074,6 +5082,9 @@ const translations: Record<Locale, Translation> = {
           lastPaymentRequested: "Запрошенные услуги",
           lastPaymentApplied: "Добавленные услуги",
           lastPaymentSkipped: "Пропущенные услуги",
+          continueToTravelerDetails: "Перейти к данным путешественников и оплате",
+          continueToTravelerDetailsHint:
+            "Выберите страховой план и дождитесь расчета цены. На следующем шаге заполните данные каждого путешественника и выберите способ оплаты.",
         },
         sections: {
           stay: "Данные проживания",

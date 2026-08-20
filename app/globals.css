@@ -4826,6 +4826,45 @@ main.service-builder{
     }
   }
 
+  .insurance-addon-checkout-action{
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, auto);
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    padding: 1.25rem;
+    border: 1px solid rgba(124, 242, 212, 0.45);
+    border-radius: 1.25rem;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(15, 23, 42, 0.78));
+
+    strong{
+      color: #fff;
+      line-height: 1.35;
+    }
+
+    p{
+      margin: .35rem 0 0;
+      color: rgba(226, 232, 240, 0.85);
+      line-height: 1.45;
+    }
+
+    .service-builder__cta{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      width: auto;
+    }
+
+    @media screen and (max-width: 720px) {
+      grid-template-columns: 1fr;
+
+      .service-builder__cta{
+        width: 100%;
+      }
+    }
+  }
+
   p{
     color: #fff;
   }

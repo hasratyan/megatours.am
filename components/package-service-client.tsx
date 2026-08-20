@@ -38,6 +38,7 @@ import { useAmdRates } from "@/lib/use-amd-rates";
 import { buildFlightRedirectFromHotel } from "@/lib/flight-redirect";
 import type { BookingAddonHotelContext, BookingAddonServiceKey } from "@/lib/booking-addons";
 import type { FeaturedHotelCard } from "@/lib/featured-hotels";
+import { isInsuranceAddonCheckoutReady } from "@/lib/insurance-addon-checkout";
 
 type Props = {
   serviceKey: PackageBuilderService;
@@ -3725,6 +3726,13 @@ export default function PackageServiceClient({
     const summaryTitle = selectedPlan?.title ?? t.packageBuilder.services.insurance;
     const insuranceQuoteErrorLabel =
       insuranceDateErrorLabel ?? insuranceQuoteError ?? insuranceSelection?.quoteError ?? null;
+    const insuranceAddonCheckoutReady = isInsuranceAddonCheckoutReady({
+      hasCheckoutTarget: Boolean(bookingAddonsHref),
+      selected: insuranceSelection?.selected === true,
+      quoteLoading: insuranceQuoteLoading || insuranceSelection?.quoteLoading === true,
+      quoteError: insuranceQuoteErrorLabel,
+      price: insuranceSelection?.price ?? null,
+    });
     const activeGuestCovered =
       activeInsuranceGuestId ? selectedInsuranceGuestIdSet.has(activeInsuranceGuestId) : true;
     const activeGuestPriceCoverages =
@@ -3954,6 +3962,28 @@ export default function PackageServiceClient({
         ) : (
           <p className="state">{t.packageBuilder.insurance.selectPlanNote}</p>
         )}
+        {bookingAddonsHref ? (
+          <div className="insurance-addon-checkout-action">
+            <div>
+              <strong>{t.profile.voucher.addServices.continueToTravelerDetails}</strong>
+              <p>{t.profile.voucher.addServices.continueToTravelerDetailsHint}</p>
+            </div>
+            {insuranceAddonCheckoutReady ? (
+              <Link href={bookingAddonsHref} className="service-builder__cta">
+                <span className="material-symbols-rounded" aria-hidden="true">
+                  arrow_forward
+                </span>
+                {t.profile.voucher.addServices.continueToTravelerDetails}
+              </Link>
+            ) : (
+              <button type="button" className="service-builder__cta" disabled>
+                {insuranceQuoteLoading || insuranceSelection?.quoteLoading === true
+                  ? t.packageBuilder.insurance.quoteLoading
+                  : t.profile.voucher.addServices.continueToTravelerDetails}
+              </button>
+            )}
+          </div>
+        ) : null}
       </>
     );
   };
