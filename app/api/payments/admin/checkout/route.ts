@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { AoryxClientError, AoryxServiceError, book, bookingDetails } from "@/lib/aoryx-client";
-import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
+import {
+  createEfesPoliciesFromBooking,
+  EfesPolicyIssuanceError,
+} from "@/lib/efes-client";
 import { parseBookingPayload, validatePrebookState } from "@/lib/aoryx-booking";
 import { clearPrebookCookie, getPrebookState, getSessionFromCookie } from "@/app/api/aoryx/_shared";
 import { resolveBookingStatusKey } from "@/lib/booking-status";
@@ -135,7 +138,8 @@ export async function POST(request: NextRequest) {
     try {
       insurancePolicies = await createEfesPoliciesFromBooking(payload);
     } catch (error) {
-      insurancePolicies = [];
+      insurancePolicies =
+        error instanceof EfesPolicyIssuanceError ? error.policyResults : [];
       insuranceError =
         error instanceof Error ? error.message : "Failed to create EFES policies";
       console.error("[AdminCheckout] EFES policy creation failed", error);
@@ -162,6 +166,8 @@ export async function POST(request: NextRequest) {
           payload,
           result,
           locale,
+          insurancePolicies,
+          insuranceError,
         });
       } catch (error) {
         console.error("[AdminCheckout] Failed to send booking confirmation email", error);

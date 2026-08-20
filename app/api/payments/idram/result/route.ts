@@ -3,7 +3,10 @@ import { createHash } from "crypto";
 import { ObjectId, type Collection, type Document } from "mongodb";
 import { getDb } from "@/lib/db";
 import { AoryxClientError, book, bookingDetails } from "@/lib/aoryx-client";
-import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
+import {
+  createEfesPoliciesFromBooking,
+  EfesPolicyIssuanceError,
+} from "@/lib/efes-client";
 import { recordUserBooking, type AppliedBookingCoupon } from "@/lib/user-data";
 import { sendBookingConfirmationEmail } from "@/lib/email";
 import { incrementCouponSuccessfulOrders } from "@/lib/coupons";
@@ -893,13 +896,15 @@ export async function POST(request: NextRequest) {
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create EFES policies";
-      insurancePolicies = [];
+      insurancePolicies =
+        error instanceof EfesPolicyIssuanceError ? error.policyResults : [];
       insuranceError = message;
       const insuranceUpdatedAt = new Date();
       await collection.updateOne(
         { billNo },
         ({
           $set: {
+            insurancePolicies,
             insuranceError: message,
             insuranceUpdatedAt,
             "diagnostics.lastInsuranceError": {
@@ -955,6 +960,8 @@ export async function POST(request: NextRequest) {
         paidAmount: lockedRecord.amount?.value ?? null,
         paidCurrency: lockedRecord.amount?.currency ?? null,
         coupon: appliedCoupon,
+        insurancePolicies,
+        insuranceError,
       });
     }
   } catch (error) {

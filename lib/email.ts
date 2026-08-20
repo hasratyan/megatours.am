@@ -1,9 +1,10 @@
 import nodemailer from "nodemailer";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
-import { calculateBookingTotal } from "@/lib/booking-total";
+import { resolveBookingPaymentTotalAmd } from "@/lib/booking-total";
 import { formatCurrencyAmount } from "@/lib/currency";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
-import { getAoryxHotelPlatformFee } from "@/lib/pricing";
+import { getAmdRates, getAoryxHotelPlatformFee } from "@/lib/pricing";
+import { resolveInsuranceIssuance } from "@/lib/insurance-policy-status";
 import type { AppliedBookingCoupon } from "@/lib/user-data";
 
 type BookingEmailInput = {
@@ -15,6 +16,8 @@ type BookingEmailInput = {
   paidAmount?: number | null;
   paidCurrency?: string | null;
   coupon?: AppliedBookingCoupon | null;
+  insurancePolicies?: unknown;
+  insuranceError?: string | null;
 };
 
 type OperationalEmailInput = {
@@ -50,6 +53,7 @@ type BookingEmailCopy = {
     profile: string;
   };
   supportHint: string;
+  insuranceWarning: string;
   plainHeading: string;
   transferTypes: {
     individual: string;
@@ -99,6 +103,8 @@ const bookingEmailCopyByLocale: Record<Locale, BookingEmailCopy> = {
       profile: "Բացել պրոֆիլը",
     },
     supportHint: "Եթե հարկավոր է աջակցություն, պատասխանեք այս նամակին, և մեր թիմը կօգնի ձեզ, կամ զանգահարեք +374 55 659965 հեռախոսահամարով։ Մենք հասանելի ենք 24/7։",
+    insuranceWarning:
+      "Կարևոր․ հյուրանոցը հաստատված է, սակայն ապահովագրական պոլիսը չի ձևակերպվել։ Այն կարող եք ձևակերպել ավելի ուշ՝ կապվելով MEGATOURS-ի աջակցման թիմի հետ։",
     plainHeading: "Ամրագրումը հաստատված է",
     transferTypes: {
       individual: "Անհատական",
@@ -140,6 +146,8 @@ const bookingEmailCopyByLocale: Record<Locale, BookingEmailCopy> = {
       profile: "Open profile",
     },
     supportHint: "Need help? Reply to this email and our team will assist you, or call us at +374 55 659965. We are available 24/7.",
+    insuranceWarning:
+      "Important: Your hotel is confirmed, but the insurance policy was not issued. You can arrange it later by contacting MEGATOURS support.",
     plainHeading: "Booking confirmed",
     transferTypes: {
       individual: "Individual",
@@ -181,6 +189,8 @@ const bookingEmailCopyByLocale: Record<Locale, BookingEmailCopy> = {
       profile: "Открыть профиль",
     },
     supportHint: "Если вам нужна помощь, ответьте на это письмо, и наша команда поможет вам, или позвоните нам по телефону +374 55 659965. Мы доступны 24/7.",
+    insuranceWarning:
+      "Важно: отель подтвержден, но страховой полис не был оформлен. Вы можете оформить его позже, связавшись со службой поддержки MEGATOURS.",
     plainHeading: "Бронирование подтверждено",
     transferTypes: {
       individual: "Индивидуальный",
@@ -336,6 +346,8 @@ export async function sendBookingConfirmationEmail({
   paidAmount,
   paidCurrency,
   coupon,
+  insurancePolicies,
+  insuranceError,
 }: BookingEmailInput) {
   if (!to) return false;
   const transport = buildTransport();
@@ -357,23 +369,34 @@ export async function sendBookingConfirmationEmail({
   const bookingId = payload.customerRefNumber ?? "—";
   const hotelName = payload.hotelName ?? payload.hotelCode ?? copy.labels.hotel;
   const dateRange = formatDateRange(payload.checkInDate, payload.checkOutDate, localeTag);
-  const hotelMarkup = await getAoryxHotelPlatformFee();
-  const total = calculateBookingTotal(payload, { hotelMarkup });
-  const normalizedPaidAmount =
-    typeof paidAmount === "number" && Number.isFinite(paidAmount) ? paidAmount : null;
-  const totalAmount = normalizedPaidAmount ?? total;
-  const totalCurrency =
-    normalizeDisplayCurrency(normalizedPaidAmount !== null ? paidCurrency : null) ??
-    normalizeDisplayCurrency(payload.currency) ??
-    "USD";
+  const [hotelMarkup, amdRates] = await Promise.all([
+    getAoryxHotelPlatformFee(),
+    getAmdRates().catch((error) => {
+      console.error("[Email] Failed to load AMD rates for booking total", error);
+      return null;
+    }),
+  ]);
+  const totalAmountAmd = resolveBookingPaymentTotalAmd(payload, amdRates, {
+    hotelMarkup,
+    paidAmount,
+    paidCurrency: normalizeDisplayCurrency(paidCurrency),
+  });
   const totalLabel =
-    formatCurrencyAmount(totalAmount, totalCurrency, localeTag) ?? `${totalAmount} ${totalCurrency}`;
+    totalAmountAmd !== null
+      ? formatCurrencyAmount(totalAmountAmd, "AMD", localeTag) ?? `${totalAmountAmd} AMD`
+      : "—";
   const confirmation =
     result?.hotelConfirmationNumber ??
     result?.supplierConfirmationNumber ??
     result?.adsConfirmationNumber ??
     "—";
   const normalizedCoupon = normalizeCoupon(coupon);
+  const insuranceIssuance = resolveInsuranceIssuance({
+    insuranceSelected: Boolean(payload.insurance),
+    insurancePolicies,
+    insuranceError,
+  });
+  const insuranceFailed = insuranceIssuance.status === "failed";
   const voucherUrl = `${baseUrl}/${safeLocale}/profile/voucher/${bookingId}?download=1`;
   const profileUrl = `${baseUrl}/${safeLocale}/profile`;
 
@@ -391,7 +414,7 @@ export async function sendBookingConfirmationEmail({
     const selectedCount = Math.max(1, payload.excursions.selections?.length ?? 1);
     serviceLines.push(copy.serviceLines.excursions(selectedCount));
   }
-  if (payload.insurance) {
+  if (payload.insurance && !insuranceFailed) {
     const insuranceSelection =
       payload.insurance.planName?.trim() ||
       payload.insurance.planId?.trim() ||
@@ -460,6 +483,12 @@ export async function sendBookingConfirmationEmail({
             </ul>
           </div>
 
+          ${
+            insuranceFailed
+              ? `<div role="alert" style="margin-top: 18px; padding: 12px 14px; border: 1px solid #f59e0b; border-radius: 12px; background: #fffbeb; color: #92400e; font-size: 14px; line-height: 1.55; font-weight: 600;">${escapeHtml(copy.insuranceWarning)}</div>`
+              : ""
+          }
+
           <div style="margin-top: 22px;">
             <a href="${escapedVoucherUrl}" style="display: inline-block; margin: 0 10px 10px 0; background: #0f766e; color: #ffffff; text-decoration: none; padding: 12px 18px; border-radius: 999px; font-weight: 700; font-size: 14px;">${escapeHtml(copy.buttons.voucher)}</a>
             <a href="${escapedProfileUrl}" style="display: inline-block; margin: 0 10px 10px 0; background: #e2e8f0; color: #0f172a; text-decoration: none; padding: 12px 18px; border-radius: 999px; font-weight: 700; font-size: 14px;">${escapeHtml(copy.buttons.profile)}</a>
@@ -479,6 +508,7 @@ export async function sendBookingConfirmationEmail({
     `${copy.labels.confirmation}: ${confirmation}`,
     normalizedCoupon ? `${copy.labels.coupon}: ${normalizedCoupon.code} (${normalizedCoupon.discountPercent}%)` : null,
     `${copy.labels.totalPaid}: ${totalLabel}`,
+    insuranceFailed ? copy.insuranceWarning : null,
     `${copy.labels.voucher}: ${voucherUrl}`,
     `${copy.labels.profile}: ${profileUrl}`,
   ]

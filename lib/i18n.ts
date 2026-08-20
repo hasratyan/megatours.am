@@ -411,6 +411,7 @@ export type Translation = {
       title: string;
       body: string;
       note: string;
+      insuranceWarning: string;
       cta: string;
       addons: {
         title: string;
@@ -479,6 +480,7 @@ export type Translation = {
       backToProfile: string;
       issuedOn: string;
       paymentNote: string;
+      insuranceWarning: string;
       modificationClosed: string;
       addons: {
         available: string;
@@ -1777,6 +1779,8 @@ const translations: Record<Locale, Translation> = {
         title: "Ամրագրումը հաստատվել է",
         body: "Շնորհակալություն MEGATOURS ընտրելու համար։",
         note: "Շուտով կստանաք հաստատման նամակ ձեր էլ․ հասցեին։",
+        insuranceWarning:
+          "Հյուրանոցը հաստատված է, սակայն ապահովագրական պոլիսը չի ձևակերպվել։ Այն կարող եք ձևակերպել ավելի ուշ՝ կապվելով MEGATOURS-ի աջակցման թիմի հետ։",
         cta: "Անձնական էջ",
         addons: {
           title: "Լրացուցիչ ծառայությունների վճարումը հաջողվեց",
@@ -1969,6 +1973,8 @@ const translations: Record<Locale, Translation> = {
         backToProfile: "Վերադառնալ պրոֆիլ",
         issuedOn: "Տրված է",
         paymentNote: "Այս վաուչերը հաստատում է ձեր ամրագրումը։",
+        insuranceWarning:
+          "Ապահովագրությունը չի հաստատվել և ներառված չէ այս վաուչերում։ Հյուրանոցի ամրագրումը հաստատված է։ Ապահովագրությունը կարող եք ձևակերպել ավելի ուշ՝ կապվելով MEGATOURS-ի աջակցման թիմի հետ։",
         modificationClosed: "Այս ամրագրումն այլևս հնարավոր չէ փոփոխել, քանի որ հյուրանոցային կեցությունն արդեն ավարտվել է։",
         addons: {
           available: "Կարելի է ավելացնել",
@@ -3306,6 +3312,8 @@ const translations: Record<Locale, Translation> = {
         title: "Booking Confirmed",
         body: "Thanks for choosing MEGATOURS.",
         note: "You will receive a confirmation email shortly.",
+        insuranceWarning:
+          "Your hotel is confirmed, but the insurance policy was not issued. You can arrange it later by contacting MEGATOURS support.",
         cta: "Go to My Account",
         addons: {
           title: "Add-on payment completed",
@@ -3498,6 +3506,8 @@ const translations: Record<Locale, Translation> = {
         backToProfile: "Back to profile",
         issuedOn: "Issued on",
         paymentNote: "This voucher confirms your booking details.",
+        insuranceWarning:
+          "Insurance was not confirmed and is not included in this voucher. Your hotel booking is confirmed. You can arrange insurance later by contacting MEGATOURS support.",
         modificationClosed: "This booking can no longer be modified because the hotel stay has already ended.",
         addons: {
           available: "Ready to add",
@@ -4839,6 +4849,8 @@ const translations: Record<Locale, Translation> = {
         title: "Бронирование подтверждено",
         body: "Спасибо, что выбрали MEGATOURS.",
         note: "Скоро вы получите подтверждение на вашу электронную почту.",
+        insuranceWarning:
+          "Отель подтвержден, но страховой полис не был оформлен. Вы можете оформить его позже, связавшись со службой поддержки MEGATOURS.",
         cta: "Личный кабинет",
         addons: {
           title: "Оплата дополнительных услуг завершена",
@@ -5031,6 +5043,8 @@ const translations: Record<Locale, Translation> = {
         backToProfile: "Назад в профиль",
         issuedOn: "Дата выдачи",
         paymentNote: "Этот ваучер подтверждает детали вашего бронирования.",
+        insuranceWarning:
+          "Страховка не подтверждена и не включена в этот ваучер. Бронирование отеля подтверждено. Страховку можно оформить позже через службу поддержки MEGATOURS.",
         modificationClosed: "Это бронирование больше нельзя изменить, потому что проживание в отеле уже завершилось.",
         addons: {
           available: "Можно добавить",

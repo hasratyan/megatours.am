@@ -12,6 +12,7 @@ import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
 import { calculateBookingTotal } from "@/lib/booking-total";
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { formatCurrencyAmount } from "@/lib/currency";
+import { resolveInsuranceIssuance } from "@/lib/insurance-policy-status";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
 const resolveLocaleFromParam = (value: string | undefined) =>
@@ -96,6 +97,8 @@ type PaymentSuccessRecord = {
   status?: string | null;
   payload?: AoryxBookingPayload | null;
   bookingResult?: AoryxBookingResult | null;
+  insurancePolicies?: unknown;
+  insuranceError?: string | null;
   amount?: {
     value?: number | null;
     currency?: string | null;
@@ -119,6 +122,8 @@ type UserBookingLookupRecord = {
     supplierConfirmationNumber?: string | null;
     adsConfirmationNumber?: string | null;
   } | null;
+  insurancePolicies?: unknown;
+  insuranceError?: string | null;
 };
 
 type DestinationSearchRecord = {
@@ -185,7 +190,7 @@ export default async function PaymentSuccessPage({
             "payload.customerRefNumber": customerRefNumber,
           },
           {
-            projection: { booking: 1 },
+            projection: { booking: 1, insurancePolicies: 1, insuranceError: 1 },
           }
         )) as UserBookingLookupRecord | null;
       }
@@ -278,6 +283,14 @@ export default async function PaymentSuccessPage({
     userBookingRecord?.booking?.supplierConfirmationNumber ||
     userBookingRecord?.booking?.adsConfirmationNumber ||
     null;
+  const insuranceIssuance = resolveInsuranceIssuance({
+    insuranceSelected: Boolean(payload?.insurance),
+    insurancePolicies:
+      bookingRecord?.insurancePolicies ?? userBookingRecord?.insurancePolicies ?? null,
+    insuranceError:
+      bookingRecord?.insuranceError ?? userBookingRecord?.insuranceError ?? null,
+  });
+  const insuranceFailed = insuranceIssuance.status === "failed";
   const hotelMarkup = await getAoryxHotelPlatformFee();
   const fallbackTotal = payload ? calculateBookingTotal(payload, { hotelMarkup }) : null;
   const paidAmount =
@@ -323,6 +336,13 @@ export default async function PaymentSuccessPage({
       <h1>{statusTitle}</h1>
       <p>{statusBody}</p>
       {!isAddonFlow && isSuccessPending ? <p>{t.payment.success.note}</p> : null}
+
+      {!isAddonFlow && insuranceFailed ? (
+        <div className="booking-service-warning" role="alert">
+          <span className="material-symbols-rounded" aria-hidden="true">warning</span>
+          <p>{t.payment.success.insuranceWarning}</p>
+        </div>
+      ) : null}
 
       <div className="profile-item" style={{ textAlign: "left", width: "100%", maxWidth: "600px" }}>
         <div className="profile-item-header">

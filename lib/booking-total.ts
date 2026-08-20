@@ -136,3 +136,22 @@ export const resolveBookingDisplayTotal = (
     currency: payload.currency ?? "USD",
   };
 };
+
+export const resolveBookingPaymentTotalAmd = (
+  payload: AoryxBookingPayload,
+  rates: AmdRates | null | undefined,
+  input?: BookingTotalOptions & {
+    paidAmount?: number | null;
+    paidCurrency?: string | null;
+  }
+): number | null => {
+  const paidAmount = input?.paidAmount;
+  if (typeof paidAmount === "number" && Number.isFinite(paidAmount)) {
+    const normalizedCurrency = (input?.paidCurrency ?? "AMD").trim().toUpperCase();
+    const paidCurrency = normalizedCurrency === "051" ? "AMD" : normalizedCurrency;
+    if (paidCurrency === "AMD") return paidAmount;
+    if (rates) return convertToAmd(paidAmount, paidCurrency, rates);
+  }
+
+  return calculateBookingTotalAmd(payload, rates, input);
+};

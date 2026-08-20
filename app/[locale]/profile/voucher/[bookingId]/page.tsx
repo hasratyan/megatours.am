@@ -21,6 +21,7 @@ import { DEFAULT_SERVICE_FLAGS } from "@/lib/package-builder-state";
 import { resolveExistingBookingAddonServiceKeys } from "@/lib/booking-addons";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 import type { AppliedBookingCoupon } from "@/lib/user-data";
+import { resolveInsuranceIssuance } from "@/lib/insurance-policy-status";
 
 export const dynamic = "force-dynamic";
 
@@ -266,6 +267,12 @@ export default async function VoucherPage({ params }: PageProps) {
   const storedInsurancePolicies = parseStoredEfesPolicies(
     (bookingRecord as { insurancePolicies?: unknown }).insurancePolicies ?? null
   );
+  const insuranceIssuance = resolveInsuranceIssuance({
+    insuranceSelected: Boolean(payload.insurance),
+    insurancePolicies: (bookingRecord as { insurancePolicies?: unknown }).insurancePolicies ?? null,
+    insuranceError: (bookingRecord as { insuranceError?: unknown }).insuranceError ?? null,
+  });
+  const insuranceFailed = insuranceIssuance.status === "failed";
   const appliedCoupon = normalizeAppliedCoupon((bookingRecord as { coupon?: unknown }).coupon ?? null);
   const cancellation =
     ((bookingRecord as { cancellation?: BookingCancellationRecord }).cancellation ?? null) as BookingCancellationRecord;
@@ -577,7 +584,7 @@ export default async function VoucherPage({ params }: PageProps) {
     });
   }
 
-  if (payload.insurance) {
+  if (payload.insurance && !insuranceFailed) {
     const policiesByTravelerId = new Map<string, StoredEfesPolicy>();
     const policiesWithoutTraveler: StoredEfesPolicy[] = [];
     storedInsurancePolicies.forEach((policy) => {
@@ -762,6 +769,13 @@ export default async function VoucherPage({ params }: PageProps) {
             profileHref={`/${resolvedLocale}/profile` as Route}
           />
         </Suspense>
+
+        {insuranceFailed ? (
+          <div className="booking-service-warning" role="alert">
+            <span className="material-symbols-rounded" aria-hidden="true">warning</span>
+            <p>{t.profile.voucher.insuranceWarning}</p>
+          </div>
+        ) : null}
 
         {showAddonCard ? (
           <div

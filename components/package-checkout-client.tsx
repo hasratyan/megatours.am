@@ -40,6 +40,11 @@ import {
   updatePackageBuilderState,
 } from "@/lib/package-builder-state";
 import { useAmdRates } from "@/lib/use-amd-rates";
+import {
+  hasManualGuestNameInput,
+  syncLeadGuestWithContact,
+  type CheckoutContactName,
+} from "@/lib/checkout-guest-sync";
 import type { CheckoutPaymentMethod, PaymentMethodFlags } from "@/lib/payment-method-flags";
 import type {
   AoryxBookingPayload,
@@ -748,15 +753,6 @@ const readCheckoutDraft = (signature: string): CheckoutDraft | null => {
   return compatibleDraft ?? null;
 };
 
-const hasManualGuestInput = (guestDetails: RoomGuestForm[]) =>
-  guestDetails.some((room) =>
-    room.guests.some((guest) => {
-      const isLeadGuest = guest.id === `room-${room.roomIdentifier}-adult-1`;
-      if (isLeadGuest) return false;
-      return hasNonEmptyValue(guest.firstName) || hasNonEmptyValue(guest.lastName);
-    })
-  );
-
 const hasManualInsuranceInput = (travelers: InsuranceTravelerForm[]) =>
   travelers.some((traveler) => {
     const address = traveler.address ?? {};
@@ -778,7 +774,7 @@ const hasMeaningfulCheckoutDraft = (draft: CheckoutDraft) =>
   hasNonEmptyValue(draft.transferFlightDetails?.arrivalDateTime) ||
   hasNonEmptyValue(draft.transferFlightDetails?.departureFlightNumber) ||
   hasNonEmptyValue(draft.transferFlightDetails?.departureDateTime) ||
-  hasManualGuestInput(draft.guestDetails) ||
+  hasManualGuestNameInput(draft.guestDetails, draft.contact) ||
   hasManualInsuranceInput(draft.insuranceTravelers);
 
 type PackageCheckoutClientProps = {
@@ -854,6 +850,7 @@ export default function PackageCheckoutClient({
   const insuranceQuoteRequestIdRef = useRef(0);
   const insuranceQuoteTimerRef = useRef<number | null>(null);
   const guestNameSyncRef = useRef(new Map<string, { first: string; last: string }>());
+  const contactGuestSyncRef = useRef<CheckoutContactName>({ firstName: "", lastName: "" });
   const insuranceSyncRef = useRef<string | null>(null);
   const efesCountriesLoadedRef = useRef(false);
   const restoredDraftSignatureRef = useRef<string | null>(null);
@@ -1048,9 +1045,13 @@ export default function PackageCheckoutClient({
   const contactLastName = contact.lastName;
 
   useEffect(() => {
-    setGuestDetails((prev) =>
-      buildGuestDetails(hotelRooms, { firstName: contactFirstName, lastName: contactLastName }, prev)
-    );
+    const nextContact = { firstName: contactFirstName, lastName: contactLastName };
+    const previousContact = contactGuestSyncRef.current;
+    setGuestDetails((prev) => {
+      const built = buildGuestDetails(hotelRooms, nextContact, prev);
+      return syncLeadGuestWithContact(built, previousContact, nextContact);
+    });
+    contactGuestSyncRef.current = nextContact;
   }, [contactFirstName, contactLastName, hotelRooms]);
 
   const hotel = builderState.hotel;

@@ -9,6 +9,10 @@ import {
 } from "@/lib/env";
 import { toCountryAlpha3 } from "@/lib/country-alpha3";
 import { resolveSafeErrorMessage } from "@/lib/error-utils";
+import {
+  formatEfesPolicyCreationDate,
+  resolveInsuranceIssuance,
+} from "@/lib/insurance-policy-status";
 import type { AoryxBookingPayload, BookingInsuranceSelection, BookingInsuranceTraveler } from "@/types/aoryx";
 import type { EfesQuoteRequest, EfesQuoteResult, EfesPolicyRequest } from "@/types/efes";
 
@@ -27,6 +31,16 @@ export class EfesServiceError extends Error {
   ) {
     super(message);
     this.name = "EfesServiceError";
+  }
+}
+
+export class EfesPolicyIssuanceError extends EfesServiceError {
+  constructor(
+    message: string,
+    public policyResults: unknown[]
+  ) {
+    super(message, 200, policyResults);
+    this.name = "EfesPolicyIssuanceError";
   }
 }
 
@@ -1046,7 +1060,7 @@ export async function createEfesPoliciesFromBooking(payload: AoryxBookingPayload
     throw new EfesClientError("Missing travel countries for EFES policy");
   }
 
-  const policyCreationDate = new Date().toISOString().slice(0, 10);
+  const policyCreationDate = formatEfesPolicyCreationDate();
   const insuredTraveler = resolveInsuredTraveler(payload, travelers);
   if (!insuredTraveler) {
     throw new EfesClientError("Missing insured traveler for EFES policy");
@@ -1098,6 +1112,17 @@ export async function createEfesPoliciesFromBooking(payload: AoryxBookingPayload
       return { travelerId: traveler.id ?? null, response };
     })
   );
+
+  const issuance = resolveInsuranceIssuance({
+    insuranceSelected: true,
+    insurancePolicies: results,
+  });
+  if (issuance.status !== "confirmed") {
+    throw new EfesPolicyIssuanceError(
+      issuance.errorMessage ?? "EFES did not issue the requested insurance policies.",
+      results
+    );
+  }
 
   return results;
 }

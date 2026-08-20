@@ -7,7 +7,10 @@ import {
   readGatewayAuditLogPath,
 } from "@/lib/idbank-gateway-audit";
 import { AoryxClientError, book, bookingDetails } from "@/lib/aoryx-client";
-import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
+import {
+  createEfesPoliciesFromBooking,
+  EfesPolicyIssuanceError,
+} from "@/lib/efes-client";
 import { recordUserBooking, type AppliedBookingCoupon } from "@/lib/user-data";
 import { sendBookingConfirmationEmail } from "@/lib/email";
 import { incrementCouponSuccessfulOrders } from "@/lib/coupons";
@@ -1505,12 +1508,14 @@ const handleResultCallback = async (request: NextRequest) => {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create EFES policies";
-      insurancePolicies = [];
+      insurancePolicies =
+        error instanceof EfesPolicyIssuanceError ? error.policyResults : [];
       insuranceError = message;
       await collection.updateOne(
         { orderId },
         {
           $set: {
+            insurancePolicies,
             insuranceError: message,
             insuranceUpdatedAt: new Date(),
           },
@@ -1547,6 +1552,8 @@ const handleResultCallback = async (request: NextRequest) => {
         paidAmount: lockedRecord.amount?.value ?? null,
         paidCurrency: lockedRecord.amount?.currency ?? lockedRecord.amount?.currencyCode ?? null,
         coupon: appliedCoupon,
+        insurancePolicies,
+        insuranceError,
       });
     }
 
