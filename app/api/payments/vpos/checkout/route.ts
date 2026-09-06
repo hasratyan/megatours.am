@@ -1,3 +1,4 @@
+import { assertCheckoutInsuranceNames, InsuranceTravelerNameError } from "@/lib/insurance-traveler-names";
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId, type Collection, type Document } from "mongodb";
@@ -1111,6 +1112,7 @@ const tryHandleBookingAddonCheckout = async (params: {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    assertCheckoutInsuranceNames(body);
     const locale =
       typeof (body as { locale?: unknown }).locale === "string"
         ? (body as { locale?: string }).locale?.trim() ?? null
@@ -1548,6 +1550,9 @@ export async function POST(request: NextRequest) {
       orderNumber: initResult.orderNumber,
     });
   } catch (error) {
+    if (error instanceof InsuranceTravelerNameError) {
+      return NextResponse.json({ error: error.message, code: "INVALID_INSURANCE_NAME" }, { status: 400 });
+    }
     console.error("[Vpos][checkout] Failed to initialize payment", error);
     return NextResponse.json({ error: "Failed to initialize payment" }, { status: 500 });
   }

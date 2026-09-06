@@ -1,3 +1,4 @@
+import { assertEfesInsuranceNames, InsuranceTravelerNameError } from "@/lib/insurance-traveler-names";
 import { randomUUID } from "node:crypto";
 import { createEfesDiagnostics, type EfesLogContext } from "@/lib/efes-diagnostics";
 import {
@@ -1052,6 +1053,12 @@ export async function createEfesPoliciesFromBooking(
   if (!insurance || insurance.provider !== "efes") return [];
   const travelers = insurance.travelers ?? [];
   if (travelers.length === 0) return [];
+  try {
+    assertEfesInsuranceNames(insurance);
+  } catch (error) {
+    if (error instanceof InsuranceTravelerNameError) throw new EfesClientError(error.message);
+    throw error;
+  }
 
   const startDate = insurance.startDate ?? payload.checkInDate ?? "";
   const endDate = insurance.endDate ?? payload.checkOutDate ?? "";

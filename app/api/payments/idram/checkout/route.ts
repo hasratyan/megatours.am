@@ -1,3 +1,4 @@
+import { assertCheckoutInsuranceNames, InsuranceTravelerNameError } from "@/lib/insurance-traveler-names";
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId, type Collection, type Document } from "mongodb";
@@ -572,6 +573,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    assertCheckoutInsuranceNames(body);
     const locale =
       typeof (body as { locale?: unknown }).locale === "string"
         ? (body as { locale?: string }).locale?.trim() ?? null
@@ -828,6 +830,9 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof InsuranceTravelerNameError) {
+      return NextResponse.json({ error: error.message, code: "INVALID_INSURANCE_NAME" }, { status: 400 });
+    }
     console.error("[Idram][checkout] Failed to initialize payment", error);
     return NextResponse.json(
       { error: "Failed to initialize payment" },

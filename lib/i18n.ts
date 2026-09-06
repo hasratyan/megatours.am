@@ -310,6 +310,7 @@ export type Translation = {
         missingDetails: string;
         missingGuestDetails: string;
         insuranceDetailsRequired: string;
+        insuranceArmenianName: string;
         insuranceQuoteFailed: string;
         invalidDateFormat: string;
         birthDateFuture: string;
@@ -1629,6 +1630,7 @@ const translations: Record<Locale, Translation> = {
           missingDetails: "Սենյակների տվյալները բացակայում են։ Խնդրում ենք կրկին ընտրել հյուրանոցը։",
           missingGuestDetails: "Խնդրում ենք լրացնել բոլոր հյուրերի տվյալները։",
           insuranceDetailsRequired: "Լրացրեք ապահովագրության բոլոր անհրաժեշտ տվյալները։",
+          insuranceArmenianName: "Անունը և ազգանունը մուտքագրեք հայերեն տառերով։",
           insuranceQuoteFailed: "Չհաջողվեց հաշվարկել ապահովագրության արժեքը։",
           invalidDateFormat: "Խնդրում ենք մուտքագրել վավեր ամսաթիվ (Օր/Ամիս/Տարի)։",
           birthDateFuture: "Ծննդյան ամսաթիվը չի կարող լինել ապագայում։",
@@ -3176,6 +3178,7 @@ const translations: Record<Locale, Translation> = {
           missingDetails: "Room details are missing. Please reselect the hotel.",
           missingGuestDetails: "Please complete the guest details for all travelers.",
           insuranceDetailsRequired: "Please complete all required insurance details.",
+          insuranceArmenianName: "Enter the first and last names in Armenian letters.",
           insuranceQuoteFailed: "Failed to calculate the insurance premium.",
           invalidDateFormat: "Please enter a valid date (DD/MM/YYYY).",
           birthDateFuture: "Birth date cannot be in the future.",
@@ -4731,6 +4734,7 @@ const translations: Record<Locale, Translation> = {
           missingDetails: "Данные по номерам отсутствуют. Пожалуйста, выберите отель заново.",
           missingGuestDetails: "Пожалуйста, заполните данные всех гостей.",
           insuranceDetailsRequired: "Пожалуйста, заполните все обязательные данные страховки.",
+          insuranceArmenianName: "Введите имя и фамилию армянскими буквами.",
           insuranceQuoteFailed: "Не удалось рассчитать стоимость страховки.",
           invalidDateFormat: "Введите корректную дату (День/Месяц/Год).",
           birthDateFuture: "Дата рождения не может быть в будущем.",

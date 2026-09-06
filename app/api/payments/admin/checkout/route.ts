@@ -1,3 +1,4 @@
+import { assertCheckoutInsuranceNames, InsuranceTravelerNameError } from "@/lib/insurance-traveler-names";
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId, type Document } from "mongodb";
 import { getServerSession } from "@/lib/auth-compat/server";
@@ -341,6 +342,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    assertCheckoutInsuranceNames(body);
     const flow = resolveString((body as { flow?: unknown }).flow).toLowerCase();
     if (flow === "booking_addons") {
       const addonRequest = parseBookingAddonCheckoutRequest(body);
@@ -435,6 +437,9 @@ export async function POST(request: NextRequest) {
     clearPrebookCookie(response);
     return response;
   } catch (error) {
+    if (error instanceof InsuranceTravelerNameError) {
+      return NextResponse.json({ error: error.message, code: "INVALID_INSURANCE_NAME" }, { status: 400 });
+    }
     console.error("[AdminCheckout] Failed to submit booking", error);
 
     if (error instanceof AoryxServiceError) {

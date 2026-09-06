@@ -6979,8 +6979,6 @@ main.payment-status{
 .booking-addon-card__icon{
   display: grid;
   place-items: center;
-  width: 3rem;
-  height: 3rem;
   border-radius: 1rem;
   color: #7cf2d4;
 
@@ -7255,11 +7253,6 @@ main.payment-status{
 
   .booking-addon-card{
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .booking-addon-card__icon{
-    width: 2.75rem;
-    height: 2.75rem;
   }
 
   .booking-addons-booking__code,

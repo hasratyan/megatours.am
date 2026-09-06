@@ -1,5 +1,7 @@
 "use client";
 
+import { isArmenianInsuranceName, isEnglishInsuranceName, normalizeInsuranceTravelerNames } from "@/lib/insurance-traveler-names";
+
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -74,6 +76,8 @@ type InsuranceTravelerForm = BookingInsuranceTraveler & {
 };
 
 type InsuranceTravelerFieldErrors = {
+  firstName?: string;
+  lastName?: string;
   birthDate?: string;
   passportIssueDate?: string;
   passportExpiryDate?: string;
@@ -2076,10 +2080,7 @@ export default function PackageCheckoutClient({
         : null;
       return {
         id: traveler.id,
-        firstName: traveler.firstName,
-        lastName: traveler.lastName,
-        firstNameEn: normalizeOptional(traveler.firstNameEn) ?? traveler.firstName,
-        lastNameEn: normalizeOptional(traveler.lastNameEn) ?? traveler.lastName,
+        ...normalizeInsuranceTravelerNames(traveler),
         gender: traveler.gender ?? null,
         birthDate: normalizeOptional(traveler.birthDate),
         residency: traveler.residency ?? null,
@@ -3345,6 +3346,11 @@ export default function PackageCheckoutClient({
 
     insuranceTravelers.forEach((traveler) => {
       const errors: InsuranceTravelerFieldErrors = {};
+      for (const field of ["firstName", "lastName"] as const) {
+        if (normalizeOptional(traveler[field]) && !isArmenianInsuranceName(traveler[field])) {
+          errors[field] = t.packageBuilder.checkout.errors.insuranceArmenianName;
+        }
+      }
       const birthDate = normalizeOptional(traveler.birthDate);
       const birthDateParsed = birthDate ? parseDateInput(birthDate) : null;
       if (birthDate && !birthDateParsed) {
@@ -3390,6 +3396,7 @@ export default function PackageCheckoutClient({
   }, [
     insuranceActive,
     insuranceTravelers,
+    t.packageBuilder.checkout.errors.insuranceArmenianName,
     t.packageBuilder.checkout.errors.birthDateFuture,
     t.packageBuilder.checkout.errors.invalidDateFormat,
     t.packageBuilder.checkout.errors.passportExpiryBeforeIssueDate,
@@ -3445,8 +3452,10 @@ export default function PackageCheckoutClient({
           ? MAX_INSURANCE_CHILD_AGE_YEARS
           : MAX_INSURANCE_AGE_YEARS;
       return (
-        Boolean(normalizeOptional(traveler.firstNameEn)) &&
-        Boolean(normalizeOptional(traveler.lastNameEn)) &&
+        isArmenianInsuranceName(traveler.firstName) &&
+        isArmenianInsuranceName(traveler.lastName) &&
+        isEnglishInsuranceName(traveler.firstNameEn) &&
+        isEnglishInsuranceName(traveler.lastNameEn) &&
         Boolean(traveler.gender) &&
         Boolean(normalizeOptional(traveler.birthDate)) &&
         isBirthDateWithinAgeLimit(traveler.birthDate, birthDateReference, maxAgeYears) &&
@@ -4145,7 +4154,7 @@ export default function PackageCheckoutClient({
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.firstName} {t.packageBuilder.checkout.armenianHint}</span>
                             <input
-                              className="checkout-input"
+                              className={`checkout-input${travelerFieldErrors?.firstName ? " error" : ""}`}
                               type="text"
                               value={traveler.firstName}
                               onChange={(event) =>
@@ -4153,12 +4162,21 @@ export default function PackageCheckoutClient({
                                   firstName: sanitizeArmenianInput(event.target.value),
                                 })
                               }
+                              lang="hy"
+                              required
+                              aria-invalid={Boolean(travelerFieldErrors?.firstName)}
+                              aria-describedby={travelerFieldErrors?.firstName ? `insurance-${traveler.id}-firstName-error` : undefined}
                             />
+                            {travelerFieldErrors?.firstName ? (
+                              <span id={`insurance-${traveler.id}-firstName-error`} className="checkout-field-error" role="alert">
+                                {travelerFieldErrors.firstName}
+                              </span>
+                            ) : null}
                           </label>
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.lastName} {t.packageBuilder.checkout.armenianHint}</span>
                             <input
-                              className="checkout-input"
+                              className={`checkout-input${travelerFieldErrors?.lastName ? " error" : ""}`}
                               type="text"
                               value={traveler.lastName}
                               onChange={(event) =>
@@ -4166,7 +4184,16 @@ export default function PackageCheckoutClient({
                                   lastName: sanitizeArmenianInput(event.target.value),
                                 })
                               }
+                              lang="hy"
+                              required
+                              aria-invalid={Boolean(travelerFieldErrors?.lastName)}
+                              aria-describedby={travelerFieldErrors?.lastName ? `insurance-${traveler.id}-lastName-error` : undefined}
                             />
+                            {travelerFieldErrors?.lastName ? (
+                              <span id={`insurance-${traveler.id}-lastName-error`} className="checkout-field-error" role="alert">
+                                {travelerFieldErrors.lastName}
+                              </span>
+                            ) : null}
                           </label>
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.gender}</span>

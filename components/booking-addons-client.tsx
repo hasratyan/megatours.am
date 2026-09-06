@@ -1,5 +1,7 @@
 "use client";
 
+import { isArmenianInsuranceName, isEnglishInsuranceName, normalizeInsuranceTravelerNames } from "@/lib/insurance-traveler-names";
+
 import type { FormEvent } from "react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -126,6 +128,8 @@ type InsuranceTravelerForm = BookingInsuranceTraveler & {
 };
 
 type InsuranceTravelerFieldErrors = {
+  firstName?: string;
+  lastName?: string;
   birthDate?: string;
   passportIssueDate?: string;
   passportExpiryDate?: string;
@@ -1169,6 +1173,11 @@ export default function BookingAddonsClient({
       t.packageBuilder.checkout.errors.passportExpiryBeforeIssueDate;
     insuranceTravelers.forEach((traveler) => {
       const errors: InsuranceTravelerFieldErrors = {};
+      for (const field of ["firstName", "lastName"] as const) {
+        if (normalizeOptional(traveler[field]) && !isArmenianInsuranceName(traveler[field])) {
+          errors[field] = t.packageBuilder.checkout.errors.insuranceArmenianName;
+        }
+      }
       const birthDate = normalizeOptional(traveler.birthDate);
       const birthDateParsed = birthDate ? parseDateInput(birthDate) : null;
       if (birthDate && !birthDateParsed) {
@@ -1202,6 +1211,7 @@ export default function BookingAddonsClient({
   }, [
     insuranceSelection,
     insuranceTravelers,
+    t.packageBuilder.checkout.errors.insuranceArmenianName,
     t.packageBuilder.checkout.errors.birthDateFuture,
     t.packageBuilder.checkout.errors.invalidDateFormat,
     t.packageBuilder.checkout.errors.passportExpiryBeforeIssueDate,
@@ -1370,11 +1380,11 @@ export default function BookingAddonsClient({
       const address = traveler.address ?? {};
       const maxAgeYears =
         traveler.type === "Child" ? MAX_INSURANCE_CHILD_AGE_YEARS : MAX_INSURANCE_AGE_YEARS;
-      const firstNameEn = normalizeOptional(traveler.firstNameEn);
-      const lastNameEn = normalizeOptional(traveler.lastNameEn);
       return (
-        Boolean(firstNameEn) &&
-        Boolean(lastNameEn) &&
+        isArmenianInsuranceName(traveler.firstName) &&
+        isArmenianInsuranceName(traveler.lastName) &&
+        isEnglishInsuranceName(traveler.firstNameEn) &&
+        isEnglishInsuranceName(traveler.lastNameEn) &&
         Boolean(traveler.gender) &&
         Boolean(normalizeOptional(traveler.birthDate)) &&
         isBirthDateWithinAgeLimit(traveler.birthDate, birthDateReference, maxAgeYears) &&
@@ -1642,10 +1652,6 @@ export default function BookingAddonsClient({
       normalizeOptional(insuranceSelection.currency) ??
       normalizeOptional(insuranceSelection.riskCurrency);
     return insuranceTravelers.map((traveler) => {
-      const firstNameEn = normalizeOptional(traveler.firstNameEn);
-      const lastNameEn = normalizeOptional(traveler.lastNameEn);
-      const firstName = firstNameEn ?? normalizeOptional(traveler.firstName) ?? "";
-      const lastName = lastNameEn ?? normalizeOptional(traveler.lastName) ?? "";
       const citizenship = normalizeOptional(traveler.citizenship);
       const socialCard = shouldUseInsuranceSocialCard(citizenship, traveler.residency)
         ? normalizeOptional(traveler.socialCard)
@@ -1668,10 +1674,7 @@ export default function BookingAddonsClient({
         normalizeOptional(traveler.riskLabel) ?? normalizeOptional(insuranceSelection.riskLabel);
       return {
         id: traveler.id,
-        firstName,
-        lastName,
-        firstNameEn,
-        lastNameEn,
+        ...normalizeInsuranceTravelerNames(traveler),
         gender: traveler.gender ?? null,
         birthDate: normalizeOptional(traveler.birthDate),
         residency: traveler.residency ?? null,
@@ -2592,7 +2595,7 @@ export default function BookingAddonsClient({
                               {t.packageBuilder.checkout.armenianHint}
                             </span>
                             <input
-                              className="checkout-input"
+                              className={`checkout-input${travelerFieldErrors?.firstName ? " error" : ""}`}
                               type="text"
                               value={traveler.firstName}
                               onChange={(event) =>
@@ -2600,7 +2603,16 @@ export default function BookingAddonsClient({
                                   firstName: sanitizeArmenianInput(event.target.value),
                                 })
                               }
+                              lang="hy"
+                              required
+                              aria-invalid={Boolean(travelerFieldErrors?.firstName)}
+                              aria-describedby={travelerFieldErrors?.firstName ? `insurance-${traveler.id}-firstName-error` : undefined}
                             />
+                            {travelerFieldErrors?.firstName ? (
+                              <span id={`insurance-${traveler.id}-firstName-error`} className="checkout-field-error" role="alert">
+                                {travelerFieldErrors.firstName}
+                              </span>
+                            ) : null}
                           </label>
                           <label className="checkout-field">
                             <span>
@@ -2608,7 +2620,7 @@ export default function BookingAddonsClient({
                               {t.packageBuilder.checkout.armenianHint}
                             </span>
                             <input
-                              className="checkout-input"
+                              className={`checkout-input${travelerFieldErrors?.lastName ? " error" : ""}`}
                               type="text"
                               value={traveler.lastName}
                               onChange={(event) =>
@@ -2616,7 +2628,16 @@ export default function BookingAddonsClient({
                                   lastName: sanitizeArmenianInput(event.target.value),
                                 })
                               }
+                              lang="hy"
+                              required
+                              aria-invalid={Boolean(travelerFieldErrors?.lastName)}
+                              aria-describedby={travelerFieldErrors?.lastName ? `insurance-${traveler.id}-lastName-error` : undefined}
                             />
+                            {travelerFieldErrors?.lastName ? (
+                              <span id={`insurance-${traveler.id}-lastName-error`} className="checkout-field-error" role="alert">
+                                {travelerFieldErrors.lastName}
+                              </span>
+                            ) : null}
                           </label>
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.gender}</span>
