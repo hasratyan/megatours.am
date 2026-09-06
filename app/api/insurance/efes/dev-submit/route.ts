@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
     };
 
     console.log("[EFES][dev-submit] request", bookingPayload);
-    const policies = await createEfesPoliciesFromBooking(bookingPayload);
+    const policies = await createEfesPoliciesFromBooking(bookingPayload, { sessionId: bookingPayload.sessionId, flow: "dev_submit" });
     console.log("[EFES][dev-submit] response", policies);
     return NextResponse.json({ policies });
   } catch (error) {

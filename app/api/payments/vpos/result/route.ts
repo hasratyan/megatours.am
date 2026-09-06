@@ -1527,7 +1527,7 @@ const handleResultCallback = async (request: NextRequest) => {
         flow: paymentFlow || "booking",
         ...summarizeEfesInsurance(payload),
       });
-      const policies = await createEfesPoliciesFromBooking(payload);
+      const policies = await createEfesPoliciesFromBooking(payload, { orderId: String(orderId), flow: "vpos_result" });
       insurancePolicies = policies;
       console.info("[EFES][vpos-result] policy response", {
         orderId,

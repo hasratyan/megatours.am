@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { createEfesDiagnostics, type EfesLogContext } from "@/lib/efes-diagnostics";
 import {
   EFES_BASE_URL,
   EFES_COMPANY_ID,
@@ -490,7 +492,7 @@ const buildSubriskFields = (labels: string[] | null | undefined) => {
   return fields;
 };
 
-const getEfesToken = async () => {
+const getEfesToken = async (context?: EfesLogContext) => {
   if (!isEfesConfigured()) {
     throw new EfesClientError("EFES is not configured");
   }
@@ -498,6 +500,11 @@ const getEfesToken = async () => {
     return cachedToken?.token ?? "";
   }
 
+  const diagnostics = createEfesDiagnostics({
+    endpoint: EFES_AUTH_PATH, timeoutMs: EFES_TIMEOUT_MS, context,
+    secrets: [EFES_USER, EFES_PASSWORD, EFES_COMPANY_ID],
+  });
+  diagnostics.phase("authentication");
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), EFES_TIMEOUT_MS);
   try {
@@ -508,9 +515,11 @@ const getEfesToken = async () => {
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
+    diagnostics.headers(response);
 
     const rawText = await response.text();
     const payload = parseEfesResponsePayload(rawText);
+    diagnostics.response(payload, Buffer.byteLength(rawText), true);
     if (!response.ok) {
       const message =
         payload && typeof payload === "object" && !Array.isArray(payload)
@@ -554,6 +563,7 @@ const getEfesToken = async () => {
     return token;
   } catch (error) {
     clearTimeout(timeoutId);
+    diagnostics.failure(error, controller.signal.aborted);
     if (error instanceof EfesServiceError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
       throw new EfesClientError("EFES auth failed");
@@ -567,11 +577,15 @@ const getEfesToken = async () => {
 const efesRequest = async <T>(
   path: string,
   body: unknown,
-  options: { auth?: boolean } = {}
+  options: { auth?: boolean; context?: EfesLogContext } = {}
 ): Promise<T> => {
   if (!isEfesConfigured()) {
     throw new EfesClientError("EFES is not configured");
   }
+  const diagnostics = createEfesDiagnostics({
+    endpoint: path, timeoutMs: EFES_TIMEOUT_MS, context: options.context,
+    request: body, secrets: [EFES_USER, EFES_PASSWORD, EFES_COMPANY_ID],
+  });
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), EFES_TIMEOUT_MS);
   try {
@@ -580,10 +594,12 @@ const efesRequest = async <T>(
       Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
     };
     if (options.auth !== false) {
-      const token = await getEfesToken();
+      diagnostics.phase("authentication");
+      const token = await getEfesToken(options.context);
       headers.Authorization = `Bearer ${token}`;
     }
 
+    diagnostics.phase("supplier_request");
     const response = await fetch(`${EFES_BASE_URL}${path}`, {
       method: "POST",
       headers,
@@ -591,9 +607,11 @@ const efesRequest = async <T>(
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
+    diagnostics.headers(response);
 
     const rawText = await response.text();
     const payload = parseEfesResponsePayload(rawText);
+    diagnostics.response(payload, Buffer.byteLength(rawText));
     if (!response.ok) {
       const message =
         payload && typeof payload === "object" && !Array.isArray(payload)
@@ -612,6 +630,7 @@ const efesRequest = async <T>(
     return payload as T;
   } catch (error) {
     clearTimeout(timeoutId);
+    diagnostics.failure(error, controller.signal.aborted);
     if (error instanceof EfesServiceError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
       throw new EfesClientError("EFES request failed");
@@ -1025,7 +1044,10 @@ const resolveInsuredTraveler = (
   return matched ?? travelers[0];
 };
 
-export async function createEfesPoliciesFromBooking(payload: AoryxBookingPayload) {
+export async function createEfesPoliciesFromBooking(
+  payload: AoryxBookingPayload,
+  logContext: EfesLogContext = {}
+) {
   const insurance = payload.insurance ?? null;
   if (!insurance || insurance.provider !== "efes") return [];
   const travelers = insurance.travelers ?? [];
@@ -1066,8 +1088,9 @@ export async function createEfesPoliciesFromBooking(payload: AoryxBookingPayload
     throw new EfesClientError("Missing insured traveler for EFES policy");
   }
 
+  const attemptId = randomUUID();
   const results = await Promise.all(
-    travelers.map(async (traveler) => {
+    travelers.map(async (traveler, travelerIndex) => {
       const subrisks = normalizeSubrisks(traveler.subrisks) ?? baseSubrisks;
       const premium = normalizeTravelerPremium(traveler, insurance, travelers.length);
       if (!premium || !Number.isFinite(premium)) {
@@ -1105,10 +1128,9 @@ export async function createEfesPoliciesFromBooking(payload: AoryxBookingPayload
         subrisks,
       };
       const payload = buildPolicyPayload(policyRequest);
-      if (process.env.NODE_ENV === "development") {
-        console.info("[EFES][policy] request", payload);
-      }
-      const response = await efesRequest<unknown>(EFES_POLICY_PATH, payload);
+      const response = await efesRequest<unknown>(EFES_POLICY_PATH, payload, {
+        context: { ...logContext, attemptId, travelerIndex },
+      });
       return { travelerId: traveler.id ?? null, response };
     })
   );

@@ -386,7 +386,7 @@ export async function POST(request: NextRequest) {
     let insuranceError: string | null = null;
 
     try {
-      insurancePolicies = await createEfesPoliciesFromBooking(payload);
+      insurancePolicies = await createEfesPoliciesFromBooking(payload, { sessionId: payload.sessionId, flow: "admin_checkout" });
     } catch (error) {
       insurancePolicies =
         error instanceof EfesPolicyIssuanceError ? error.policyResults : [];

@@ -214,7 +214,7 @@ export async function processB2bBookingServices(
       };
     } else {
       try {
-        const policies = await createEfesPoliciesFromBooking(payload);
+        const policies = await createEfesPoliciesFromBooking(payload, { sessionId: payload.sessionId, flow: "b2b_service_booking" });
         insuranceResult = {
           status: "booked",
           referenceId: buildReference("INS"),

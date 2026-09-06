@@ -892,7 +892,7 @@ export async function POST(request: NextRequest) {
         flow: paymentFlow || "booking",
         ...summarizeEfesInsurance(payload),
       });
-      const policies = await createEfesPoliciesFromBooking(payload);
+      const policies = await createEfesPoliciesFromBooking(payload, { orderId: String(billNo), flow: "idram_result" });
       insurancePolicies = policies;
       const insuranceUpdatedAt = new Date();
       console.info("[EFES][idram-result] policy response", {

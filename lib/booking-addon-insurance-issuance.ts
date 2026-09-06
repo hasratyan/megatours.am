@@ -27,7 +27,10 @@ export const issueBookingAddonInsurance = async (input: {
   }
 
   try {
-    const insurancePolicies = await createEfesPoliciesFromBooking(input.payload);
+    const insurancePolicies = await createEfesPoliciesFromBooking(input.payload, {
+      bookingId: typeof input.logContext.bookingId === "string" ? input.logContext.bookingId : undefined,
+      flow: typeof input.logContext.flow === "string" ? input.logContext.flow : undefined,
+    });
     await input.userBookings.updateOne(input.bookingFilter, ({
       $set: {
         insurancePolicies,
