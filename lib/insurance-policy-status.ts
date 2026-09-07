@@ -62,6 +62,19 @@ export const hasIssuedEfesPolicy = (insurancePolicies: unknown): boolean =>
   Array.isArray(insurancePolicies) &&
   insurancePolicies.some((policy) => resolveEfesPolicyResponseFailure(policy) === null);
 
+export const INSURANCE_CONFIRMATION_PENDING = "Insurance confirmation is pending. Please do not submit or pay again; our support team will verify the policies with EFES.";
+
+export const isEfesPolicyPending = (policy: unknown) =>
+  isRecord(policy) && policy.confirmationStatus === "pending";
+
+export const hasPendingEfesPolicy = (policies: unknown) =>
+  Array.isArray(policies) && policies.some(isEfesPolicyPending);
+
+export const hasDefinitiveEfesRejection = (value: unknown) => {
+  if (!isRecord(value)) return false;
+  return isTruthyErrorFlag(value.is_error) || isNonZeroCode(value.error_code) || isNonZeroCode(value.d_error_code);
+};
+
 export const resolveInsuranceIssuance = (input: {
   insuranceSelected: boolean;
   insurancePolicies?: unknown;
@@ -72,6 +85,10 @@ export const resolveInsuranceIssuance = (input: {
   }
 
   const storedError = toOptionalText(input.insuranceError);
+  if (hasPendingEfesPolicy(input.insurancePolicies) || storedError === INSURANCE_CONFIRMATION_PENDING ||
+      storedError === "Insurance policy issuance has not completed.") {
+    return { status: "pending", errorMessage: null };
+  }
   if (storedError) {
     return { status: "failed", errorMessage: storedError };
   }

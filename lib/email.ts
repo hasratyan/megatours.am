@@ -1,3 +1,4 @@
+import { insurancePendingCopy } from "@/lib/insurance-pending-copy";
 import nodemailer from "nodemailer";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 import { resolveBookingPaymentTotalAmd } from "@/lib/booking-total";
@@ -397,6 +398,9 @@ export async function sendBookingConfirmationEmail({
     insuranceError,
   });
   const insuranceFailed = insuranceIssuance.status === "failed";
+  const insurancePending = insuranceIssuance.status === "pending";
+  const insuranceNotice = insurancePending ? insurancePendingCopy(safeLocale).body
+    : insuranceFailed ? copy.insuranceWarning : null;
   const voucherUrl = `${baseUrl}/${safeLocale}/profile/voucher/${bookingId}?download=1`;
   const profileUrl = `${baseUrl}/${safeLocale}/profile`;
 
@@ -414,7 +418,7 @@ export async function sendBookingConfirmationEmail({
     const selectedCount = Math.max(1, payload.excursions.selections?.length ?? 1);
     serviceLines.push(copy.serviceLines.excursions(selectedCount));
   }
-  if (payload.insurance && !insuranceFailed) {
+  if (payload.insurance && insuranceIssuance.status === "confirmed") {
     const insuranceSelection =
       payload.insurance.planName?.trim() ||
       payload.insurance.planId?.trim() ||
@@ -484,8 +488,8 @@ export async function sendBookingConfirmationEmail({
           </div>
 
           ${
-            insuranceFailed
-              ? `<div role="alert" style="margin-top: 18px; padding: 12px 14px; border: 1px solid #f59e0b; border-radius: 12px; background: #fffbeb; color: #92400e; font-size: 14px; line-height: 1.55; font-weight: 600;">${escapeHtml(copy.insuranceWarning)}</div>`
+            insuranceNotice
+              ? `<div role="status" style="margin-top: 18px; padding: 12px 14px; border: 1px solid #f59e0b; border-radius: 12px; background: #fffbeb; color: #92400e; font-size: 14px; line-height: 1.55; font-weight: 600;">${escapeHtml(insuranceNotice)}</div>`
               : ""
           }
 
@@ -508,7 +512,7 @@ export async function sendBookingConfirmationEmail({
     `${copy.labels.confirmation}: ${confirmation}`,
     normalizedCoupon ? `${copy.labels.coupon}: ${normalizedCoupon.code} (${normalizedCoupon.discountPercent}%)` : null,
     `${copy.labels.totalPaid}: ${totalLabel}`,
-    insuranceFailed ? copy.insuranceWarning : null,
+    insuranceNotice,
     `${copy.labels.voucher}: ${voucherUrl}`,
     `${copy.labels.profile}: ${profileUrl}`,
   ]

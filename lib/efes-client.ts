@@ -1,3 +1,5 @@
+import { executeEfesPolicy, efesPolicyHash } from "@/lib/efes-policy-execution";
+import { getEfesPolicyStore } from "@/lib/efes-policy-store";
 import { assertEfesInsuranceNames, InsuranceTravelerNameError } from "@/lib/insurance-traveler-names";
 import { randomUUID } from "node:crypto";
 import { createEfesDiagnostics, type EfesLogContext } from "@/lib/efes-diagnostics";
@@ -14,6 +16,9 @@ import { toCountryAlpha3 } from "@/lib/country-alpha3";
 import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import {
   formatEfesPolicyCreationDate,
+  hasDefinitiveEfesRejection,
+  resolveEfesPolicyResponseFailure,
+  INSURANCE_CONFIRMATION_PENDING,
   resolveInsuranceIssuance,
 } from "@/lib/insurance-policy-status";
 import type { AoryxBookingPayload, BookingInsuranceSelection, BookingInsuranceTraveler } from "@/types/aoryx";
@@ -55,6 +60,9 @@ type EfesTokenCache = {
 const EFES_AUTH_PATH = "/webservice/auth";
 const EFES_SCRIPT_PATH = "/webservice/script";
 const EFES_POLICY_PATH = "/webservice/policy";
+const configuredPolicyTimeout = Number(process.env.EFES_POLICY_TIMEOUT_MS ?? "60000");
+const EFES_POLICY_TIMEOUT_MS = Number.isFinite(configuredPolicyTimeout) && configuredPolicyTimeout >= 15000
+  ? Math.min(configuredPolicyTimeout, 90000) : 60000;
 const DEFAULT_RISK_LABEL = "STANDARD";
 const DEFAULT_RISK_AMOUNT = 15000;
 const DEFAULT_RISK_CURRENCY = "EUR";
@@ -583,12 +591,13 @@ const efesRequest = async <T>(
   if (!isEfesConfigured()) {
     throw new EfesClientError("EFES is not configured");
   }
+  const timeoutMs = path === EFES_POLICY_PATH ? EFES_POLICY_TIMEOUT_MS : EFES_TIMEOUT_MS;
   const diagnostics = createEfesDiagnostics({
-    endpoint: path, timeoutMs: EFES_TIMEOUT_MS, context: options.context,
+    endpoint: path, timeoutMs, context: options.context,
     request: body, secrets: [EFES_USER, EFES_PASSWORD, EFES_COMPANY_ID],
   });
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), EFES_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -607,10 +616,10 @@ const efesRequest = async <T>(
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    clearTimeout(timeoutId);
     diagnostics.headers(response);
 
     const rawText = await response.text();
+    clearTimeout(timeoutId);
     const payload = parseEfesResponsePayload(rawText);
     diagnostics.response(payload, Buffer.byteLength(rawText));
     if (!response.ok) {
@@ -1096,8 +1105,7 @@ export async function createEfesPoliciesFromBooking(
   }
 
   const attemptId = randomUUID();
-  const results = await Promise.all(
-    travelers.map(async (traveler, travelerIndex) => {
+  const requests = travelers.map((traveler) => {
       const subrisks = normalizeSubrisks(traveler.subrisks) ?? baseSubrisks;
       const premium = normalizeTravelerPremium(traveler, insurance, travelers.length);
       if (!premium || !Number.isFinite(premium)) {
@@ -1134,13 +1142,30 @@ export async function createEfesPoliciesFromBooking(
         policyCreationDate,
         subrisks,
       };
-      const payload = buildPolicyPayload(policyRequest);
-      const response = await efesRequest<unknown>(EFES_POLICY_PATH, payload, {
+      return buildPolicyPayload(policyRequest);
+    });
+  const store = await getEfesPolicyStore();
+  const results = await Promise.all(requests.map((request, travelerIndex) => {
+    const traveler = travelers[travelerIndex];
+    // Identity excludes editable names and premiums, so correcting the form cannot
+    // accidentally create another policy for an already submitted traveler/trip.
+    const id = efesPolicyHash([
+      EFES_BASE_URL, EFES_COMPANY_ID, payload.customerRefNumber || payload.sessionId,
+      traveler.passportNumber?.trim().toUpperCase() || traveler.id || travelerIndex,
+      traveler.birthDate, startDate, endDate,
+    ]);
+    const { POLICY_CREATION_DATE: creationDate, POLICY_PAYMENT_SCHEDULE: schedule, ...stableRequest } = request;
+    void creationDate; void schedule;
+    return executeEfesPolicy({
+      id, requestHash: efesPolicyHash(stableRequest), travelerId: traveler.id ?? null,
+      travelerIndex, store,
+      send: () => efesRequest<unknown>(EFES_POLICY_PATH, request, {
         context: { ...logContext, attemptId, travelerIndex },
-      });
-      return { travelerId: traveler.id ?? null, response };
-    })
-  );
+      }),
+      classify: (response) => resolveEfesPolicyResponseFailure(response) === null ? "confirmed"
+        : hasDefinitiveEfesRejection(response) ? "rejected" : "pending",
+    });
+  }));
 
   const issuance = resolveInsuranceIssuance({
     insuranceSelected: true,
@@ -1148,7 +1173,8 @@ export async function createEfesPoliciesFromBooking(
   });
   if (issuance.status !== "confirmed") {
     throw new EfesPolicyIssuanceError(
-      issuance.errorMessage ?? "EFES did not issue the requested insurance policies.",
+      issuance.status === "pending" ? INSURANCE_CONFIRMATION_PENDING
+        : issuance.errorMessage ?? "EFES did not issue the requested insurance policies.",
       results
     );
   }

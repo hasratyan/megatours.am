@@ -1,3 +1,4 @@
+import { hasPendingEfesPolicy } from "@/lib/insurance-policy-status";
 import { assertCheckoutInsuranceNames, InsuranceTravelerNameError } from "@/lib/insurance-traveler-names";
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId, type Document } from "mongodb";
@@ -394,7 +395,10 @@ export async function POST(request: NextRequest) {
         error instanceof EfesPolicyIssuanceError ? error.policyResults : [];
       insuranceError =
         error instanceof Error ? error.message : "Failed to create EFES policies";
-      console.error("[AdminCheckout] EFES policy creation failed", error);
+      (hasPendingEfesPolicy(insurancePolicies) ? console.info : console.error)(
+        hasPendingEfesPolicy(insurancePolicies) ? "[AdminCheckout] EFES confirmation pending" : "[AdminCheckout] EFES policy creation failed",
+        { message: insuranceError }
+      );
     }
 
     try {

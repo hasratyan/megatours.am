@@ -1,3 +1,4 @@
+import { refreshEfesPolicyResults } from "@/lib/efes-policy-store";
 import Link from "next/link";
 import type { Route } from "next";
 import { notFound } from "next/navigation";
@@ -193,6 +194,7 @@ export default async function BookingAddonsPage({ params }: PageProps) {
     getPaymentMethodFlags().catch(() => DEFAULT_PAYMENT_METHOD_FLAGS),
   ]);
 
+  await refreshEfesPolicyResults(bookingRecord);
   const existingServices = resolveExistingBookingAddonServiceKeys(payload);
   const hotelContext = resolveBookingAddonHotelContext(payload);
   const insuranceIssuance: InsuranceIssuanceSummary = resolveInsuranceIssuance({

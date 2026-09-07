@@ -1,5 +1,7 @@
 "use client";
 
+import { insurancePendingCopy } from "@/lib/insurance-pending-copy";
+
 import { isArmenianInsuranceName, isEnglishInsuranceName, normalizeInsuranceTravelerNames } from "@/lib/insurance-traveler-names";
 
 import type { FormEvent } from "react";
@@ -75,7 +77,7 @@ type AdminCheckoutResponse = {
   appliedServices: AddonServiceKey[];
   failedServices?: AddonServiceKey[];
   skippedServices: AddonServiceKey[];
-  insuranceStatus: "not_requested" | "confirmed" | "failed";
+  insuranceStatus: "not_requested" | "confirmed" | "pending" | "failed";
 };
 
 type BookingAddonPaymentSnapshot = {
@@ -1554,6 +1556,8 @@ export default function BookingAddonsClient({
       ),
     [disabledServiceSet, existingServiceSet, serviceDefinitions]
   );
+  const insuranceConfirmationPending = existingServiceSet.has("insurance") && insuranceIssuance.status === "pending";
+  const pendingCopy = insurancePendingCopy(locale);
   const insuranceConfirmationFailed =
     existingServiceSet.has("insurance") && insuranceIssuance.status === "failed";
   const includedServiceCards = useMemo(
@@ -1561,9 +1565,9 @@ export default function BookingAddonsClient({
       serviceDefinitions.filter(
         (service) =>
           existingServiceSet.has(service.key) &&
-          !(service.key === "insurance" && insuranceConfirmationFailed)
+          !(service.key === "insurance" && (insuranceConfirmationFailed || insuranceConfirmationPending))
       ),
-    [existingServiceSet, insuranceConfirmationFailed, serviceDefinitions]
+    [existingServiceSet, insuranceConfirmationFailed, insuranceConfirmationPending, serviceDefinitions]
   );
   const unavailableServiceCards = useMemo(
     () =>
@@ -1966,7 +1970,7 @@ export default function BookingAddonsClient({
     setInsuranceRetryLoading(true);
     setInsuranceRetryError(null);
     try {
-      await postJson<{ insuranceStatus: "confirmed" }>(
+      await postJson<{ insuranceStatus: "confirmed" | "pending" }>(
         `/api/admin/bookings/${encodeURIComponent(adminBookingId)}/manage`,
         { action: "retry_insurance" }
       );
@@ -2160,6 +2164,15 @@ export default function BookingAddonsClient({
                 </article>
               );
             })}
+            {insuranceConfirmationPending ? (
+              <article className="profile-card booking-addon-card" role="status">
+                <div className="booking-addon-card__icon"><span className="material-symbols-rounded">schedule</span></div>
+                <div className="booking-addon-card__body">
+                  <h3>{resolveServiceLabel("insurance")}: {pendingCopy.title}</h3>
+                  <p>{pendingCopy.body}</p>
+                </div>
+              </article>
+            ) : null}
             {insuranceConfirmationFailed ? (
               <article className="profile-card booking-addon-card is-failed">
                 <div className="booking-addon-card__icon">

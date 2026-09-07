@@ -6,7 +6,7 @@ import type { Locale } from "@/lib/i18n";
 import { postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 
-type B2bServiceStatus = "skipped" | "booked" | "failed";
+type B2bServiceStatus = "skipped" | "booked" | "pending" | "failed";
 type B2bReviewStatus = "new" | "in_progress" | "needs_followup" | "resolved";
 
 type B2bServiceResult = {
@@ -108,7 +108,7 @@ const normalizeText = (value: string) => value.trim().toLowerCase();
 const resolveServiceStatus = (value: unknown): B2bServiceStatus => {
   if (typeof value !== "string") return "skipped";
   const normalized = value.trim().toLowerCase();
-  if (normalized === "booked" || normalized === "failed" || normalized === "skipped") {
+  if (normalized === "booked" || normalized === "failed" || normalized === "pending" || normalized === "skipped") {
     return normalized;
   }
   return "skipped";

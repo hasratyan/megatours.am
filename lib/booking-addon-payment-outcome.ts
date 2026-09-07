@@ -25,6 +25,13 @@ export const resolveBookingAddonPaymentServiceOutcome = (input: {
   const appliedServices = uniqueServiceKeys(input.appliedServices);
   const failedServices = uniqueServiceKeys(input.failedServices ?? []);
 
+  if (input.insuranceStatus === "pending") {
+    return {
+      appliedServices: appliedServices.filter(service => service !== "insurance"),
+      failedServices: failedServices.filter(service => service !== "insurance"),
+    };
+  }
+
   if (input.insuranceStatus === "failed") {
     const insuranceBelongsToPayment =
       appliedServices.includes("insurance") || failedServices.includes("insurance");

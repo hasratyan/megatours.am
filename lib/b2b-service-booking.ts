@@ -1,9 +1,10 @@
+import { hasPendingEfesPolicy } from "@/lib/insurance-policy-status";
 import { randomUUID } from "crypto";
 import { getB2bDb } from "@/lib/db";
-import { createEfesPoliciesFromBooking } from "@/lib/efes-client";
+import { createEfesPoliciesFromBooking, EfesPolicyIssuanceError } from "@/lib/efes-client";
 import type { AoryxBookingPayload, AoryxBookingResult, AoryxTransferSelection } from "@/types/aoryx";
 
-type ServiceStatus = "skipped" | "booked" | "failed";
+type ServiceStatus = "skipped" | "booked" | "pending" | "failed";
 
 type BaseServiceResult = {
   status: ServiceStatus;
@@ -223,12 +224,13 @@ export async function processB2bBookingServices(
           policies,
         };
       } catch (error) {
+        const policies = error instanceof EfesPolicyIssuanceError ? error.policyResults : null;
         insuranceResult = {
-          status: "failed",
+          status: hasPendingEfesPolicy(policies) ? "pending" : "failed",
           referenceId: null,
           message: errorMessage(error, "Failed to issue EFES insurance policies."),
           provider: "efes",
-          policies: null,
+          policies: policies as B2bServicesBookingResult["insurance"]["policies"],
         };
       }
     }

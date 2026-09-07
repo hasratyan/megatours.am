@@ -1,3 +1,4 @@
+import { hasPendingEfesPolicy } from "@/lib/insurance-policy-status";
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { ObjectId, type Collection, type Document } from "mongodb";
@@ -952,7 +953,7 @@ export async function POST(request: NextRequest) {
           $push: {
             "diagnostics.events": {
               $each: [
-                buildDiagnosticEvent("insurance", "error", "efes_policy_creation_failed", {
+                buildDiagnosticEvent("insurance", hasPendingEfesPolicy(insurancePolicies) ? "info" : "error", hasPendingEfesPolicy(insurancePolicies) ? "efes_confirmation_pending" : "efes_policy_creation_failed", {
                   flow: paymentFlow || "booking",
                   provider: payload.insurance?.provider ?? null,
                   message,
@@ -963,7 +964,10 @@ export async function POST(request: NextRequest) {
           },
         }) as Document
       );
-      console.error("[Idram][result] EFES policy creation failed", error);
+      (hasPendingEfesPolicy(insurancePolicies) ? console.info : console.error)(
+        hasPendingEfesPolicy(insurancePolicies) ? "[Idram][result] EFES confirmation pending" : "[Idram][result] EFES policy creation failed",
+        { message: insuranceError }
+      );
     }
 
     if (lockedRecord.userId) {

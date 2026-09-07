@@ -1,3 +1,5 @@
+import { refreshEfesPolicyResults } from "@/lib/efes-policy-store";
+import { insurancePendingCopy } from "@/lib/insurance-pending-copy";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -262,6 +264,7 @@ export default async function VoucherPage({ params }: PageProps) {
     notFound();
   }
 
+  await refreshEfesPolicyResults(bookingRecord as { insurancePolicies?: unknown; insuranceError?: unknown });
   const payload = bookingRecord.payload as AoryxBookingPayload;
   const booking = (bookingRecord.booking ?? null) as AoryxBookingResult | null;
   const storedInsurancePolicies = parseStoredEfesPolicies(
@@ -273,6 +276,7 @@ export default async function VoucherPage({ params }: PageProps) {
     insuranceError: (bookingRecord as { insuranceError?: unknown }).insuranceError ?? null,
   });
   const insuranceFailed = insuranceIssuance.status === "failed";
+  const insurancePending = insuranceIssuance.status === "pending";
   const appliedCoupon = normalizeAppliedCoupon((bookingRecord as { coupon?: unknown }).coupon ?? null);
   const cancellation =
     ((bookingRecord as { cancellation?: BookingCancellationRecord }).cancellation ?? null) as BookingCancellationRecord;
@@ -770,6 +774,12 @@ export default async function VoucherPage({ params }: PageProps) {
           />
         </Suspense>
 
+        {insurancePending ? (
+          <div className="booking-service-warning" role="status">
+            <span className="material-symbols-rounded" aria-hidden="true">schedule</span>
+            <p>{insurancePendingCopy(resolvedLocale).body}</p>
+          </div>
+        ) : null}
         {insuranceFailed ? (
           <div className="booking-service-warning" role="alert">
             <span className="material-symbols-rounded" aria-hidden="true">warning</span>

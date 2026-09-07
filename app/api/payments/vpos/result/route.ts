@@ -1,3 +1,4 @@
+import { hasPendingEfesPolicy } from "@/lib/insurance-policy-status";
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId, type Collection, type Document } from "mongodb";
 import { getDb } from "@/lib/db";
@@ -1562,7 +1563,10 @@ const handleResultCallback = async (request: NextRequest) => {
           },
         }
       );
-      console.error("[Vpos][result] EFES policy creation failed", error);
+      (hasPendingEfesPolicy(insurancePolicies) ? console.info : console.error)(
+        hasPendingEfesPolicy(insurancePolicies) ? "[Vpos][result] EFES confirmation pending" : "[Vpos][result] EFES policy creation failed",
+        { message: insuranceError }
+      );
     }
 
     if (lockedRecord.userId) {

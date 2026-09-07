@@ -832,6 +832,7 @@ export type Translation = {
         note: string;
       };
       serviceStatus: {
+        pending: string;
         booked: string;
         failed: string;
         skipped: string;
@@ -2359,6 +2360,7 @@ const translations: Record<Locale, Translation> = {
         note: "Ներքին նշում",
       },
       serviceStatus: {
+        pending: "Հաստատումը սպասվում է",
         booked: "Ամրագրված",
         failed: "Ձախողված",
         skipped: "Բաց թողնված",
@@ -3911,6 +3913,7 @@ const translations: Record<Locale, Translation> = {
         note: "Internal note",
       },
       serviceStatus: {
+        pending: "Confirmation pending",
         booked: "Booked",
         failed: "Failed",
         skipped: "Skipped",
@@ -5467,6 +5470,7 @@ const translations: Record<Locale, Translation> = {
         note: "Внутренняя заметка",
       },
       serviceStatus: {
+        pending: "Ожидается подтверждение",
         booked: "Забронировано",
         failed: "Сбой",
         skipped: "Пропущено",

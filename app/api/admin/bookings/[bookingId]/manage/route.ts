@@ -1,3 +1,4 @@
+import { refreshEfesPolicyResults } from "@/lib/efes-policy-store";
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId, type Collection, type Document } from "mongodb";
 import { getServerSession } from "@/lib/auth-compat/server";
@@ -334,6 +335,7 @@ export async function POST(
     }
 
     const record = lock.record;
+    await refreshEfesPolicyResults(record);
     if (!record.payload) {
       return NextResponse.json({ error: "Booking payload is missing." }, { status: 422 });
     }
@@ -701,7 +703,9 @@ export async function POST(
       }
 
       return NextResponse.json({
-        message: "Insurance was confirmed by EFES without collecting another payment.",
+        message: insuranceOutcome.status === "pending"
+          ? "Insurance confirmation is pending. No further payment or submission is needed."
+          : "Insurance was confirmed by EFES without collecting another payment.",
         insuranceStatus: insuranceOutcome.status,
       });
     }

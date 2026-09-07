@@ -1,3 +1,5 @@
+import { refreshEfesPolicyResults } from "@/lib/efes-policy-store";
+import { insurancePendingCopy } from "@/lib/insurance-pending-copy";
 import Link from "next/link";
 import type { Route } from "next";
 import { cookies } from "next/headers";
@@ -283,14 +285,16 @@ export default async function PaymentSuccessPage({
     userBookingRecord?.booking?.supplierConfirmationNumber ||
     userBookingRecord?.booking?.adsConfirmationNumber ||
     null;
+  await Promise.all([refreshEfesPolicyResults(bookingRecord), refreshEfesPolicyResults(userBookingRecord)]);
   const insuranceIssuance = resolveInsuranceIssuance({
     insuranceSelected: Boolean(payload?.insurance),
     insurancePolicies:
-      bookingRecord?.insurancePolicies ?? userBookingRecord?.insurancePolicies ?? null,
+      userBookingRecord?.insurancePolicies ?? bookingRecord?.insurancePolicies ?? null,
     insuranceError:
-      bookingRecord?.insuranceError ?? userBookingRecord?.insuranceError ?? null,
+      userBookingRecord ? userBookingRecord.insuranceError ?? null : bookingRecord?.insuranceError ?? null,
   });
   const insuranceFailed = insuranceIssuance.status === "failed";
+  const insurancePending = insuranceIssuance.status === "pending";
   const hotelMarkup = await getAoryxHotelPlatformFee();
   const fallbackTotal = payload ? calculateBookingTotal(payload, { hotelMarkup }) : null;
   const paidAmount =
@@ -337,6 +341,12 @@ export default async function PaymentSuccessPage({
       <p>{statusBody}</p>
       {!isAddonFlow && isSuccessPending ? <p>{t.payment.success.note}</p> : null}
 
+        {insurancePending ? (
+          <div className="booking-service-warning" role="status">
+            <span className="material-symbols-rounded" aria-hidden="true">schedule</span>
+            <p>{insurancePendingCopy(locale).body}</p>
+          </div>
+        ) : null}
       {!isAddonFlow && insuranceFailed ? (
         <div className="booking-service-warning" role="alert">
           <span className="material-symbols-rounded" aria-hidden="true">warning</span>

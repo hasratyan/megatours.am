@@ -1,3 +1,4 @@
+import { refreshEfesPolicyResults } from "@/lib/efes-policy-store";
 import AdminBookingsClient from "./admin-bookings-client";
 import ProfileSignIn from "@/components/profile-signin";
 import { getServerSession } from "@/lib/auth-compat/server";
@@ -468,6 +469,7 @@ export default async function AdminBookingsPage({ params }: PageProps) {
   (vposPaymentDocs as PaymentRecord[]).forEach((payment) => attachPaymentRecord(payment, "vpos"));
   (idramPaymentDocs as PaymentRecord[]).forEach((payment) => attachPaymentRecord(payment, "idram"));
 
+  await Promise.all(bookingDocs.map(entry => refreshEfesPolicyResults(entry)));
   const bookings: AdminBookingRecord[] = bookingDocs.map((entry) => {
     const profile = entry.userIdString ? profileMap.get(entry.userIdString) ?? null : null;
     const customerRef = entry.payload?.customerRefNumber ?? entry.booking?.customerRefNumber ?? null;
