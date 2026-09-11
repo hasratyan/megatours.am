@@ -1606,25 +1606,22 @@ export default function BookingAddonsClient({
         insuranceQuotedRequestKey !== insuranceQuoteRequest.key)
   );
   const insuranceStatusMessage =
-    !insuranceSelection || insuranceDetailsValid
+    !insuranceSelection || insuranceDetailsValid || insuranceQuotePending
       ? null
       : normalizeOptional(insuranceSelection.quoteError) ??
-        (insuranceQuotePending
-          ? t.packageBuilder.insurance.quoteLoading
-          : t.packageBuilder.checkout.errors.insuranceDetailsRequired);
+        t.packageBuilder.checkout.errors.insuranceDetailsRequired;
 
   const blockedServiceMessages = useMemo(() => {
     const messages: string[] = [];
     if (transferSelection && !transferDetailsValid) {
       messages.push(t.hotel.addons.transfers.detailsRequired);
     }
-    if (insuranceStatusMessage && !insuranceQuotePending) {
+    if (insuranceStatusMessage) {
       messages.push(insuranceStatusMessage);
     }
     return messages;
   }, [
     insuranceStatusMessage,
-    insuranceQuotePending,
     t.hotel.addons.transfers.detailsRequired,
     transferDetailsValid,
     transferSelection,
@@ -1925,6 +1922,7 @@ export default function BookingAddonsClient({
       return;
     }
     if (insuranceSelection && !insuranceDetailsValid) {
+      if (insuranceQuotePending) return;
       setPaymentError(
         insuranceStatusMessage ?? t.packageBuilder.checkout.errors.insuranceDetailsRequired
       );
@@ -2343,7 +2341,9 @@ export default function BookingAddonsClient({
                       </span>
                     </div>
                     <p>{service.description}</p>
-                    {isSelected && selectedCard?.ready === false ? (
+                    {isSelected &&
+                    selectedCard?.ready === false &&
+                    (service.key !== "insurance" || insuranceStatusMessage) ? (
                       <p className="checkout-section__hint">
                         {service.key === "transfer"
                           ? t.hotel.addons.transfers.detailsRequired
@@ -2479,7 +2479,8 @@ export default function BookingAddonsClient({
                   </legend>
                   <ul className="checkout-service__details">
                     <li>{t.packageBuilder.selectedTag}</li>
-                    {!card.ready ? (
+                    {!card.ready &&
+                    (card.id !== "insurance" || insuranceStatusMessage) ? (
                       <li>
                         {card.id === "transfer"
                           ? t.hotel.addons.transfers.detailsRequired
@@ -3349,11 +3350,6 @@ export default function BookingAddonsClient({
               ) : null}
 
               {paymentError ? <p className="checkout-error">{paymentError}</p> : null}
-              {!paymentError && insuranceQuotePending ? (
-                <p className="checkout-section__hint">
-                  {t.packageBuilder.insurance.quoteLoading}
-                </p>
-              ) : null}
               {!paymentError && blockedServiceMessages.length > 0 ? (
                 <p className="checkout-error">{blockedServiceMessages.join(" ")}</p>
               ) : null}
