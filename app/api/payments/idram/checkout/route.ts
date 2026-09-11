@@ -34,6 +34,7 @@ import {
   type BookingAddonCheckoutRequest,
   type BookingAddonServiceKey,
 } from "@/lib/booking-addons";
+import { refreshBookingAddonInsurancePricing } from "@/lib/booking-addon-insurance-pricing";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
 export const runtime = "nodejs";
@@ -457,6 +458,25 @@ const tryHandleBookingAddonCheckout = async (params: {
         },
       },
       { status: 409 }
+    );
+  }
+
+  try {
+    await refreshBookingAddonInsurancePricing(addonRequest, {
+      startDate: userBooking.payload.checkInDate,
+      endDate: userBooking.payload.checkOutDate,
+    });
+  } catch (error) {
+    console.error("[Idram][checkout][addons] Failed to refresh EFES price", {
+      bookingId: addonRequest.bookingId,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+    return NextResponse.json(
+      {
+        error: "Unable to verify the current insurance price. Please try again.",
+        code: "insurance_quote_failed",
+      },
+      { status: 502 }
     );
   }
 

@@ -1,5 +1,9 @@
 import { executeEfesPolicy, efesPolicyHash } from "@/lib/efes-policy-execution";
 import { getEfesPolicyStore } from "@/lib/efes-policy-store";
+import {
+  applyEfesInsuranceQuote,
+  buildEfesInsuranceQuoteRequest,
+} from "@/lib/efes-insurance-pricing";
 import { assertEfesInsuranceNames, InsuranceTravelerNameError } from "@/lib/insurance-traveler-names";
 import { randomUUID } from "node:crypto";
 import { createEfesDiagnostics, type EfesLogContext } from "@/lib/efes-diagnostics";
@@ -852,6 +856,15 @@ export async function quoteEfesTravelCost(request: EfesQuoteRequest): Promise<Ef
   };
 }
 
+export async function requoteEfesInsuranceSelection(
+  insurance: BookingInsuranceSelection,
+  fallbackDates: { startDate?: string | null; endDate?: string | null } = {}
+) {
+  const request = buildEfesInsuranceQuoteRequest(insurance, fallbackDates);
+  const quote = await quoteEfesTravelCost(request);
+  return applyEfesInsuranceQuote(insurance, quote);
+}
+
 const buildPolicyPayload = (request: EfesPolicyRequest) => {
   const traveler = request.traveler;
   const insuredTraveler = request.insuredTraveler ?? traveler;
@@ -1058,16 +1071,24 @@ export async function createEfesPoliciesFromBooking(
   payload: AoryxBookingPayload,
   logContext: EfesLogContext = {}
 ) {
-  const insurance = payload.insurance ?? null;
-  if (!insurance || insurance.provider !== "efes") return [];
-  const travelers = insurance.travelers ?? [];
-  if (travelers.length === 0) return [];
+  const selectedInsurance = payload.insurance ?? null;
+  if (!selectedInsurance || selectedInsurance.provider !== "efes") return [];
+  if ((selectedInsurance.travelers ?? []).length === 0) return [];
   try {
-    assertEfesInsuranceNames(insurance);
+    assertEfesInsuranceNames(selectedInsurance);
   } catch (error) {
     if (error instanceof InsuranceTravelerNameError) throw new EfesClientError(error.message);
     throw error;
   }
+
+  // Recalculate from the submitted birth dates before any policy request. This
+  // prevents an earlier age-placeholder quote from partially issuing a group.
+  const insurance = await requoteEfesInsuranceSelection(selectedInsurance, {
+    startDate: payload.checkInDate,
+    endDate: payload.checkOutDate,
+  });
+  payload.insurance = insurance;
+  const travelers = insurance.travelers ?? [];
 
   const startDate = insurance.startDate ?? payload.checkInDate ?? "";
   const endDate = insurance.endDate ?? payload.checkOutDate ?? "";

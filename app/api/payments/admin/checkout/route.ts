@@ -25,6 +25,7 @@ import {
   type BookingAddonServiceKey,
 } from "@/lib/booking-addons";
 import { issueBookingAddonInsurance } from "@/lib/booking-addon-insurance-issuance";
+import { refreshBookingAddonInsurancePricing } from "@/lib/booking-addon-insurance-pricing";
 import { resolveBookingAddonPaymentServiceOutcome } from "@/lib/booking-addon-payment-outcome";
 import {
   validateInsuranceDetailsForBooking,
@@ -229,6 +230,25 @@ const handleAdminAddonCheckout = async (
         services: disabledServices,
       },
       { status: 403 }
+    );
+  }
+
+  try {
+    await refreshBookingAddonInsurancePricing(addonRequest, {
+      startDate: userBooking.payload.checkInDate,
+      endDate: userBooking.payload.checkOutDate,
+    });
+  } catch (error) {
+    console.error("[AdminCheckout][addons] Failed to refresh EFES price", {
+      bookingId: addonRequest.bookingId,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+    return NextResponse.json(
+      {
+        error: "Unable to verify the current insurance price. Please try again.",
+        code: "insurance_quote_failed",
+      },
+      { status: 502 }
     );
   }
 

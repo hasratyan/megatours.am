@@ -28,6 +28,7 @@ import {
   type BookingAddonPaymentMethod,
 } from "@/lib/booking-addon-payment-methods";
 import { resolveCountryAlpha2 } from "@/lib/countries";
+import { buildEfesInsuranceQuoteRequest } from "@/lib/efes-insurance-pricing";
 import {
   EFES_DEFAULT_COUNTRY_ID,
   EFES_DEFAULT_REGION_ID,
@@ -50,6 +51,7 @@ import {
 } from "@/lib/package-builder-state";
 import { useAmdRates } from "@/lib/use-amd-rates";
 import type { BookingInsuranceTraveler } from "@/types/aoryx";
+import type { EfesQuoteRequest, EfesQuoteResult } from "@/types/efes";
 
 type TransferFlightDetailsForm = {
   flightNumber: string;
@@ -717,6 +719,10 @@ export default function BookingAddonsClient({
   >({});
   const [efesLocationsLoading, setEfesLocationsLoading] = useState<Record<string, boolean>>({});
   const efesCountriesLoadedRef = useRef(false);
+  const insuranceQuoteKeyRef = useRef<string | null>(null);
+  const insuranceQuoteRequestIdRef = useRef(0);
+  const insuranceQuoteTimerRef = useRef<number | null>(null);
+  const [insuranceQuotedRequestKey, setInsuranceQuotedRequestKey] = useState<string | null>(null);
 
   const efesCountryOptions = useMemo(
     () =>
@@ -1256,6 +1262,172 @@ export default function BookingAddonsClient({
     [insuranceSelection?.subrisks, insuranceSelection?.subrisksByGuest]
   );
 
+  const insuranceQuoteRequest = useMemo(() => {
+    if (!insuranceSelection) return null;
+    try {
+      const payload = buildEfesInsuranceQuoteRequest(
+        {
+          startDate: insuranceSelection.startDate,
+          endDate: insuranceSelection.endDate,
+          days: insuranceSelection.days,
+          territoryCode: insuranceSelection.territoryCode,
+          riskAmount: insuranceSelection.riskAmount,
+          riskCurrency: insuranceSelection.riskCurrency,
+          riskLabel: insuranceSelection.riskLabel,
+          subrisks: insuranceSelection.subrisks,
+          riskByGuest: insuranceSelection.riskByGuest,
+          travelers: insuranceTravelers.map((traveler) => ({
+            ...traveler,
+            subrisks: resolveInsuranceTravelerSubrisks(traveler.id),
+          })),
+        },
+        {
+          startDate: hotelContext.checkInDate,
+          endDate: hotelContext.checkOutDate,
+        }
+      );
+      return { key: JSON.stringify(payload), payload };
+    } catch {
+      return null;
+    }
+  }, [
+    hotelContext.checkInDate,
+    hotelContext.checkOutDate,
+    insuranceSelection,
+    insuranceTravelers,
+    resolveInsuranceTravelerSubrisks,
+  ]);
+
+  const applyInsuranceQuote = useCallback(
+    (quote: EfesQuoteResult, quoteKey: string) => {
+      const premiumsById = new Map(
+        quote.premiums.flatMap((entry) =>
+          entry.travelerId && Number.isFinite(entry.premium) && entry.premium > 0
+            ? [[entry.travelerId, entry.premium] as const]
+            : []
+        )
+      );
+      const updatedTravelers = insuranceTravelers.map((traveler, index) => {
+        const premium = premiumsById.get(traveler.id) ?? quote.premiums[index]?.premium ?? null;
+        return {
+          ...traveler,
+          premium,
+          policyPremium: premium,
+          premiumCurrency: quote.currency,
+        };
+      });
+      const quotePremiumsByGuest = Object.fromEntries(
+        updatedTravelers.flatMap((traveler) =>
+          typeof traveler.premium === "number" && Number.isFinite(traveler.premium) && traveler.premium > 0
+            ? [[traveler.id, traveler.premium] as const]
+            : []
+        )
+      );
+      insuranceQuoteKeyRef.current = quoteKey;
+      setInsuranceQuotedRequestKey(quoteKey);
+      setInsuranceTravelers(updatedTravelers);
+      updatePackageBuilderState((state) => {
+        if (!state.insurance?.selected) return state;
+        return {
+          ...state,
+          insurance: {
+            ...state.insurance,
+            price: quote.totalPremium,
+            currency: quote.currency,
+            quoteSum: quote.sum ?? null,
+            quoteDiscountedSum: quote.discountedSum ?? null,
+            quoteSumByGuest: quote.sumByTraveler ?? null,
+            quoteDiscountedSumByGuest: quote.discountedSumByTraveler ?? null,
+            quotePriceCoverages: quote.priceCoverages ?? null,
+            quoteDiscountedPriceCoverages: quote.discountedPriceCoverages ?? null,
+            quotePriceCoveragesByGuest: quote.priceCoveragesByTraveler ?? null,
+            quoteDiscountedPriceCoveragesByGuest:
+              quote.discountedPriceCoveragesByTraveler ?? null,
+            quotePremiumsByGuest,
+            quoteLoading: false,
+            quoteError: null,
+            travelers: updatedTravelers,
+          },
+          updatedAt: Date.now(),
+        };
+      });
+    },
+    [insuranceTravelers]
+  );
+
+  const insuranceQuoteRequestKey = insuranceQuoteRequest?.key ?? null;
+  const hasInsuranceSelection = Boolean(insuranceSelection);
+
+  useEffect(() => {
+    const requestId = (insuranceQuoteRequestIdRef.current += 1);
+    if (insuranceQuoteTimerRef.current !== null) {
+      window.clearTimeout(insuranceQuoteTimerRef.current);
+      insuranceQuoteTimerRef.current = null;
+    }
+    if (!hasInsuranceSelection || !insuranceQuoteRequestKey) {
+      insuranceQuoteKeyRef.current = null;
+      return;
+    }
+    if (insuranceQuoteKeyRef.current === insuranceQuoteRequestKey) return;
+    insuranceQuoteKeyRef.current = null;
+    const quotePayload = JSON.parse(insuranceQuoteRequestKey) as EfesQuoteRequest;
+    insuranceQuoteTimerRef.current = window.setTimeout(async () => {
+      updatePackageBuilderState((state) => {
+        if (!state.insurance?.selected) return state;
+        return {
+          ...state,
+          insurance: {
+            ...state.insurance,
+            quoteLoading: true,
+            quoteError: null,
+          },
+          updatedAt: Date.now(),
+        };
+      });
+      try {
+        const quote = await postJson<EfesQuoteResult>(
+          "/api/insurance/efes/quote",
+          quotePayload
+        );
+        if (requestId !== insuranceQuoteRequestIdRef.current) return;
+        applyInsuranceQuote(quote, insuranceQuoteRequestKey);
+      } catch (error) {
+        if (requestId !== insuranceQuoteRequestIdRef.current) return;
+        setInsuranceQuotedRequestKey(null);
+        const message = resolveSafeErrorFromUnknown(
+          error,
+          t.packageBuilder.checkout.errors.insuranceQuoteFailed
+        );
+        updatePackageBuilderState((state) => {
+          if (!state.insurance?.selected) return state;
+          return {
+            ...state,
+            insurance: {
+              ...state.insurance,
+              price: null,
+              currency: null,
+              quotePremiumsByGuest: null,
+              quoteLoading: false,
+              quoteError: message,
+            },
+            updatedAt: Date.now(),
+          };
+        });
+      }
+    }, 400);
+    return () => {
+      if (insuranceQuoteTimerRef.current !== null) {
+        window.clearTimeout(insuranceQuoteTimerRef.current);
+        insuranceQuoteTimerRef.current = null;
+      }
+    };
+  }, [
+    applyInsuranceQuote,
+    hasInsuranceSelection,
+    insuranceQuoteRequestKey,
+    t.packageBuilder.checkout.errors.insuranceQuoteFailed,
+  ]);
+
   const insuranceSubriskLabelMap = useMemo<Record<string, string>>(
     () => ({
       amateur_sport_expences: t.packageBuilder.insurance.subrisks.amateurSport.label,
@@ -1354,6 +1526,9 @@ export default function BookingAddonsClient({
 
   const insuranceDetailsValid = useMemo(() => {
     if (!insuranceSelection) return true;
+    if (!insuranceQuoteRequest || insuranceQuotedRequestKey !== insuranceQuoteRequest.key) {
+      return false;
+    }
     if (insuranceSelection.quoteLoading === true) return false;
     if (insuranceSelection.quoteError) return false;
     if (Object.keys(localInsuranceTravelerFieldErrors).length > 0) return false;
@@ -1412,6 +1587,8 @@ export default function BookingAddonsClient({
   }, [
     hotelContext.checkInDate,
     insuranceSelection,
+    insuranceQuoteRequest,
+    insuranceQuotedRequestKey,
     insuranceTravelers,
     localInsuranceTravelerFieldErrors,
     resolveInsuranceTravelerPremium,
@@ -1632,6 +1809,9 @@ export default function BookingAddonsClient({
         }
         if (error.code === "insurance_details_required") {
           return t.packageBuilder.checkout.errors.insuranceDetailsRequired;
+        }
+        if (error.code === "insurance_quote_failed") {
+          return t.packageBuilder.checkout.errors.insuranceQuoteFailed;
         }
         if (error.code === "addon_service_exists") {
           return services.length > 0
