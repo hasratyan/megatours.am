@@ -1359,19 +1359,23 @@ export default function BookingAddonsClient({
   const hasInsuranceSelection = Boolean(insuranceSelection);
 
   useEffect(() => {
-    const requestId = (insuranceQuoteRequestIdRef.current += 1);
     if (insuranceQuoteTimerRef.current !== null) {
       window.clearTimeout(insuranceQuoteTimerRef.current);
       insuranceQuoteTimerRef.current = null;
     }
     if (!hasInsuranceSelection || !insuranceQuoteRequestKey) {
+      insuranceQuoteRequestIdRef.current += 1;
       insuranceQuoteKeyRef.current = null;
       return;
     }
     if (insuranceQuoteKeyRef.current === insuranceQuoteRequestKey) return;
-    insuranceQuoteKeyRef.current = null;
+    const requestId = (insuranceQuoteRequestIdRef.current += 1);
+    // Claim the request before quoteLoading updates the shared builder state.
+    // That update rerenders this page and must not schedule the same quote again.
+    insuranceQuoteKeyRef.current = insuranceQuoteRequestKey;
     const quotePayload = JSON.parse(insuranceQuoteRequestKey) as EfesQuoteRequest;
     insuranceQuoteTimerRef.current = window.setTimeout(async () => {
+      insuranceQuoteTimerRef.current = null;
       updatePackageBuilderState((state) => {
         if (!state.insurance?.selected) return state;
         return {
@@ -1594,20 +1598,34 @@ export default function BookingAddonsClient({
     resolveInsuranceTravelerPremium,
   ]);
 
+  const insuranceQuotePending = Boolean(
+    insuranceSelection &&
+      insuranceQuoteRequest &&
+      !insuranceSelection.quoteError &&
+      (insuranceSelection.quoteLoading === true ||
+        insuranceQuotedRequestKey !== insuranceQuoteRequest.key)
+  );
+  const insuranceStatusMessage =
+    !insuranceSelection || insuranceDetailsValid
+      ? null
+      : normalizeOptional(insuranceSelection.quoteError) ??
+        (insuranceQuotePending
+          ? t.packageBuilder.insurance.quoteLoading
+          : t.packageBuilder.checkout.errors.insuranceDetailsRequired);
+
   const blockedServiceMessages = useMemo(() => {
     const messages: string[] = [];
     if (transferSelection && !transferDetailsValid) {
       messages.push(t.hotel.addons.transfers.detailsRequired);
     }
-    if (insuranceSelection && !insuranceDetailsValid) {
-      messages.push(t.packageBuilder.checkout.errors.insuranceDetailsRequired);
+    if (insuranceStatusMessage && !insuranceQuotePending) {
+      messages.push(insuranceStatusMessage);
     }
     return messages;
   }, [
-    insuranceDetailsValid,
-    insuranceSelection,
+    insuranceStatusMessage,
+    insuranceQuotePending,
     t.hotel.addons.transfers.detailsRequired,
-    t.packageBuilder.checkout.errors.insuranceDetailsRequired,
     transferDetailsValid,
     transferSelection,
   ]);
@@ -1907,7 +1925,9 @@ export default function BookingAddonsClient({
       return;
     }
     if (insuranceSelection && !insuranceDetailsValid) {
-      setPaymentError(t.packageBuilder.checkout.errors.insuranceDetailsRequired);
+      setPaymentError(
+        insuranceStatusMessage ?? t.packageBuilder.checkout.errors.insuranceDetailsRequired
+      );
       return;
     }
     setTransferFieldErrors({});
@@ -2328,7 +2348,7 @@ export default function BookingAddonsClient({
                         {service.key === "transfer"
                           ? t.hotel.addons.transfers.detailsRequired
                           : service.key === "insurance"
-                            ? t.packageBuilder.checkout.errors.insuranceDetailsRequired
+                            ? insuranceStatusMessage
                             : null}
                       </p>
                     ) : null}
@@ -2464,7 +2484,7 @@ export default function BookingAddonsClient({
                         {card.id === "transfer"
                           ? t.hotel.addons.transfers.detailsRequired
                           : card.id === "insurance"
-                            ? t.packageBuilder.checkout.errors.insuranceDetailsRequired
+                            ? insuranceStatusMessage
                             : t.packageBuilder.checkout.pendingDetails}
                       </li>
                     ) : null}
@@ -3329,6 +3349,11 @@ export default function BookingAddonsClient({
               ) : null}
 
               {paymentError ? <p className="checkout-error">{paymentError}</p> : null}
+              {!paymentError && insuranceQuotePending ? (
+                <p className="checkout-section__hint">
+                  {t.packageBuilder.insurance.quoteLoading}
+                </p>
+              ) : null}
               {!paymentError && blockedServiceMessages.length > 0 ? (
                 <p className="checkout-error">{blockedServiceMessages.join(" ")}</p>
               ) : null}
