@@ -34,6 +34,7 @@ import {
   type EfesCountryLocation,
 } from "@/lib/efes-locations";
 import { mapEfesErrorMessage, resolveEfesErrorKind } from "@/lib/efes-errors";
+import { EFES_MAX_INSURANCE_AGE_YEARS } from "@/lib/efes-insurance-pricing";
 import type { PackageBuilderState, PackageBuilderService } from "@/lib/package-builder-state";
 import {
   readPackageBuilderState,
@@ -295,7 +296,7 @@ const isDateTimeEarlierThan = (
   return parsedValue.getTime() < parsedMinValue.getTime();
 };
 
-const MAX_INSURANCE_AGE_YEARS = 100;
+const MAX_INSURANCE_AGE_YEARS = EFES_MAX_INSURANCE_AGE_YEARS;
 const MAX_INSURANCE_CHILD_AGE_YEARS = 18;
 const ISO_DATE_INPUT_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 

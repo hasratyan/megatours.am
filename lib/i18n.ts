@@ -150,6 +150,7 @@ export type Translation = {
       note: string;
       quoteLabel: string;
       quoteLoading: string;
+      ageRateLabel: string;
       selectPlanNote: string;
       coverageLabel: string;
       programTitle: string;
@@ -1445,6 +1446,7 @@ const translations: Record<Locale, Translation> = {
         note: "Ապահովագրավճարը հաշվարկվում է ըստ ճանապարհորդների տարիքի և թարմացվում է վճարման փուլում։",
         quoteLabel: "Ապահովագրավճար",
         quoteLoading: "Ապահովագրավճարը հաշվարկվում է...",
+        ageRateLabel: "Տարիքային գործակից՝ ×{multiplier}",
         selectPlanNote: "Ընտրեք ապահովագրության պլանը՝ փաթեթին ավելացնելու համար։",
         coverageLabel: "Ծածկույթ: {amount}",
         programTitle: "Ճամփորդական ծրագիր:",
@@ -2994,6 +2996,7 @@ const translations: Record<Locale, Translation> = {
         note: "Premiums are estimated using traveler ages and update at checkout.",
         quoteLabel: "Premium",
         quoteLoading: "Calculating premium...",
+        ageRateLabel: "Age rate: ×{multiplier}",
         selectPlanNote: "Choose a plan to add insurance to your package.",
         coverageLabel: "Coverage: {amount}",
         programTitle: "Travel program",
@@ -4551,6 +4554,7 @@ const translations: Record<Locale, Translation> = {
         note: "Стоимость рассчитывается по возрасту путешественников и обновляется при оплате.",
         quoteLabel: "Стоимость",
         quoteLoading: "Рассчитываем стоимость...",
+        ageRateLabel: "Возрастной коэффициент: ×{multiplier}",
         selectPlanNote: "Выберите план, чтобы добавить страховку в пакет.",
         coverageLabel: "Покрытие: {amount}",
         programTitle: "Страховой план",

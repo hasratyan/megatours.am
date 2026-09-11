@@ -28,7 +28,10 @@ import {
   type BookingAddonPaymentMethod,
 } from "@/lib/booking-addon-payment-methods";
 import { resolveCountryAlpha2 } from "@/lib/countries";
-import { buildEfesInsuranceQuoteRequest } from "@/lib/efes-insurance-pricing";
+import {
+  buildEfesInsuranceQuoteRequest,
+  EFES_MAX_INSURANCE_AGE_YEARS,
+} from "@/lib/efes-insurance-pricing";
 import {
   EFES_DEFAULT_COUNTRY_ID,
   EFES_DEFAULT_REGION_ID,
@@ -156,7 +159,7 @@ const intlLocales = {
 const addonServiceKeys: AddonServiceKey[] = ["transfer", "excursion", "insurance", "flight"];
 const DEFAULT_INSURANCE_ADULT_AGE = 30;
 const DEFAULT_INSURANCE_CHILD_AGE = 8;
-const MAX_INSURANCE_AGE_YEARS = 100;
+const MAX_INSURANCE_AGE_YEARS = EFES_MAX_INSURANCE_AGE_YEARS;
 const MAX_INSURANCE_CHILD_AGE_YEARS = 18;
 const ISO_DATE_INPUT_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -511,20 +514,37 @@ const buildInsuranceTravelerSeeds = (
     const roomIdentifier =
       typeof room.roomIdentifier === "number" ? room.roomIdentifier : roomIndex + 1;
     const adults = typeof room.adults === "number" && room.adults > 0 ? room.adults : 1;
-    const adultTravelers = Array.from({ length: adults }, (_, index) => ({
-      id: `room-${roomIdentifier}-adult-${index + 1}`,
-      age: DEFAULT_INSURANCE_ADULT_AGE,
-      type: "Adult" as const,
-      firstName: "",
-      lastName: "",
-    }));
+    const bookingAdults = room.guests.filter((guest) => guest.type === "Adult");
+    const bookingChildren = room.guests.filter((guest) => guest.type === "Child");
+    const adultTravelers = Array.from({ length: adults }, (_, index) => {
+      const bookingGuest = bookingAdults[index];
+      return {
+        id: `room-${roomIdentifier}-adult-${index + 1}`,
+        age:
+          typeof bookingGuest?.age === "number"
+            ? bookingGuest.age
+            : DEFAULT_INSURANCE_ADULT_AGE,
+        type: "Adult" as const,
+        firstName: "",
+        lastName: "",
+        firstNameEn: bookingGuest?.firstName ?? "",
+        lastNameEn: bookingGuest?.lastName ?? "",
+      };
+    });
     const childTravelers = (Array.isArray(room.childrenAges) ? room.childrenAges : []).map(
       (age, index) => ({
         id: `room-${roomIdentifier}-child-${index + 1}`,
-        age: Number.isFinite(age) ? age : DEFAULT_INSURANCE_CHILD_AGE,
+        age:
+          typeof bookingChildren[index]?.age === "number"
+            ? bookingChildren[index].age
+            : Number.isFinite(age)
+              ? age
+              : DEFAULT_INSURANCE_CHILD_AGE,
         type: "Child" as const,
         firstName: "",
         lastName: "",
+        firstNameEn: bookingChildren[index]?.firstName ?? "",
+        lastNameEn: bookingChildren[index]?.lastName ?? "",
       })
     );
     return [...adultTravelers, ...childTravelers];
@@ -878,8 +898,14 @@ export default function BookingAddonsClient({
             ...traveler,
             firstName: normalizeOptional(existing?.firstName) ?? "",
             lastName: normalizeOptional(existing?.lastName) ?? "",
-            firstNameEn: normalizeOptional(existing?.firstNameEn) ?? "",
-            lastNameEn: normalizeOptional(existing?.lastNameEn) ?? "",
+            firstNameEn:
+              normalizeOptional(existing?.firstNameEn) ??
+              normalizeOptional(traveler.firstNameEn) ??
+              "",
+            lastNameEn:
+              normalizeOptional(existing?.lastNameEn) ??
+              normalizeOptional(traveler.lastNameEn) ??
+              "",
             gender: existing?.gender ?? null,
             birthDate: normalizeOptional(existing?.birthDate),
             residency:

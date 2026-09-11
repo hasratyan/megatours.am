@@ -25,6 +25,12 @@ export type BookingAddonHotelContext = {
     roomIdentifier: number;
     adults: number;
     childrenAges: number[];
+    guests: Array<{
+      firstName: string;
+      lastName: string;
+      type: "Adult" | "Child";
+      age: number | null;
+    }>;
   }>;
 };
 
@@ -335,6 +341,24 @@ export const resolveBookingAddonHotelContext = (
             : 1,
         childrenAges: Array.isArray(room.childrenAges)
           ? room.childrenAges.filter((age) => Number.isFinite(age))
+          : [],
+        guests: Array.isArray(room.guests)
+          ? room.guests.flatMap((guest) => {
+              if (guest.type !== "Adult" && guest.type !== "Child") return [];
+              return [
+                {
+                  firstName: resolveString(guest.firstName),
+                  lastName: resolveString(guest.lastName),
+                  type: guest.type,
+                  age:
+                    typeof guest.age === "number" &&
+                    Number.isInteger(guest.age) &&
+                    guest.age >= 0
+                      ? guest.age
+                      : null,
+                },
+              ];
+            })
           : [],
       }))
     : [];

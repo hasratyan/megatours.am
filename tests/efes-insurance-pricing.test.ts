@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 // @ts-expect-error Node's built-in TypeScript test runner requires the source extension.
-import { applyEfesInsuranceQuote, buildEfesInsuranceQuoteRequest, calculateEfesInsuranceAge } from "../lib/efes-insurance-pricing.ts";
+import { applyEfesInsuranceQuote, buildEfesInsuranceQuoteRequest, calculateEfesInsuranceAge, resolveEfesInsuranceAgeMultiplier } from "../lib/efes-insurance-pricing.ts";
+
+test("EFES age multipliers cover every pricing boundary through age 100", () => {
+  assert.deepEqual(
+    [64, 65, 74, 75, 84, 85, 94, 95, 100].map(resolveEfesInsuranceAgeMultiplier),
+    [1, 2, 2, 3, 3, 4, 4, 5, 5]
+  );
+  assert.equal(resolveEfesInsuranceAgeMultiplier(101), null);
+  assert.equal(resolveEfesInsuranceAgeMultiplier(64.5), null);
+  assert.equal(resolveEfesInsuranceAgeMultiplier(null), null);
+});
 
 test("EFES age is calculated on the insurance start date", () => {
   assert.equal(calculateEfesInsuranceAge("1963-12-08", "2026-09-20"), 62);

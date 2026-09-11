@@ -16,6 +16,7 @@ import { useLanguage } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount, withDisplayCurrencyParam } from "@/lib/currency";
 import { mapEfesErrorMessage, resolveEfesErrorKind } from "@/lib/efes-errors";
+import { resolveEfesInsuranceAgeMultiplier } from "@/lib/efes-insurance-pricing";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { postJson } from "@/lib/api-helpers";
 import type {
@@ -436,6 +437,28 @@ export default function PackageServiceClient({
     () => new Set(bookingAddonContext?.existingServices ?? []),
     [bookingAddonContext]
   );
+  const bookingInsuranceGuestById = useMemo(() => {
+    const map = new Map<
+      string,
+      BookingAddonHotelContext["rooms"][number]["guests"][number]
+    >();
+    bookingAddonContext?.hotelContext.rooms.forEach((room, roomIndex) => {
+      const roomIdentifier =
+        typeof room.roomIdentifier === "number" ? room.roomIdentifier : roomIndex + 1;
+      let adultIndex = 0;
+      let childIndex = 0;
+      room.guests.forEach((guest) => {
+        if (guest.type === "Adult") {
+          adultIndex += 1;
+          map.set(`room-${roomIdentifier}-adult-${adultIndex}`, guest);
+        } else {
+          childIndex += 1;
+          map.set(`room-${roomIdentifier}-child-${childIndex}`, guest);
+        }
+      });
+    });
+    return map;
+  }, [bookingAddonContext]);
   const [builderState, setBuilderState] = useState<PackageBuilderState>(() =>
     addonHotelSelection ? { hotel: addonHotelSelection } : {}
   );
@@ -932,20 +955,40 @@ export default function PackageServiceClient({
         typeof room.adults === "number" && room.adults > 0 ? room.adults : 1;
       const children = Array.isArray(room.childrenAges) ? room.childrenAges : [];
       for (let i = 0; i < adults; i += 1) {
+        const id = `room-${roomIdentifier}-adult-${i + 1}`;
+        const bookingGuest = bookingInsuranceGuestById.get(id);
+        const safeAge =
+          typeof bookingGuest?.age === "number" && Number.isFinite(bookingGuest.age)
+            ? bookingGuest.age
+            : null;
+        const name = [bookingGuest?.firstName, bookingGuest?.lastName]
+          .filter((value): value is string => Boolean(value))
+          .join(" ");
+        const ageLabel = safeAge !== null ? ` (${safeAge})` : "";
         guests.push({
-          id: `room-${roomIdentifier}-adult-${i + 1}`,
-          label: `${t.auth.guestNameFallback} ${counter} - ${t.hotel.addons.excursions.adultPrice}`,
+          id,
+          label: `${name || `${t.auth.guestNameFallback} ${counter}`} - ${t.hotel.addons.excursions.adultPrice}${ageLabel}`,
           type: "Adult",
-          age: null,
+          age: safeAge,
         });
         counter += 1;
       }
       children.forEach((age, index) => {
-        const safeAge = Number.isFinite(age) ? age : null;
+        const id = `room-${roomIdentifier}-child-${index + 1}`;
+        const bookingGuest = bookingInsuranceGuestById.get(id);
+        const safeAge =
+          typeof bookingGuest?.age === "number" && Number.isFinite(bookingGuest.age)
+            ? bookingGuest.age
+            : Number.isFinite(age)
+              ? age
+              : null;
+        const name = [bookingGuest?.firstName, bookingGuest?.lastName]
+          .filter((value): value is string => Boolean(value))
+          .join(" ");
         const ageLabel = safeAge !== null ? ` (${safeAge})` : "";
         guests.push({
-          id: `room-${roomIdentifier}-child-${index + 1}`,
-          label: `${t.auth.guestNameFallback} ${counter} - ${t.hotel.addons.excursions.childPrice}${ageLabel}`,
+          id,
+          label: `${name || `${t.auth.guestNameFallback} ${counter}`} - ${t.hotel.addons.excursions.childPrice}${ageLabel}`,
           type: "Child",
           age: safeAge,
         });
@@ -955,6 +998,7 @@ export default function PackageServiceClient({
 
     return guests;
   }, [
+    bookingInsuranceGuestById,
     hotelSelection?.guestCount,
     hotelSelection?.rooms,
     t.auth.guestNameFallback,
@@ -1110,9 +1154,13 @@ export default function PackageServiceClient({
         const adultCount = typeof room.adults === "number" && room.adults > 0 ? room.adults : 1;
         for (let i = 0; i < adultCount; i += 1) {
           const id = `room-${roomIdentifier}-adult-${i + 1}`;
+          const bookingAge = bookingInsuranceGuestById.get(id)?.age;
           travelers.push({
             id,
-            age: DEFAULT_INSURANCE_ADULT_AGE,
+            age:
+              typeof bookingAge === "number" && Number.isFinite(bookingAge)
+                ? bookingAge
+                : DEFAULT_INSURANCE_ADULT_AGE,
             riskAmount: resolveGuestRiskAmount(id),
             riskCurrency: defaultRiskCurrency,
             riskLabel: defaultRiskLabel,
@@ -1122,9 +1170,15 @@ export default function PackageServiceClient({
         const childAges = Array.isArray(room.childrenAges) ? room.childrenAges : [];
         childAges.forEach((age, index) => {
           const id = `room-${roomIdentifier}-child-${index + 1}`;
+          const bookingAge = bookingInsuranceGuestById.get(id)?.age;
           travelers.push({
             id,
-            age: Number.isFinite(age) ? age : DEFAULT_INSURANCE_CHILD_AGE,
+            age:
+              typeof bookingAge === "number" && Number.isFinite(bookingAge)
+                ? bookingAge
+                : Number.isFinite(age)
+                  ? age
+                  : DEFAULT_INSURANCE_CHILD_AGE,
             riskAmount: resolveGuestRiskAmount(id),
             riskCurrency: defaultRiskCurrency,
             riskLabel: defaultRiskLabel,
@@ -1136,6 +1190,7 @@ export default function PackageServiceClient({
 
     return travelers.filter((traveler) => selectedInsuranceGuestIdSet.has(traveler.id));
   }, [
+    bookingInsuranceGuestById,
     hotelSelection?.guestCount,
     hotelSelection?.rooms,
     insuranceSelection?.riskCurrency,
@@ -3677,6 +3732,11 @@ export default function PackageServiceClient({
   const renderInsurancePanel = () => {
     const selectedPlanId = insuranceSelection?.planId ?? null;
     const activeGuestForPlan = activeInsuranceGuestId ?? insuranceGuests[0]?.id ?? null;
+    const activeInsuranceGuest =
+      insuranceGuests.find((guest) => guest.id === activeGuestForPlan) ?? null;
+    const activeInsuranceAgeMultiplier = resolveEfesInsuranceAgeMultiplier(
+      activeInsuranceGuest?.age
+    );
     const selectedRiskAmount = resolveGuestRiskAmount(activeGuestForPlan);
     const selectedTerritory =
       insuranceSelection?.territoryCode ?? insuranceTerritories[0]?.code ?? "";
@@ -3870,6 +3930,21 @@ export default function PackageServiceClient({
                         calendar_month
                       </span>
                       {insuranceDaysLabel}
+                    </div>
+                  ) : null}
+                  {showInsuranceDetails &&
+                  activeInsuranceGuest?.age !== null &&
+                  activeInsuranceGuest?.age !== undefined &&
+                  activeInsuranceAgeMultiplier !== null ? (
+                    <div className="meta">
+                      <span className="material-symbols-rounded" aria-hidden="true">
+                        person
+                      </span>
+                      {t.packageBuilder.checkout.ageLabel}: {activeInsuranceGuest.age} ·{" "}
+                      {t.packageBuilder.insurance.ageRateLabel.replace(
+                        "{multiplier}",
+                        activeInsuranceAgeMultiplier.toString()
+                      )}
                     </div>
                   ) : null}
                   {showInsuranceDetails && roamingLabel ? (

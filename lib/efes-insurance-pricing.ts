@@ -17,6 +17,24 @@ type InsuranceQuoteSource = Pick<
 
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+export const EFES_MAX_INSURANCE_AGE_YEARS = 100;
+
+export const resolveEfesInsuranceAgeMultiplier = (age: number | null | undefined) => {
+  if (
+    typeof age !== "number" ||
+    !Number.isInteger(age) ||
+    age < 0 ||
+    age > EFES_MAX_INSURANCE_AGE_YEARS
+  ) {
+    return null;
+  }
+  if (age >= 95) return 5;
+  if (age >= 85) return 4;
+  if (age >= 75) return 3;
+  if (age >= 65) return 2;
+  return 1;
+};
+
 const parseIsoDate = (value: string | null | undefined) => {
   const match = value?.trim().match(ISO_DATE_RE);
   if (!match) return null;
