@@ -4314,7 +4314,6 @@
         "attractions",
         "attribution",
         "auto_awesome",
-        "autoplay",
         "badge",
         "balance",
         "bed",
@@ -4363,7 +4362,6 @@
         "directions",
         "directions_car",
         "discover_tune",
-        "dns",
         "domain",
         "done",
         "download",
@@ -4444,7 +4442,6 @@
         "margin",
         "markdown",
         "menu",
-        "merge",
         "message",
         "mobile",
         "mode",
@@ -4571,14 +4568,13 @@
         "water",
         "wc",
         "weight",
-        "widgets",
         "width",
         "wifi",
         "window"
       ],
       "sourceBytes": 3981208,
-      "subsetBytes": 246148,
-      "sha256": "9626d850c1ab7c9dca438923b4b9635b36aa6e041626725adee69971955f7bfd"
+      "subsetBytes": 242708,
+      "sha256": "0e371caa49c56f14dac023c6fdc84a47e2ae6995cb6bd15d728c509272225e9a"
     },
     "rounded": {
       "availableIcons": [
@@ -8893,7 +8889,6 @@
         "attractions",
         "attribution",
         "auto_awesome",
-        "autoplay",
         "badge",
         "balance",
         "bed",
@@ -8942,7 +8937,6 @@
         "directions",
         "directions_car",
         "discover_tune",
-        "dns",
         "domain",
         "done",
         "download",
@@ -9023,7 +9017,6 @@
         "margin",
         "markdown",
         "menu",
-        "merge",
         "message",
         "mobile",
         "mode",
@@ -9150,14 +9143,13 @@
         "water",
         "wc",
         "weight",
-        "widgets",
         "width",
         "wifi",
         "window"
       ],
       "sourceBytes": 5374160,
-      "subsetBytes": 330260,
-      "sha256": "2b1bc349116f1c054e2b991fa486915ac9e2d1c467e5f1e0364bd030f43682bd"
+      "subsetBytes": 324944,
+      "sha256": "e5678df6f59365825402d569eeeb3bef767903c6fb14e99601edf5e5e6142707"
     }
   }
 }
