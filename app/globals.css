@@ -10481,3 +10481,27 @@ html.zoho-salesiq-handoff-only:not(.zoho-salesiq-live-agent-requested) #zsiq_flo
     }
   }
 }
+
+/* Keep controls outside individual cards, across both result grid layouts. */
+.progressive-list-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  width: 100%;
+  color: inherit;
+}
+.progressive-list-controls > button {
+  padding: .8rem 1.5rem;
+  border-radius: 999px;
+  background: #fff;
+  color: #111327;
+  cursor: pointer;
+}
+.progressive-list-controls > button:focus-visible {
+  outline: 3px solid #69c59f;
+  outline-offset: 4px;
+}
+.progressive-list-controls > button:disabled { cursor: progress; opacity: .7; }

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import type { Locale } from "@/lib/i18n";
 
 const PromoPopup = dynamic(() => import("@/components/promo-popup"));
-const PackageBuilderAiChat = dynamic(() => import("@/components/package-builder-ai-chat"));
+const PackageBuilderAiChat = dynamic(() => import("@/components/deferred-ai-chat"));
 const PackageBuilder = dynamic(() => import("@/components/package-builder"));
 
 type DeferredLayoutWidgetsProps = {

@@ -7,6 +7,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { signIn, useSession } from "@/lib/auth-compat/react";
 import SearchForm from "@/components/search-form";
 import Loader from "@/components/loader";
+import ProgressiveList from "@/components/progressive-list";
 import { useCurrency } from "@/components/currency-provider";
 import { ApiError, postJson } from "@/lib/api-helpers";
 import { parseSearchParams } from "@/lib/search-query";
@@ -2877,7 +2878,7 @@ export default function HotelClient({
                       <p className="room-options-empty">{t.hotel.roomOptions.noMatch}</p>
                     ) : (
                       <div className="room-options-list">
-                        {visibleRoomOptions.map((group) => {
+                        <ProgressiveList items={visibleRoomOptions} batchSize={24} locale={locale} renderItem={(group) => {
                           const price = formatDisplayPrice(
                             group.displayTotalPrice ?? group.totalPrice,
                             group.currency ?? fallbackCurrency
@@ -2990,7 +2991,7 @@ export default function HotelClient({
                               </div>
                             </div>
                           );
-                        })}
+                        }} />
                       </div>
                     )}
                   </>

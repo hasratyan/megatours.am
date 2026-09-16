@@ -1,9 +1,12 @@
 "use client";
 
+import { useDeferredValue, useMemo, useState } from "react";
 import Select, {
   components as selectComponents,
   type CSSObjectWithLabel,
   type StylesConfig,
+  type ControlProps,
+  type OptionProps,
 } from "react-select";
 
 type LocationOption = {
@@ -17,6 +20,34 @@ type LocationOption = {
   rating?: number;
   imageUrl?: string;
   price?: string;
+};
+
+const LocationControl = (props: ControlProps<LocationOption, false>) => {
+  const current = props.getValue()[0];
+  const icon = current?.type === "hotel" ? "hotel" : current?.type === "destination" ? "location_city" : "travel_explore";
+  return (
+    <selectComponents.Control {...props}>
+      <span className="material-symbols-rounded" aria-hidden="true">{icon}</span>
+      {props.children}
+    </selectComponents.Control>
+  );
+};
+
+const LocationOptionRow = (props: OptionProps<LocationOption, false>) => (
+  <selectComponents.Option {...props}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <span className="material-symbols-rounded" aria-hidden="true" style={{ margin: 0 }}>
+        {props.data.type === "destination" ? "location_city" : "hotel"}
+      </span>
+      {props.data.type === "destination" ? <strong>{props.data.label}</strong> : <span>{props.data.label}</span>}
+    </div>
+  </selectComponents.Option>
+);
+
+const locationComponents = {
+  IndicatorSeparator: () => null,
+  Control: LocationControl,
+  Option: LocationOptionRow,
 };
 
 const selectStyles: StylesConfig<LocationOption, false> = {
@@ -114,58 +145,51 @@ export default function SearchFormLocationSelect({
   isDisabled,
   matchesOption,
 }: SearchFormLocationSelectProps) {
+  "use memo";
+  const [inputValue, setInputValue] = useState("");
+  const [visibleCount, setVisibleCount] = useState(40);
+  const deferredInput = useDeferredValue(inputValue);
+  const matchingOptions = useMemo(
+    () => options.filter((option) => matchesOption(option, deferredInput)),
+    [options, matchesOption, deferredInput]
+  );
   return (
     <Select<LocationOption>
       classNamePrefix="search-form-select"
       instanceId={instanceId}
       inputId={inputId}
-      options={options}
+      options={matchingOptions.slice(0, visibleCount)}
+      aria-label={placeholder}
       value={value}
       onChange={(option) => onChange(option ?? null)}
       placeholder={placeholder}
       styles={selectStyles}
       isClearable
       isSearchable
-      isLoading={isLoading}
+      isLoading={isLoading || inputValue !== deferredInput}
       isDisabled={isDisabled}
       noOptionsMessage={() => (isLoading ? loadingMessage : emptyMessage)}
-      filterOption={(option, input) => matchesOption(option.data, input)}
-      components={{
-        IndicatorSeparator: () => null,
-        Control: (props) => {
-          const current = props.getValue()[0] as LocationOption | undefined;
-          const icon =
-            current?.type === "hotel"
-              ? "hotel"
-              : current?.type === "destination"
-              ? "location_city"
-              : "travel_explore";
-          return (
-            <selectComponents.Control {...props}>
-              <span className="material-symbols-rounded">{icon}</span>
-              {props.children}
-            </selectComponents.Control>
-          );
-        },
-        Option: (optionProps) => {
-          const data = optionProps.data as LocationOption;
-          const icon = data.type === "destination" ? "location_city" : "hotel";
-          return (
-            <selectComponents.Option {...optionProps}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span className="material-symbols-rounded" style={{ margin: 0 }}>
-                  {icon}
-                </span>
-                {data.type === "destination" ? (
-                  <strong>{data.label}</strong>
-                ) : (
-                  <span>{data.label}</span>
-                )}
-              </div>
-            </selectComponents.Option>
-          );
-        },
+      filterOption={null}
+      inputValue={inputValue}
+      onInputChange={(value, meta) => {
+        if (meta.action === "input-change" || meta.action === "menu-close") {
+          setInputValue(value);
+          setVisibleCount(40);
+        }
       }}
+      onMenuScrollToBottom={() => setVisibleCount((count) => count + 40)}
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowDown" && event.key !== "PageDown") return;
+        const activeOption = (event.target as HTMLInputElement).getAttribute("aria-activedescendant")
+          // react-select omits aria-activedescendant on Apple devices.
+          ?? event.currentTarget.querySelector(".search-form-select__option--is-focused")?.id;
+        const index = Number(activeOption?.match(/-option-(\d+)$/)?.[1]);
+        // Extend before keyboard focus reaches the current window's edge.
+        if (Number.isFinite(index) && index >= visibleCount - 10 && visibleCount < matchingOptions.length) {
+          setVisibleCount((count) => count + 40);
+        }
+      }}
+      components={locationComponents}
     />
   );
 }

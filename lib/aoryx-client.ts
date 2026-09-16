@@ -1,3 +1,4 @@
+import { fetchTextWithDeadline } from "@/lib/fetch-text-with-deadline";
 // Aoryx API Client
 import {
   AORYX_API_KEY,
@@ -385,11 +386,8 @@ async function coreRequest<TRequest, TResponse>(
   let lastError: unknown = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
     try {
-      const response = await fetch(url, {
+      const { response, text } = await fetchTextWithDeadline(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -397,13 +395,10 @@ async function coreRequest<TRequest, TResponse>(
           ...(config.customerCode ? { CustomerCode: config.customerCode } : {}),
         },
         body: JSON.stringify(pascalizedPayload),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
+      }, timeoutMs);
 
       if (!response.ok) {
-        const errorBody = await response.text().catch(() => "");
+        const errorBody = text;
         const retryableStatus = RETRYABLE_STATUS.has(response.status) || response.status >= 500;
         if (idempotent && attempt < maxAttempts && retryableStatus) {
           await sleep(AORYX_IDEMPOTENT_RETRY_DELAY_MS * attempt);
@@ -437,7 +432,6 @@ async function coreRequest<TRequest, TResponse>(
         );
       }
 
-      const text = await response.text();
       if (!text) {
         logAoryxEndpointFlow({
           endpoint,
@@ -506,14 +500,13 @@ async function coreRequest<TRequest, TResponse>(
       });
       return normalized;
     } catch (error) {
-      clearTimeout(timeoutId);
       lastError = error;
 
       if (error instanceof AoryxClientError) {
         throw error;
       }
 
-      const isAbortError = error instanceof Error && error.name === "AbortError";
+      const isAbortError = error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
       const isRetryableNetwork = error instanceof TypeError || isAbortError;
 
       if (idempotent && attempt < maxAttempts && isRetryableNetwork) {

@@ -9,7 +9,7 @@ import { useLanguage } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount, withDisplayCurrencyParam } from "@/lib/currency";
 import { useAmdRates } from "@/lib/use-amd-rates";
-import { getJson } from "@/lib/api-helpers";
+import { loadServiceFlags } from "@/lib/service-flags-client";
 import {
   DEFAULT_SERVICE_FLAGS,
   PackageBuilderState,
@@ -307,9 +307,9 @@ export default function PackageBuilder() {
     let active = true;
     const load = async () => {
       try {
-        const data = await getJson<{ flags?: ServiceFlags }>("/api/services/availability");
+        const flags = await loadServiceFlags();
         if (!active) return;
-        setServiceFlags({ ...DEFAULT_SERVICE_FLAGS, ...(data.flags ?? {}) });
+        setServiceFlags(flags);
       } catch (error) {
         if (!active) return;
         setServiceFlags(DEFAULT_SERVICE_FLAGS);

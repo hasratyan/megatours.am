@@ -1,14 +1,13 @@
 "use client";
 
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getJson, postJson } from "@/lib/api-helpers";
+import { postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { Locale as AppLocale } from "@/lib/i18n";
 import { resolveMealPlanKeys } from "@/lib/meal-plans";
 import type {
   PackageBuilderHotelSelection,
   PackageBuilderState,
-  ServiceFlags,
 } from "@/lib/package-builder-state";
 import {
   DEFAULT_SERVICE_FLAGS,
@@ -25,7 +24,10 @@ import type {
   PackageAssistantResponse,
 } from "@/types/package-assistant";
 
+import { loadServiceFlags } from "@/lib/service-flags-client";
+
 type PackageBuilderAiChatProps = {
+  initialOpen?: boolean;
   locale: AppLocale;
   context?: PackageAssistantContext | null;
 };
@@ -513,9 +515,9 @@ const buildOptionStagePrompts = (locale: AppLocale) => {
   ];
 };
 
-export default function PackageBuilderAiChat({ locale, context }: PackageBuilderAiChatProps) {
+export default function PackageBuilderAiChat({ locale, context, initialOpen = false }: PackageBuilderAiChatProps) {
   const copy = copyMap[locale] ?? copyMap.en;
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(initialOpen);
   const [isAiChatEnabled, setIsAiChatEnabled] = useState(DEFAULT_SERVICE_FLAGS.aiChat);
   const [isLiveAgentActive, setIsLiveAgentActive] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -541,9 +543,9 @@ export default function PackageBuilderAiChat({ locale, context }: PackageBuilder
     let active = true;
     const loadFlags = async () => {
       try {
-        const data = await getJson<{ flags?: ServiceFlags }>("/api/services/availability");
+        const flags = await loadServiceFlags();
         if (!active) return;
-        const mergedFlags = { ...DEFAULT_SERVICE_FLAGS, ...(data.flags ?? {}) };
+        const mergedFlags = flags;
         setIsAiChatEnabled(mergedFlags.aiChat !== false);
       } catch {
         if (!active) return;

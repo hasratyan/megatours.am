@@ -9,6 +9,7 @@ import type { AoryxSearchParams, AoryxSearchResult } from "@/types/aoryx";
 import Image from "next/image";
 import SearchForm from "@/components/search-form";
 import Loader from "@/components/loader";
+import ProgressiveList from "@/components/progressive-list";
 import { useCurrency } from "@/components/currency-provider";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
@@ -722,7 +723,7 @@ export default function ResultsClient({
 
           {!isSearching && (
             <div id="hotels" className="grid">
-              {sortedHotels.map((hotel, idx) => {
+              <ProgressiveList items={sortedHotels} batchSize={36} locale={locale} renderItem={(hotel, idx) => {
                 const formattedPrice = formatCurrencyAmount(
                   hotel.displayPrice,
                   hotel.displayCurrency,
@@ -808,7 +809,7 @@ export default function ResultsClient({
                     </div>
                   </div>
                 );
-              })}
+              }} />
             </div>
           )}
         </div>
