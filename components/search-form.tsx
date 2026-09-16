@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 import { useCurrency } from "@/components/currency-provider";
 import { useLanguage } from "@/components/language-provider";
 import StarBorder from '@/components/StarBorder'
-import { postJson } from "@/lib/api-helpers";
+import { loadSearchDestinations, loadSearchHotels } from "@/lib/search-catalog-client";
 import { withDisplayCurrencyParam } from "@/lib/currency";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { sanitizeLeadingZeroNumberInput } from "@/lib/number-input";
@@ -136,15 +136,6 @@ export type SearchCopy = {
     invalidRooms: string;
     submit: string;
   };
-};
-
-// API response type for destinations
-type DestinationApiResponse = {
-  destinations: Array<{
-    id: string;
-    name: string;
-    rawId: string;
-  }>;
 };
 
 // Helper to build default dates
@@ -424,6 +415,8 @@ export default function SearchForm({
   );
   const [hotels, setHotels] = useState<LocationOption[]>([]);
   const [hotelsLoading, setHotelsLoading] = useState(false);
+  const [catalogRequested, setCatalogRequested] = useState(0);
+  const catalogGeneration = useRef(0);
   const resolvedDates = initialDateRange?.startDate && initialDateRange?.endDate
     ? {
         checkIn: new Date(initialDateRange.startDate),
@@ -679,10 +672,7 @@ export default function SearchForm({
   const fetchHotelsForDestination = useCallback(
     async (destination: LocationOption) => {
       const destinationId = destination.rawId ?? destination.value;
-      const response = await postJson<{ hotels: HotelInfo[] }>("/api/aoryx/hotels-by-destination", {
-        destinationId,
-        parentDestinationId: destination.value,
-      });
+      const response = await loadSearchHotels(destinationId, destination.value);
       const fallbackParentDestinationId = destination.rawId ?? destination.value;
       return mapHotelsToOptions(response.hotels ?? [], fallbackParentDestinationId);
     },
@@ -697,16 +687,20 @@ export default function SearchForm({
         return;
       }
 
+      const generation = ++catalogGeneration.current;
       setHotelsLoading(true);
       try {
-        const responses = await Promise.all(
+        const responses = await Promise.allSettled(
           destinationOptions.map(async (destination) => ({
             destination,
             hotels: await fetchHotelsForDestination(destination),
           }))
         );
         const byHotelCode = new Map<string, LocationOption>();
-        responses.forEach(({ hotels: destinationHotels }) => {
+        if (generation !== catalogGeneration.current) return;
+        responses.forEach((response) => {
+          if (response.status !== "fulfilled") return;
+          const { hotels: destinationHotels } = response.value;
           destinationHotels.forEach((hotel) => {
             const existing = byHotelCode.get(hotel.value);
             if (!existing) {
@@ -730,9 +724,9 @@ export default function SearchForm({
         setHotels(merged);
       } catch (error) {
         console.error("Failed to load hotels for all destinations:", error);
-        setHotels([]);
+        if (generation === catalogGeneration.current) setHotels([]);
       } finally {
-        setHotelsLoading(false);
+        if (generation === catalogGeneration.current) setHotelsLoading(false);
       }
     },
     [fetchHotelsForDestination, hideLocationFields]
@@ -785,27 +779,29 @@ export default function SearchForm({
   useEffect(() => {
     if (hideLocationFields) return;
 
-    postJson<DestinationApiResponse>("/api/aoryx/country-info", { countryCode: "AE" })
+    let active = true;
+    loadSearchDestinations()
       .then((response) => {
+        if (!active) return;
         const options = (response.destinations ?? []).map<LocationOption>((dest) => ({
           value: dest.id,
           label: dest.name,
           rawId: dest.rawId,
           type: "destination",
         }));
-        console.log("Destinations loaded:", options.length, options.slice(0, 3));
         setDestinations(options);
       })
       .catch((error) => {
         console.error("Failed to load destinations:", error);
       })
       .finally(() => {
-        setDestinationsLoading(false);
+        if (active) setDestinationsLoading(false);
       });
+    return () => { active = false; };
   }, [hideLocationFields, copy.unknownHotel]);
 
   // Initialize location once destinations are loaded.
-  // If there's no preset/referrer destination, load hotels across all destinations.
+  // Catalogs load separately when the picker or map is opened.
   useEffect(() => {
     if (hideLocationFields) return;
     if (destinationsInitialized) return;
@@ -830,23 +826,30 @@ export default function SearchForm({
       queueMicrotask(() => {
         setSelectedLocation(referrerDestination);
         setDestinationsInitialized(true);
-        void loadHotelsForAllDestinations(destinations);
       });
       return;
     }
 
     queueMicrotask(() => {
       setDestinationsInitialized(true);
-      void loadHotelsForAllDestinations(destinations);
     });
   }, [
     destinationsInitialized,
     destinations,
     hideLocationFields,
-    loadHotelsForAllDestinations,
     referrerChecked,
     referrerPreset,
   ]);
+
+  useEffect(() => {
+    if (!catalogRequested && !isMapOpen) return;
+    if (!destinations.length || hideLocationFields) return;
+    let active = true;
+    queueMicrotask(() => {
+      if (active) void loadHotelsForAllDestinations(destinations);
+    });
+    return () => { active = false; catalogGeneration.current += 1; };
+  }, [catalogRequested, isMapOpen, destinations, hideLocationFields, loadHotelsForAllDestinations]);
 
   // Keep preset hotel selection synced with full hotel list labels.
   useEffect(() => {
@@ -863,29 +866,9 @@ export default function SearchForm({
     });
   }, [hideLocationFields, hotels, presetHotelOption]);
 
-  // Load hotels for a destination from the API
   const loadHotelsForDestination = useCallback((destination: LocationOption | null) => {
-    if (hideLocationFields) {
-      setSelectedLocation(destination);
-      return;
-    }
-
     setSelectedLocation(destination);
-
-    if (!destination) {
-      if (destinations.length > 0) {
-        void loadHotelsForAllDestinations(destinations);
-      } else {
-        setHotels([]);
-      }
-      return;
-    }
-
-    // Keep the hotel pool global across all destinations even when a destination is selected.
-    if (hotels.length === 0 && destinations.length > 0) {
-      void loadHotelsForAllDestinations(destinations);
-    }
-  }, [destinations, hideLocationFields, hotels.length, loadHotelsForAllDestinations]);
+  }, []);
 
   // Guest handlers
 
@@ -1176,6 +1159,7 @@ export default function SearchForm({
       {!hideLocationFields && (
         <div className="field">
           <SearchFormLocationSelect
+            onMenuOpen={() => setCatalogRequested((count) => count + 1)}
             instanceId={locationSelectInstanceId}
             inputId={locationSelectInputId}
             options={combinedOptions}
@@ -1198,12 +1182,12 @@ export default function SearchForm({
             emptyMessage={copy.noLocations}
             matchesOption={matchesLocationOption}
           />
-          {!hideLocationFields && mapHotels.length > 0 && (
+          {!hideLocationFields && destinations.length > 0 && (
             <button
               type="button"
               className="map-picker"
               popoverTarget={mapPopoverId}
-              disabled={isFormDisabled || hotelsLoading}
+              disabled={isFormDisabled}
               aria-label={copy.pickOnMap ?? "Pick on map"}
               title={copy.pickOnMap ?? "Pick on map"}
               onClick={() => setIsMapOpen(true)}
@@ -1217,7 +1201,7 @@ export default function SearchForm({
         </div>
       )}
 
-      {!hideLocationFields && mapHotels.length > 0 && (
+      {!hideLocationFields && destinations.length > 0 && (
         <div
           id={mapPopoverId}
           popover="auto"
@@ -1225,7 +1209,7 @@ export default function SearchForm({
           ref={mapPopoverRef}
         >
           <h2>{copy.pickOnMap ?? "Pick on map"}</h2>
-          {isMapOpen ? (
+          {isMapOpen && !hotelsLoading ? (
             <HotelMapPicker
               hotels={mapHotels}
               selectedHotel={selectedLocation?.type === "hotel" ? selectedLocation : null}

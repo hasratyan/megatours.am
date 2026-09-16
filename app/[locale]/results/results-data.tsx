@@ -1,10 +1,8 @@
+import { scheduleSearchHistory } from "@/lib/search-history";
 import ResultsClient from "./results-client";
 import { cookies, headers } from "next/headers";
-import { getServerSession } from "@/lib/auth-compat/server";
 import { parseSearchParams } from "@/lib/search-query";
-import { authOptions } from "@/lib/auth";
 import { getTranslations, type Locale } from "@/lib/i18n";
-import { recordUserSearch } from "@/lib/user-data";
 import {
   normalizeSearchError,
   runAoryxSearch,
@@ -66,25 +64,8 @@ export default async function ResultsData({ locale, searchParams }: ResultsDataP
     try {
       initialResult = await runAoryxSearch(parsed.payload);
 
-      try {
-        const session = await getServerSession(authOptions);
-        const userId = session?.user?.id;
-        if (userId) {
-          const params = withAoryxDefaults(parsed.payload);
-          await recordUserSearch({
-            userId,
-            params,
-            resultSummary: {
-              propertyCount: initialResult.propertyCount ?? null,
-              destinationCode: initialResult.destination?.code ?? null,
-              destinationName: initialResult.destination?.name ?? null,
-            },
-            source: "aoryx",
-          });
-        }
-      } catch (error) {
-        console.error("[Aoryx][search] Failed to record user search", error);
-      }
+      scheduleSearchHistory(new Headers(await headers()), withAoryxDefaults(parsed.payload), initialResult);
+
     } catch (error) {
       const normalized = normalizeSearchError(error);
       initialError =

@@ -1,9 +1,8 @@
 "use server";
 
+import { headers } from "next/headers";
+import { scheduleSearchHistory } from "@/lib/search-history";
 import type { AoryxSearchParams } from "@/types/aoryx";
-import { getServerSession } from "@/lib/auth-compat/server";
-import { authOptions } from "@/lib/auth";
-import { recordUserSearch } from "@/lib/user-data";
 import {
   normalizeSearchError,
   runAoryxSearch,
@@ -19,25 +18,7 @@ export async function runResultsSearch(payload: AoryxSearchParams): Promise<Sear
   try {
     const data = await runAoryxSearch(payload);
 
-    try {
-      const session = await getServerSession(authOptions);
-      const userId = session?.user?.id;
-      if (userId) {
-        const params = withAoryxDefaults(payload);
-        await recordUserSearch({
-          userId,
-          params,
-          resultSummary: {
-            propertyCount: data.propertyCount ?? null,
-            destinationCode: data.destination?.code ?? null,
-            destinationName: data.destination?.name ?? null,
-          },
-          source: "aoryx",
-        });
-      }
-    } catch (error) {
-      console.error("[Aoryx][search] Failed to record user search", error);
-    }
+    scheduleSearchHistory(new Headers(await headers()), withAoryxDefaults(payload), data);
 
     return { ok: true, data };
   } catch (error) {

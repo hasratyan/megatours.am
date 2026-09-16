@@ -1,3 +1,4 @@
+import { createAsyncTtlCache } from "@/lib/async-ttl-cache";
 import { fetchTextWithDeadline } from "@/lib/fetch-text-with-deadline";
 // Aoryx API Client
 import {
@@ -80,6 +81,7 @@ const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 
 // Request options
 interface AoryxRequestOptions {
+  signal?: AbortSignal;
   timeoutMs?: number;
   environment?: AoryxEnvironment;
   idempotent?: boolean;
@@ -371,6 +373,7 @@ async function coreRequest<TRequest, TResponse>(
   payload: TRequest,
   options: AoryxRequestOptions = {}
 ): Promise<TResponse> {
+  options.signal?.throwIfAborted();
   const environment = options.environment ?? AORYX_RUNTIME_ENV;
   const config = isStaticEndpoint(endpoint)
     ? resolveStaticConfig()
@@ -386,6 +389,7 @@ async function coreRequest<TRequest, TResponse>(
   let lastError: unknown = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    options.signal?.throwIfAborted();
     try {
       const { response, text } = await fetchTextWithDeadline(url, {
         method: "POST",
@@ -395,6 +399,7 @@ async function coreRequest<TRequest, TResponse>(
           ...(config.customerCode ? { CustomerCode: config.customerCode } : {}),
         },
         body: JSON.stringify(pascalizedPayload),
+        signal: options.signal,
       }, timeoutMs);
 
       if (!response.ok) {
@@ -500,6 +505,8 @@ async function coreRequest<TRequest, TResponse>(
       });
       return normalized;
     } catch (error) {
+      // Caller cancellation must never be retried or logged as a supplier timeout.
+      options.signal?.throwIfAborted();
       lastError = error;
 
       if (error instanceof AoryxClientError) {
@@ -1369,8 +1376,8 @@ function validateSearchParams(params: AoryxSearchParams): void {
 /**
  * Search for hotels
  */
-export async function search(params: AoryxSearchParams): Promise<AoryxSearchResult> {
-  return searchWithOptions(params);
+export async function search(params: AoryxSearchParams, options: AoryxRequestOptions = {}): Promise<AoryxSearchResult> {
+  return searchWithOptions(params, options);
 }
 
 export async function searchWithOptions(
@@ -1671,11 +1678,15 @@ export async function bookingDetails(
 /**
  * Get hotels info by destination ID
  */
-export async function hotelsInfoByDestinationId(destinationId: string): Promise<HotelInfo[]> {
+const destinationHotelsCache = createAsyncTtlCache<HotelInfo[]>(AORYX_STATIC_CACHE_TTL_MS, 128);
+
+export function hotelsInfoByDestinationId(destinationId: string): Promise<HotelInfo[]> {
+  const id = destinationId.trim();
+  return destinationHotelsCache.get(`${AORYX_RUNTIME_ENV}:${id.toLowerCase()}`, () => loadHotelsInfoByDestinationId(id));
+}
+
+async function loadHotelsInfoByDestinationId(destinationId: string): Promise<HotelInfo[]> {
   const request: AoryxHotelsInfoByDestinationIdRequest = { destinationId };
-  const cacheKey = `hotelsInfoByDestinationId:${AORYX_RUNTIME_ENV}:${destinationId.trim().toLowerCase()}`;
-  const cached = getStaticCache<HotelInfo[]>(cacheKey);
-  if (cached) return cached;
 
   // Note: coreRequest applies pascalizeKeys to the response, so we need to use PascalCase keys
   const response = await coreRequest<
@@ -1721,7 +1732,7 @@ export async function hotelsInfoByDestinationId(destinationId: string): Promise<
         toStringValue(item.Currency),
     };
   });
-  return setStaticCache(cacheKey, hotels);
+  return hotels;
 }
 
 /**

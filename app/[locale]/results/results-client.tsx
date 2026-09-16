@@ -16,7 +16,7 @@ import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
 import { formatCurrencyAmount, normalizeAmount, withDisplayCurrencyParam, type AmdRates } from "@/lib/currency";
 import { resolveSafeErrorFromUnknown, resolveSafeErrorMessage } from "@/lib/error-utils";
 import { useAmdRates } from "@/lib/use-amd-rates";
-import { runResultsSearch } from "./actions";
+import { fetchResultsSearch } from "@/lib/results-search-client";
 
 const ratingOptions = [5, 4, 3, 2, 1] as const;
 const intlLocales: Record<AppLocale, string> = {
@@ -87,7 +87,8 @@ export default function ResultsClient({
       }),
     [searchKey, t]
   );
-  const initialSearchKeyRef = useRef(searchKey);
+  const requestKey = parsed.payload ? buildSearchQuery(parsed.payload) : null;
+  const initialSearchKeyRef = useRef(requestKey);
   const [resultState, setResultState] = useState<SafeSearchResult | null>(initialResult);
   const [errorState, setErrorState] = useState<string | null>(initialError);
   const [isFetching, setIsFetching] = useState(
@@ -121,26 +122,30 @@ export default function ResultsClient({
   }, [searchKey]);
 
   useEffect(() => {
-    if (!parsed.payload) {
+    if (!requestKey) {
       setIsFetching(false);
       setResultState(null);
       setErrorState(null);
       return;
     }
 
-    const isInitialSearch = searchKey === initialSearchKeyRef.current;
+    const isInitialSearch = requestKey === initialSearchKeyRef.current;
     if (isInitialSearch && (initialResult || initialError)) {
+      setResultState(initialResult);
+      setErrorState(initialError);
+      setIsFetching(false);
       return;
     }
 
     let active = true;
+    const controller = new AbortController();
     setIsFetching(true);
     setResultState(null);
     setErrorState(null);
 
-    runResultsSearch(parsed.payload)
+    fetchResultsSearch(requestKey, controller.signal)
       .then((response) => {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         if (response.ok) {
           setResultState(response.data);
           return;
@@ -152,7 +157,7 @@ export default function ResultsClient({
         setErrorState(message);
       })
       .catch((error) => {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         const message = resolveSafeErrorFromUnknown(error, t.search.errors.submit);
         setErrorState(message);
       })
@@ -162,12 +167,12 @@ export default function ResultsClient({
 
     return () => {
       active = false;
+      controller.abort();
     };
   }, [
     initialError,
     initialResult,
-    parsed.payload,
-    searchKey,
+    requestKey,
     t.search.errors.missingSession,
     t.search.errors.submit,
   ]);

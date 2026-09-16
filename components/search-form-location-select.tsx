@@ -129,6 +129,7 @@ export type SearchFormLocationSelectProps = {
   emptyMessage: string;
   isLoading: boolean;
   isDisabled: boolean;
+  onMenuOpen?: () => void;
   matchesOption: (option: LocationOption, input: string) => boolean;
 };
 
@@ -144,6 +145,7 @@ export default function SearchFormLocationSelect({
   isLoading,
   isDisabled,
   matchesOption,
+  onMenuOpen,
 }: SearchFormLocationSelectProps) {
   "use memo";
   const [inputValue, setInputValue] = useState("");
@@ -161,6 +163,7 @@ export default function SearchFormLocationSelect({
       options={matchingOptions.slice(0, visibleCount)}
       aria-label={placeholder}
       value={value}
+      onMenuOpen={onMenuOpen}
       onChange={(option) => onChange(option ?? null)}
       placeholder={placeholder}
       styles={selectStyles}

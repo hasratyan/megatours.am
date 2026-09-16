@@ -1,12 +1,10 @@
+import { scheduleSearchHistory } from "@/lib/search-history";
 import { NextRequest, NextResponse } from "next/server";
 import { search, AoryxServiceError, AoryxClientError } from "@/lib/aoryx-client";
 import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env";
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
 import type { AoryxSearchParams, AoryxRoomSearch } from "@/types/aoryx";
-import { getServerSession } from "@/lib/auth-compat/server";
-import { authOptions } from "@/lib/auth";
-import { recordUserSearch } from "@/lib/user-data";
 import { setSessionCookie } from "../_shared";
 import { createSearchToken } from "@/lib/aoryx-rate-tokens";
 
@@ -81,7 +79,7 @@ export async function POST(request: NextRequest) {
     };
 
     const [result, hotelMarkup] = await Promise.all([
-      search(params),
+      search(params, { signal: request.signal }),
       getAoryxHotelPlatformFee(),
     ]);
 
@@ -100,27 +98,11 @@ export async function POST(request: NextRequest) {
     });
     setSessionCookie(response, result.sessionId);
 
-    try {
-      const session = await getServerSession(authOptions);
-      const userId = session?.user?.id;
-      if (userId) {
-        await recordUserSearch({
-          userId,
-          params,
-          resultSummary: {
-            propertyCount: result.propertyCount ?? null,
-            destinationCode: result.destination?.code ?? null,
-            destinationName: result.destination?.name ?? null,
-          },
-          source: "aoryx",
-        });
-      }
-    } catch (error) {
-      console.error("[Aoryx][search] Failed to record user search", error);
-    }
+    scheduleSearchHistory(request.headers, params, result);
 
     return response;
   } catch (error) {
+    if (request.signal.aborted) return new NextResponse(null, { status: 499 });
     console.error("Search error:", error);
 
     if (error instanceof AoryxServiceError) {

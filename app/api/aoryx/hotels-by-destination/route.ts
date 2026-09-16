@@ -38,17 +38,24 @@ export async function POST(request: NextRequest) {
     let hotels: Awaited<ReturnType<typeof hotelsInfoByDestinationId>> = [];
     let resolvedDestinationId = candidates[0];
 
+    let hadSuccessfulResponse = false;
+    let lastError: unknown;
+
     // Try each candidate until we get results
     for (const candidate of candidates) {
       resolvedDestinationId = candidate;
       try {
         hotels = await hotelsInfoByDestinationId(candidate);
+        hadSuccessfulResponse = true;
         if (Array.isArray(hotels) && hotels.length > 0) break;
-      } catch {
+      } catch (error) {
+        lastError = error;
         // Continue to next candidate
         continue;
       }
     }
+
+    if (!hadSuccessfulResponse && lastError) throw lastError;
 
     return NextResponse.json({
       destinationId: resolvedDestinationId,

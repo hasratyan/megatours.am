@@ -1,3 +1,4 @@
+import { createSearchTiming } from "@/lib/search-timing";
 import {
   searchWithOptions,
   type AoryxEnvironment,
@@ -27,6 +28,8 @@ export const withAoryxDefaults = (payload: AoryxSearchParams): AoryxSearchParams
 
 type RunAoryxSearchOptions = {
   environment?: AoryxEnvironment;
+  signal?: AbortSignal;
+  timing?: ReturnType<typeof createSearchTiming>;
 };
 
 export async function runAoryxSearch(
@@ -34,12 +37,15 @@ export async function runAoryxSearch(
   options: RunAoryxSearchOptions = {}
 ): Promise<SafeSearchResult> {
   const params = withAoryxDefaults(payload);
+  const timing = options.timing ?? createSearchTiming();
   const [result, hotelMarkup] = await Promise.all([
-    searchWithOptions(params, {
+    timing.measure("supplier_search", () => searchWithOptions(params, {
       environment: options.environment ?? AORYX_RUNTIME_ENV,
-    }),
-    getAoryxHotelB2BPlatformFee(),
+      signal: options.signal,
+    })),
+    timing.measure("pricing", () => getAoryxHotelB2BPlatformFee()),
   ]);
+  options.signal?.throwIfAborted();
   const safeResult: SafeSearchResult = {
     currency: result.currency,
     propertyCount: result.propertyCount,
