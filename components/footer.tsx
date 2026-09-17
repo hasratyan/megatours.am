@@ -1,6 +1,7 @@
+import { getTranslations } from "@/lib/i18n-server";
 import Link from "next/link";
 import Images from "next/image";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 
 type FooterProps = {
   locale?: string;

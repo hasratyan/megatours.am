@@ -1,10 +1,11 @@
+import { getTranslations } from "@/lib/i18n-server";
 import Link from "next/link";
 import type { Route } from "next";
 import { cookies } from "next/headers";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { getDb } from "@/lib/db";
 import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
 import { calculateBookingTotal } from "@/lib/booking-total";

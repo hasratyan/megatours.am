@@ -1,9 +1,10 @@
+import { getTranslations } from "@/lib/i18n-server";
 import { getServerSession } from "@/lib/auth-compat/server";
 import PackageCheckoutClient from "@/components/package-checkout-client";
 import ProfileSignIn from "@/components/profile-signin";
 import { authOptions } from "@/lib/auth";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { DEFAULT_PAYMENT_METHOD_FLAGS, getPaymentMethodFlags } from "@/lib/payment-method-flags";
 
 type PageProps = {

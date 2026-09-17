@@ -7,7 +7,10 @@
     "build": "node scripts/check-icon-fonts.mjs && next build",
     "icons:check": "node scripts/check-icon-fonts.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit --incremental false",
+    "test:performance": "node --test tests/search-performance.test.mjs tests/fetch-text-with-deadline.test.ts tests/icon-source-tokens.test.mjs tests/mongodb-recovery.test.mjs",
+    "perf:report": "node scripts/report-page-payload.mjs"
   },
   "dependencies": {
     "@better-auth/mongo-adapter": "^1.7.4",

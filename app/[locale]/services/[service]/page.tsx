@@ -1,3 +1,4 @@
+import { getTranslations } from "@/lib/i18n-server";
 import Link from "next/link";
 import type { Route } from "next";
 import { notFound } from "next/navigation";
@@ -7,7 +8,7 @@ import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { getFeaturedHotelCards, type FeaturedHotelCard } from "@/lib/featured-hotels";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { isBookingModificationClosed } from "@/lib/booking-modification";
 import { DEFAULT_SERVICE_FLAGS, type PackageBuilderService } from "@/lib/package-builder-state";
 import { getServiceFlags } from "@/lib/service-flags";

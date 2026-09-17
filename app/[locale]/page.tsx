@@ -1,7 +1,8 @@
+import { getTranslations } from "@/lib/i18n-server";
 import Home from "./home";
 import JsonLd from "@/components/json-ld";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { getFeaturedHotelCards, type FeaturedHotelCard } from "@/lib/featured-hotels";
 import { buildHomeStructuredData } from "@/lib/structured-data";
 

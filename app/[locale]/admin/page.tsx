@@ -1,10 +1,11 @@
+import { getTranslations } from "@/lib/i18n-server";
 import Link from "next/link";
 import ProfileSignIn from "@/components/profile-signin";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { hasAdminConfig, isAdminUser } from "@/lib/admin";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 

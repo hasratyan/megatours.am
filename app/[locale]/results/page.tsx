@@ -1,8 +1,9 @@
+import { getTranslations } from "@/lib/i18n-server";
 import { Suspense } from "react";
 import ResultsData from "./results-data";
 import Loader from "@/components/loader";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 
 const resolveLocale = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;

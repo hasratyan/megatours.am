@@ -1,3 +1,4 @@
+import { getTranslations } from "@/lib/i18n-server";
 import { refreshEfesPolicyResults } from "@/lib/efes-policy-store";
 import { insurancePendingCopy } from "@/lib/insurance-pending-copy";
 import { Suspense } from "react";
@@ -15,7 +16,7 @@ import { applyMarkup } from "@/lib/pricing-utils";
 import { getAmdRates, getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { localizeMealPlan } from "@/lib/meal-plans";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { resolveBookingStatusKey } from "@/lib/booking-status";
 import { isBookingModificationClosed } from "@/lib/booking-modification";
 import { getServiceFlags } from "@/lib/service-flags";

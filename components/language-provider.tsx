@@ -2,32 +2,26 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo } from "react";
 import type { Route } from "next";
-import { useParams, usePathname, useRouter } from "next/navigation";
-import { Locale, defaultLocale, locales, getTranslations } from "@/lib/i18n";
+import { usePathname, useRouter } from "next/navigation";
+import { type Locale, type Translation, locales } from "@/lib/i18n";
 
 type LanguageContextValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: ReturnType<typeof getTranslations>;
+  t: Translation;
 };
 
 const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
 
 type LanguageProviderProps = {
   children: React.ReactNode;
-  initialLocale?: Locale;
+  initialLocale: Locale;
+  translations: Translation;
 };
 
-export function LanguageProvider({ children, initialLocale }: LanguageProviderProps) {
-  const params = useParams();
+export function LanguageProvider({ children, initialLocale: locale, translations }: LanguageProviderProps) {
   const pathname = usePathname();
   const router = useRouter();
-
-  // Get locale from URL params, falling back to initialLocale or default
-  const paramLocale = params?.locale as Locale | undefined;
-  const locale: Locale = paramLocale && locales.includes(paramLocale) 
-    ? paramLocale 
-    : (initialLocale ?? defaultLocale);
 
   const setLocale = useCallback((newLocale: Locale) => {
     // Set cookie for proxy to use on next navigation
@@ -55,8 +49,8 @@ export function LanguageProvider({ children, initialLocale }: LanguageProviderPr
   }, [locale]);
 
   const value = useMemo<LanguageContextValue>(
-    () => ({ locale, setLocale, t: getTranslations(locale) }),
-    [locale, setLocale],
+    () => ({ locale, setLocale, t: translations }),
+    [locale, setLocale, translations],
   );
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;

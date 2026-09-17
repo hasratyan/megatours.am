@@ -1,3 +1,4 @@
+import { getTranslations } from "@/lib/i18n-server";
 import { refreshEfesPolicyResults } from "@/lib/efes-policy-store";
 import { insurancePendingCopy } from "@/lib/insurance-pending-copy";
 import Link from "next/link";
@@ -7,7 +8,7 @@ import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import type { BookingAddonServiceKey } from "@/lib/booking-addons";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { getDb } from "@/lib/db";
 import PackageBuilderResetOnConfirm from "@/components/package-builder-reset-on-confirm";
 import { getHotelInfoFromDb } from "@/lib/hotel-info-db";

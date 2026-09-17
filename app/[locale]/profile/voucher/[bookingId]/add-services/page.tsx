@@ -1,3 +1,4 @@
+import { getTranslations } from "@/lib/i18n-server";
 import { refreshEfesPolicyResults } from "@/lib/efes-policy-store";
 import Link from "next/link";
 import type { Route } from "next";
@@ -9,7 +10,7 @@ import { authOptions } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin";
 import { getDb } from "@/lib/db";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { isBookingModificationClosed } from "@/lib/booking-modification";
 import { DEFAULT_SERVICE_FLAGS } from "@/lib/package-builder-state";
 import { getServiceFlags } from "@/lib/service-flags";

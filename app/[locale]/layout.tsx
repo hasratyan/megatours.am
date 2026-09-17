@@ -1,3 +1,4 @@
+import { getTranslations } from "@/lib/i18n-server";
 import * as React from "react";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
@@ -28,7 +29,7 @@ export default async function LocaleLayout({ children, params }: LayoutProps) {
   const resolvedLocale = locale as Locale;
 
   return (
-    <LanguageProvider initialLocale={locale as Locale}>
+    <LanguageProvider initialLocale={resolvedLocale} translations={getTranslations(resolvedLocale)}>
       <JsonLd id="structured-data-travel-agency" data={buildTravelAgencyStructuredData(resolvedLocale)} />
       <div className="page">
         <Header />

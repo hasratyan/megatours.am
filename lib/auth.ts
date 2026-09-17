@@ -2,7 +2,8 @@ import { ObjectId } from "mongodb";
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
-import clientPromise from "@/lib/mongodb";
+import mongoClient, { connectMongoClient } from "@/lib/mongodb";
+import { createAuthMiddleware } from "better-auth/api";
 import { upsertUserProfile } from "@/lib/user-data";
 
 type BetterAuthSessionShape = {
@@ -32,14 +33,6 @@ const authDbName =
   typeof process.env.MONGODB_DB === "string" && process.env.MONGODB_DB.trim().length > 0
     ? process.env.MONGODB_DB.trim()
     : "megatours_am";
-
-const mongoClient =
-  clientPromise
-    ? await clientPromise.catch((error) => {
-        console.error("[Auth] Mongo client initialization failed", error);
-        return null;
-      })
-    : null;
 
 const authDb = mongoClient ? mongoClient.db(authDbName) : null;
 const authAdapter =
@@ -77,6 +70,7 @@ const findLegacyUserIdByEmail = async (email: string): Promise<string | null> =>
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) return null;
 
+  await connectMongoClient();
   const profile = await authDb.collection("user_profiles").findOne(
     {
       $or: [
@@ -96,6 +90,7 @@ const persistLegacyUserId = async (authUserId: string, legacyUserId: string) => 
   if (!authDb) return;
   const objectId = toObjectId(authUserId);
   if (!objectId) return;
+  await connectMongoClient();
   await authDb
     .collection<Record<string, unknown>>("user")
     .updateOne({ _id: objectId }, { $set: { legacyUserId } });
@@ -128,6 +123,7 @@ const syncUserProfileOnSessionCreate = async (authUserIdRaw: unknown) => {
   const authUserId = toTrimmedString(authUserIdRaw);
   if (!authUserId) return;
 
+  await connectMongoClient();
   const usersCollection = authDb.collection<Record<string, unknown>>("user");
   const authUserObjectId = toObjectId(authUserId);
   const userByObjectId = authUserObjectId
@@ -205,6 +201,11 @@ export const auth = betterAuth({
         input: false,
       },
     },
+  },
+  hooks: {
+    before: createAuthMiddleware(async () => {
+      if (mongoClient) await connectMongoClient();
+    }),
   },
   databaseHooks: {
     session: {

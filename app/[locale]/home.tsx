@@ -1,3 +1,4 @@
+import { getTranslations } from "@/lib/i18n-server";
 import Link from "next/link";
 import Image from "next/image";
 import type { Route } from "next";
@@ -9,7 +10,7 @@ import ShinyText from "@/components/ShinyText";
 import PartnerCarousel from "@/components/partner-carousel";
 import PackageBuilderCta from "@/components/package-builder-cta";
 import type { FeaturedHotelCard } from "@/lib/featured-hotels";
-import { getTranslations, type Locale } from "@/lib/i18n";
+import { type Locale } from "@/lib/i18n";
 
 type HomeProps = {
   featuredHotels: FeaturedHotelCard[];

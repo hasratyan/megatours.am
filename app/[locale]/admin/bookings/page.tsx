@@ -1,3 +1,4 @@
+import { getTranslations } from "@/lib/i18n-server";
 import { refreshEfesPolicyResults } from "@/lib/efes-policy-store";
 import AdminBookingsClient from "./admin-bookings-client";
 import ProfileSignIn from "@/components/profile-signin";
@@ -6,7 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { hasAdminConfig, isAdminUser } from "@/lib/admin";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { resolveBookingDisplayTotal } from "@/lib/booking-total";
 import { getAmdRates, getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { convertToAmd } from "@/lib/currency";

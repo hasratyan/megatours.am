@@ -1,8 +1,9 @@
+import { getTranslations } from "@/lib/i18n-server";
 import { scheduleSearchHistory } from "@/lib/search-history";
 import ResultsClient from "./results-client";
 import { cookies, headers } from "next/headers";
 import { parseSearchParams } from "@/lib/search-query";
-import { getTranslations, type Locale } from "@/lib/i18n";
+import { type Locale } from "@/lib/i18n";
 import {
   normalizeSearchError,
   runAoryxSearch,

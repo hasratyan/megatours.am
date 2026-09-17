@@ -1,8 +1,9 @@
+import { getTranslations } from "@/lib/i18n-server";
 import { Suspense, cache } from "react";
 import HotelClient from "./hotel-client";
 import JsonLd from "@/components/json-ld";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
 import { buildHotelShareTitle, resolveHotelPrimaryImageUrl } from "@/lib/hotel-share";
 import { buildHotelStructuredData } from "@/lib/structured-data";

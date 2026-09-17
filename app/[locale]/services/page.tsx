@@ -1,6 +1,7 @@
+import { getTranslations } from "@/lib/i18n-server";
 import Link from "next/link";
 import { buildLocalizedMetadata } from "@/lib/metadata";
-import { defaultLocale, getTranslations, Locale, locales } from "@/lib/i18n";
+import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { DEFAULT_SERVICE_FLAGS, type PackageBuilderService } from "@/lib/package-builder-state";
 import { getServiceFlags } from "@/lib/service-flags";
 
