@@ -2528,7 +2528,6 @@ const runOpenAiResponse = async (
       previous_response_id: request.previousResponseId ?? undefined,
       store: true,
       ...(model.startsWith("gpt-6") ? { reasoning: { effort: OPENAI_REASONING_EFFORT } } : {}),
-      ...(model.startsWith("gpt-6") ? { temperature: 0.35, top_p: 0.95 } : {}),
       stream: Boolean(onTextDelta),
       text: {
         verbosity: "medium",
