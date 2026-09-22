@@ -83,7 +83,9 @@ export function normalizeSearchError(error: unknown): SearchErrorInfo {
     };
   }
   if (error instanceof AoryxClientError) {
-    return { message: toSearchMessage(error.message) };
+    // Client errors describe configuration, transport, timeout, or response
+    // parsing failures. Keep those details in server logs, not customer copy.
+    return { message: "" };
   }
   if (error instanceof Error) {
     return { message: toSearchMessage(error.message) };

@@ -72,7 +72,9 @@ type AoryxResolvedConfig = {
 };
 
 const AORYX_DEFAULT_TIMEOUT_MS = 30000;
-const AORYX_SEARCH_TIMEOUT_MS = 30000;
+// Leave enough headroom for the app to serialize a controlled JSON error before
+// the public proxy closes long-running requests at roughly 30 seconds.
+const AORYX_SEARCH_TIMEOUT_MS = 20000;
 const AORYX_BOOK_TIMEOUT_MS = 180000;
 const AORYX_IDEMPOTENT_RETRY_ATTEMPTS = 2;
 const AORYX_IDEMPOTENT_RETRY_DELAY_MS = 500;

@@ -945,6 +945,7 @@ export type Translation = {
     };
     loading: string;
     errorAlt: string;
+    retry: string;
     emptyAlt: string;
     emptyMessage: string;
     fallbackTitle: string;

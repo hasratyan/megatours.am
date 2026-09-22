@@ -7601,6 +7601,31 @@ main.payment-status{
     border-color: #f8717166;
   }
 
+  .results-error-actions{
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 1em;
+  }
+
+  .results-retry{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    padding: 0.65em 1em;
+    color: #ecfdf5;
+    background: #05966933;
+    border: 1px solid #34d39999;
+    border-radius: 999px;
+    cursor: pointer;
+    font: inherit;
+
+    &:hover{
+      background: #05966955;
+    }
+  }
+
   & > span{
     font-size: 2.25rem;
     margin-top: -1.5rem;

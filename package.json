@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit --incremental false",
-    "test:performance": "node --test tests/search-performance.test.mjs tests/fetch-text-with-deadline.test.ts tests/icon-source-tokens.test.mjs tests/mongodb-recovery.test.mjs",
+    "test:performance": "node --test tests/search-performance.test.mjs tests/results-search-client.test.mjs tests/fetch-text-with-deadline.test.ts tests/icon-source-tokens.test.mjs tests/mongodb-recovery.test.mjs",
     "perf:report": "node scripts/report-page-payload.mjs"
   },
   "dependencies": {

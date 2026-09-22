@@ -20,6 +20,12 @@ const TECHNICAL_ERROR_PATTERNS = [
   /\bENOTFOUND\b/i,
   /\bEAI_AGAIN\b/i,
   /aoryx api error/i,
+  /failed to communicate with hotel service/i,
+  /failed to parse/i,
+  /unexpected token/i,
+  /not valid json/i,
+  /<!doctype/i,
+  /missing .+ configuration/i,
 ];
 
 export const DEFAULT_USER_ERROR_MESSAGE = "Something went wrong. Please try again.";
