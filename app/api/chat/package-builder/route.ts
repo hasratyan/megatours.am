@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
+import { getDb } from "@/lib/db";
+import { getServiceFlags } from "@/lib/service-flags";
+import { consumeAssistantRateLimit } from "@/lib/package-assistant-rate-limit";
+import { resolveScopedAssistantSessionId } from "@/lib/package-assistant-session";
 import { defaultLocale, locales, type Locale } from "@/lib/i18n";
 import {
   generatePackageAssistantReply,
@@ -19,7 +23,7 @@ export const runtime = "nodejs";
 
 const MAX_MESSAGES = 30;
 const MAX_MESSAGE_CHARS = 2000;
-const STREAM_TOKEN_DELAY_MS = 14;
+const OWNER_COOKIE = "package_assistant_owner";
 
 const parseLocale = (value: unknown): Locale => {
   if (typeof value !== "string") return defaultLocale;
@@ -30,7 +34,7 @@ const parseLocale = (value: unknown): Locale => {
 const parseSessionId = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  return /^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(trimmed) ? trimmed : null;
 };
 
 const parseBoolean = (value: unknown): boolean => {
@@ -81,6 +85,13 @@ const parseContext = (value: unknown): PackageAssistantContext | null => {
     return null;
   };
 
+  const currentPackage = record.currentPackage && typeof record.currentPackage === "object"
+    ? record.currentPackage as Record<string, unknown>
+    : null;
+  const currentHotel = currentPackage?.hotel && typeof currentPackage.hotel === "object"
+    ? currentPackage.hotel as Record<string, unknown>
+    : null;
+  const serviceNames = ["transfer", "excursion", "insurance", "flight"] as const;
   return {
     destinationCode: parseString(record.destinationCode),
     destinationName: parseString(record.destinationName),
@@ -89,8 +100,27 @@ const parseContext = (value: unknown): PackageAssistantContext | null => {
     roomCount: parseNumber(record.roomCount),
     adults: parseNumber(record.adults),
     children: parseNumber(record.children),
+    childAges: Array.isArray(record.childAges)
+      ? record.childAges.filter((age): age is number =>
+          typeof age === "number" && Number.isInteger(age) && age >= 0 && age <= 17
+        ).slice(0, 8)
+      : null,
     budgetAmount: parseNumber(record.budgetAmount),
     budgetCurrency: parseString(record.budgetCurrency),
+    currentPackage: currentPackage ? {
+      hotel: currentHotel ? {
+        hotelCode: parseString(currentHotel.hotelCode),
+        hotelName: parseString(currentHotel.hotelName),
+        destinationCode: parseString(currentHotel.destinationCode),
+        checkInDate: parseString(currentHotel.checkInDate),
+        checkOutDate: parseString(currentHotel.checkOutDate),
+        roomCount: parseNumber(currentHotel.roomCount),
+        guestCount: parseNumber(currentHotel.guestCount),
+      } : null,
+      services: Array.isArray(currentPackage.services)
+        ? serviceNames.filter((name) => (currentPackage.services as unknown[]).includes(name))
+        : [],
+    } : null,
   };
 };
 
@@ -104,20 +134,13 @@ const getUserId = async (): Promise<string | null> => {
   }
 };
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const tokenizeForStream = (value: string) => {
-  const tokens = value.match(/\S+\s*/g);
-  if (tokens && tokens.length > 0) return tokens;
-  return value.length > 0 ? [value] : [];
-};
-
 const createNdjsonStreamResponse = (input: {
   sessionId: string;
   locale: Locale;
   messages: PackageAssistantApiMessage[];
   context: PackageAssistantContext | null;
   userId: string | null;
+  ownerKey: string;
   lastUserMessage: string | null;
 }) => {
   const encoder = new TextEncoder();
@@ -139,6 +162,10 @@ const createNdjsonStreamResponse = (input: {
           context: input.context,
           sessionId: input.sessionId,
           userId: input.userId,
+          ownerKey: input.ownerKey,
+          onTextDelta: async (delta) => {
+            push({ type: "token", delta });
+          },
           onProgress: async (event) => {
             push({
               type: "progress",
@@ -147,20 +174,11 @@ const createNdjsonStreamResponse = (input: {
           },
         });
 
-        push({ type: "message_start" });
-        const tokens = tokenizeForStream(result.reply.message ?? "");
-        for (let index = 0; index < tokens.length; index += 1) {
-          const token = tokens[index];
-          push({ type: "token", delta: token });
-          if (index % 3 === 0) {
-            await sleep(STREAM_TOKEN_DELAY_MS);
-          }
-        }
-
         await persistPackageAssistantTurn({
           sessionId: input.sessionId,
           locale: input.locale,
           userId: input.userId,
+          ownerKey: input.ownerKey,
           userMessage: input.lastUserMessage,
           context: input.context ?? null,
           reply: result.reply,
@@ -227,25 +245,54 @@ export async function POST(request: NextRequest) {
     }
 
     const locale = parseLocale(body.locale);
-    const sessionId = parseSessionId(body.sessionId) ?? randomUUID();
+    const serviceFlags = await getServiceFlags();
+    if (!serviceFlags.aiChat) {
+      return NextResponse.json({ ok: false, error: "AI chat is disabled." }, { status: 403 });
+    }
+    const userId = await getUserId();
+    const existingOwner = parseSessionId(request.cookies.get(OWNER_COOKIE)?.value);
+    const guestOwner = existingOwner ?? randomUUID();
+    const ownerKey = userId ? `user:${userId}` : `guest:${guestOwner}`;
+    const rateLimit = await consumeAssistantRateLimit(ownerKey, "chat");
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ ok: false, error: "Too many chat requests. Please try again later." }, {
+        status: 429, headers: { "Retry-After": String(rateLimit.retryAfter) },
+      });
+    }
+    const requestedSessionId = parseSessionId(body.sessionId);
+    let existingSession: { ownerKey?: string } | null = null;
+    if (requestedSessionId) {
+      const db = await getDb();
+      existingSession = await db.collection<{ _id: string; ownerKey?: string }>("package_assistant_sessions").findOne(
+        { _id: requestedSessionId }, { projection: { ownerKey: 1 } }
+      );
+    }
+    const sessionId = resolveScopedAssistantSessionId(
+      requestedSessionId, existingSession, ownerKey, Boolean(userId || existingOwner), randomUUID
+    );
     const context = parseContext(body.context);
     const streamRequested =
       parseBoolean(body.stream) ||
       parseBoolean(request.nextUrl.searchParams.get("stream")) ||
       request.headers.get("accept")?.includes("application/x-ndjson") === true;
-    const userId = await getUserId();
     const lastUserMessage =
       [...messages].reverse().find((message) => message.role === "user")?.content ?? null;
 
     if (streamRequested) {
-      return createNdjsonStreamResponse({
+      const response = createNdjsonStreamResponse({
         sessionId,
         locale,
         messages,
         context,
         userId,
+        ownerKey,
         lastUserMessage,
       });
+      if (!userId) response.cookies.set(OWNER_COOKIE, guestOwner, {
+        httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production",
+        path: "/", maxAge: 60 * 60 * 24 * 30,
+      });
+      return response;
     }
 
     const result = await generatePackageAssistantReply({
@@ -254,12 +301,14 @@ export async function POST(request: NextRequest) {
       context,
       sessionId,
       userId,
+      ownerKey,
     });
 
     await persistPackageAssistantTurn({
       sessionId,
       locale,
       userId,
+      ownerKey,
       userMessage: lastUserMessage,
       context: context ?? null,
       reply: result.reply,
@@ -269,11 +318,16 @@ export async function POST(request: NextRequest) {
       responseId: result.meta.responseId,
     });
 
-    return NextResponse.json<PackageAssistantResponse>({
+    const response = NextResponse.json<PackageAssistantResponse>({
       ok: true,
       sessionId,
       reply: result.reply,
     });
+    if (!userId) response.cookies.set(OWNER_COOKIE, guestOwner, {
+      httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production",
+      path: "/", maxAge: 60 * 60 * 24 * 30,
+    });
+    return response;
   } catch (error) {
     console.error("[PackageAssistant] Route error", error);
     return NextResponse.json<PackageAssistantResponse>(

@@ -5,6 +5,7 @@ import { postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import type { Locale as AppLocale } from "@/lib/i18n";
 import { resolveMealPlanKeys } from "@/lib/meal-plans";
+import { labelMissingFields, normalizeMissingFieldKey } from "@/lib/package-assistant-fields";
 import type {
   PackageBuilderHotelSelection,
   PackageBuilderState,
@@ -13,6 +14,7 @@ import {
   DEFAULT_SERVICE_FLAGS,
   PACKAGE_BUILDER_SESSION_MS,
   openPackageBuilder,
+  readPackageBuilderState,
   updatePackageBuilderState,
 } from "@/lib/package-builder-state";
 import type {
@@ -37,6 +39,8 @@ type UiMessage = {
   role: "user" | "assistant";
   content: string;
 };
+
+class StreamUnavailableError extends Error {}
 
 type ZohoSalesIqApi = {
   visitor?: {
@@ -90,6 +94,12 @@ const copyMap: Record<
     liveAgent: string;
     liveAgentConnecting: string;
     liveAgentUnavailable: string;
+    applying: string;
+    replacePackage: string;
+    roomLabel: string;
+    guestLabel: string;
+    childAgesLabel: string;
+    estimated: string;
   }
 > = {
   en: {
@@ -118,6 +128,12 @@ const copyMap: Record<
     liveAgentConnecting: "Connecting to live agent...",
     liveAgentUnavailable:
       "Our support team is currently unavailable. Please try again later.",
+    applying: "Checking live rooms...",
+    replacePackage: "Replace the current package with this option? Existing services not shown here will be removed.",
+    roomLabel: "rooms",
+    guestLabel: "travelers",
+    childAgesLabel: "children's ages",
+    estimated: "Est.",
   },
   hy: {
     title: "Megatours Concierge AI",
@@ -145,6 +161,12 @@ const copyMap: Record<
     liveAgentConnecting: "Կապ եմ հաստատում աշխատակցի հետ...",
     liveAgentUnavailable:
       "Մեր սպասարկման թիմը այս պահին հասանելի չէ։ Խնդրում ենք կրկին փորձել քիչ անց։",
+    applying: "Ստուգում եմ ազատ սենյակները...",
+    replacePackage: "Փոխարինե՞լ ընթացիկ փաթեթը այս տարբերակով։ Այստեղ չնշված ծառայությունները կհեռացվեն։",
+    roomLabel: "սենյակ",
+    guestLabel: "ուղևոր",
+    childAgesLabel: "երեխաների տարիքներ",
+    estimated: "Մոտ.",
   },
   ru: {
     title: "Megatours Concierge AI",
@@ -172,6 +194,12 @@ const copyMap: Record<
     liveAgentConnecting: "Подключаю агента...",
     liveAgentUnavailable:
       "Наша служба поддержки сейчас недоступна. Пожалуйста, попробуйте позже.",
+    applying: "Проверяю доступные номера...",
+    replacePackage: "Заменить текущий пакет этим вариантом? Услуги, не указанные здесь, будут удалены.",
+    roomLabel: "номера",
+    guestLabel: "путешественника",
+    childAgesLabel: "возраст детей",
+    estimated: "Прим.",
   },
 };
 
@@ -292,19 +320,6 @@ const formatPrice = (amount: number | null | undefined, currency: string | null 
     return `${code} ${Math.round(amount).toLocaleString()}`;
   }
 };
-
-const buildHotelSelectionKey = (selection?: PackageBuilderHotelSelection | null) =>
-  selection?.selected
-    ? [
-        selection.hotelCode ?? "",
-        selection.destinationCode ?? "",
-        selection.checkInDate ?? "",
-        selection.checkOutDate ?? "",
-        selection.roomCount ?? "",
-        selection.guestCount ?? "",
-        selection.selectionKey ?? "",
-      ].join("|")
-    : "";
 
 const buildPackageStateFromDraft = (draft: PackageAssistantDraft): PackageBuilderState => {
   const now = Date.now();
@@ -439,14 +454,28 @@ const dedupePrompts = (items: string[], max = 5) => {
 };
 
 const resolveMissingPrompt = (locale: AppLocale, rawField: string): string | null => {
+  const key = normalizeMissingFieldKey(rawField);
   const field = rawField.trim().toLocaleLowerCase();
   if (!field) return null;
 
+  if (key === "year") {
+    return locale === "hy" ? "Ճամփորդության տարին՝ " :
+      locale === "ru" ? "Год поездки: " : "Travel year: ";
+  }
+  if (key === "childage") {
+    return locale === "hy" ? "Երեխաների տարիքները՝ " :
+      locale === "ru" ? "Возраст детей: " : "Children's ages: ";
+  }
+  if (key === "roomcount") {
+    return locale === "hy" ? "Սենյակների քանակը՝ " :
+      locale === "ru" ? "Число номеров: " : "Number of rooms: ";
+  }
+
   const isDestination = field.includes("destination") || field.includes("ուղղ") || field.includes("направ");
   if (isDestination) {
-    if (locale === "ru") return "Подбери отель в Дубае на мои даты";
-    if (locale === "hy") return "Ընտրիր հյուրանոց Դուբայում իմ ամսաթվերով";
-    return "Find me a hotel in Dubai for my dates";
+    if (locale === "ru") return "Направление в ОАЭ: ";
+    if (locale === "hy") return "ԱՄԷ ուղղությունը՝ ";
+    return "UAE destination: ";
   }
 
   const isHotel = field.includes("hotel") || field.includes("հյուրան") || field.includes("отел");
@@ -463,9 +492,9 @@ const resolveMissingPrompt = (locale: AppLocale, rawField: string): string | nul
     field.includes("ամսաթ") ||
     field.includes("дат");
   if (isDates) {
-    if (locale === "ru") return "Даты: 12 марта – 17 марта";
-    if (locale === "hy") return "Ամսաթվեր՝ 12 մարտից 17 մարտ";
-    return "Dates: March 12 to March 17";
+    if (locale === "ru") return "Даты поездки: ";
+    if (locale === "hy") return "Ճամփորդության ամսաթվերը՝ ";
+    return "Travel dates: ";
   }
 
   const isTravelers =
@@ -478,16 +507,16 @@ const resolveMissingPrompt = (locale: AppLocale, rawField: string): string | nul
     field.includes("взросл") ||
     field.includes("реб");
   if (isTravelers) {
-    if (locale === "ru") return "Состав: 2 взрослых и 1 ребенок";
-    if (locale === "hy") return "Ուղևորներ՝ 2 մեծահասակ և 1 երեխա";
-    return "Travelers: 2 adults and 1 child";
+    if (locale === "ru") return "Состав туристов: ";
+    if (locale === "hy") return "Ուղևորների կազմը՝ ";
+    return "Travelers: ";
   }
 
   const isBudget = field.includes("budget") || field.includes("բյուջե") || field.includes("бюджет");
   if (isBudget) {
-    if (locale === "ru") return "Бюджет: до 2000 USD";
-    if (locale === "hy") return "Բյուջե՝ մինչև 2000 USD";
-    return "Budget: up to 2000 USD";
+    if (locale === "ru") return "Мой бюджет: ";
+    if (locale === "hy") return "Իմ բյուջեն՝ ";
+    return "My budget: ";
   }
 
   return null;
@@ -535,9 +564,11 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
   const [packageOptions, setPackageOptions] = useState<PackageAssistantPackageOption[]>([]);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [appliedOptionId, setAppliedOptionId] = useState<string | null>(null);
+  const [applyingOptionId, setApplyingOptionId] = useState<string | null>(null);
   const [hasTopFade, setHasTopFade] = useState(false);
   const [hasBottomFade, setHasBottomFade] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -571,9 +602,11 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
 
   useEffect(() => {
     if (!isOpen) {
-      setHasTopFade(false);
-      setHasBottomFade(false);
-      return;
+      const raf = window.requestAnimationFrame(() => {
+        setHasTopFade(false);
+        setHasBottomFade(false);
+      });
+      return () => window.cancelAnimationFrame(raf);
     }
     const raf = window.requestAnimationFrame(syncContentFade);
     const onResize = () => syncContentFade();
@@ -605,7 +638,7 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
       chips.push(children > 0 ? `${adults} + ${children}` : `${adults} pax`);
     }
     return chips;
-  }, [context?.adults, context?.checkInDate, context?.checkOutDate, context?.children, context?.destinationName]);
+  }, [context]);
 
   const usedPromptKeys = useMemo(() => {
     const used = new Set<string>();
@@ -633,13 +666,13 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
         .map((field) => resolveMissingPrompt(locale, field))
         .filter((entry): entry is string => Boolean(entry))
     );
-    if (fromMissing.length > 0) return fromMissing;
+    if (fromMissing.length > 0) return { prompts: fromMissing, requiresInput: true };
 
     if (packageOptions.length > 0) {
       const fromOptions = takeUnused(buildOptionStagePrompts(locale));
-      if (fromOptions.length > 0) return fromOptions;
+      if (fromOptions.length > 0) return { prompts: fromOptions, requiresInput: false };
     }
-    return takeUnused(copy.quickPrompts);
+    return { prompts: takeUnused(copy.quickPrompts), requiresInput: false };
   }, [copy.quickPrompts, locale, missingFields, packageOptions.length, usedPromptKeys]);
 
   const sendMessage = async (content: string) => {
@@ -652,6 +685,34 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
       content: trimmed,
     };
     const assistantMessageId = createMessageId();
+    const currentBuilder = readPackageBuilderState();
+    const currentRooms = currentBuilder.hotel?.rooms ?? [];
+    const currentChildAges = currentRooms.flatMap((room) => room.childrenAges ?? []);
+    const requestContext: PackageAssistantContext = {
+      ...context,
+      destinationCode: context?.destinationCode ?? currentBuilder.hotel?.destinationCode,
+      destinationName: context?.destinationName ?? currentBuilder.hotel?.destinationName,
+      checkInDate: context?.checkInDate ?? currentBuilder.hotel?.checkInDate,
+      checkOutDate: context?.checkOutDate ?? currentBuilder.hotel?.checkOutDate,
+      roomCount: context?.roomCount ?? currentBuilder.hotel?.roomCount,
+      adults: context?.adults ?? (currentRooms.length > 0
+        ? currentRooms.reduce((sum, room) => sum + room.adults, 0) : null),
+      children: context?.children ?? (currentRooms.length > 0 ? currentChildAges.length : null),
+      childAges: context?.childAges ?? (currentRooms.length > 0 ? currentChildAges : null),
+      currentPackage: {
+        hotel: currentBuilder.hotel?.selected ? {
+          hotelCode: currentBuilder.hotel.hotelCode,
+          hotelName: currentBuilder.hotel.hotelName,
+          destinationCode: currentBuilder.hotel.destinationCode,
+          checkInDate: currentBuilder.hotel.checkInDate,
+          checkOutDate: currentBuilder.hotel.checkOutDate,
+          roomCount: currentBuilder.hotel.roomCount,
+          guestCount: currentBuilder.hotel.guestCount,
+        } : null,
+        services: (["transfer", "excursion", "insurance", "flight"] as const)
+          .filter((service) => currentBuilder[service]?.selected === true),
+      },
+    };
     const conversationMessages: PackageAssistantApiMessage[] = [...messages, userMessage].map(
       (message) => ({
         role: message.role,
@@ -700,7 +761,7 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
           sessionId,
           locale,
           messages: conversationMessages,
-          context: context ?? null,
+          context: requestContext,
         });
         if (!response.ok) {
           throw new Error(response.error);
@@ -721,13 +782,17 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
             sessionId,
             locale,
             messages: conversationMessages,
-            context: context ?? null,
+            context: requestContext,
             stream: true,
           }),
         });
 
-        if (!streamResponse.ok || !streamResponse.body) {
-          throw new Error("Streaming unavailable");
+        if (!streamResponse.ok) {
+          const failed = await streamResponse.json().catch(() => null) as { error?: string } | null;
+          throw new Error(failed?.error ?? copy.fallbackError);
+        }
+        if (!streamResponse.body) {
+          throw new StreamUnavailableError("Streaming unavailable");
         }
 
         const reader = streamResponse.body.getReader();
@@ -771,13 +836,14 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
             }
           }
         }
-      } catch {
+      } catch (error) {
+        if (!(error instanceof StreamUnavailableError)) throw error;
         await requestJsonFallback();
         receivedReply = true;
       }
 
       if (!receivedReply) {
-        await requestJsonFallback();
+        throw new Error(copy.fallbackError);
       }
     } catch (error) {
       const safeMessage = resolveSafeErrorFromUnknown(error, copy.fallbackError);
@@ -803,25 +869,30 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
     await sendMessage(inputValue);
   };
 
-  const onApplyOption = (option: PackageAssistantPackageOption) => {
-    updatePackageBuilderState((prev) => {
+  const onApplyOption = async (option: PackageAssistantPackageOption) => {
+    if (!sessionId || applyingOptionId) return;
+    const previous = readPackageBuilderState();
+    if (previous.hotel?.selected && !window.confirm(copy.replacePackage)) return;
+    setApplyingOptionId(option.id);
+    setErrorMessage(null);
+    try {
+      const prepared = await postJson<{ hotel: PackageBuilderHotelSelection }>(
+        "/api/chat/package-builder/prepare", { sessionId, optionId: option.id }
+      );
       const nextState = buildPackageStateFromDraft(option.draft);
-      const previousHotelKey = buildHotelSelectionKey(prev.hotel);
-      const nextHotelKey = buildHotelSelectionKey(nextState.hotel);
-      const shouldRestartSession = nextHotelKey.length > 0 && nextHotelKey !== previousHotelKey;
-
-      return {
+      nextState.hotel = prepared.hotel;
+      updatePackageBuilderState(() => ({
         ...nextState,
-        sessionExpiresAt: shouldRestartSession
-          ? Date.now() + PACKAGE_BUILDER_SESSION_MS
-          : nextHotelKey.length > 0
-            ? prev.sessionExpiresAt
-            : undefined,
+        sessionExpiresAt: Date.now() + Math.min(PACKAGE_BUILDER_SESSION_MS, 10 * 60 * 1000),
         updatedAt: Date.now(),
-      };
-    });
-    openPackageBuilder();
-    setAppliedOptionId(option.id);
+      }));
+      openPackageBuilder();
+      setAppliedOptionId(option.id);
+    } catch (error) {
+      setErrorMessage(resolveSafeErrorFromUnknown(error, copy.fallbackError));
+    } finally {
+      setApplyingOptionId(null);
+    }
   };
 
   const onContinueWithLiveAgent = useCallback(async () => {
@@ -949,7 +1020,7 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
 
           {missingFields.length > 0 ? (
             <p className="concierge-ai__missing">
-              <strong>{copy.missingPrefix}</strong> {missingFields.join(", ")}
+              <strong>{copy.missingPrefix}</strong> {labelMissingFields(missingFields, locale).join(", ")}
             </p>
           ) : null}
 
@@ -969,6 +1040,15 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
                         ) : null}
                       </div>
                       <p>{option.summary}</p>
+                      {option.draft.hotel ? (
+                        <p className="concierge-ai__option-details">
+                          {option.draft.hotel.checkInDate && option.draft.hotel.checkOutDate
+                            ? `${option.draft.hotel.checkInDate} - ${option.draft.hotel.checkOutDate} · ` : ""}
+                          {option.draft.hotel.roomCount ?? "?"} {copy.roomLabel} · {option.draft.hotel.guestCount ?? "?"} {copy.guestLabel}
+                          {option.draft.hotel.childAges?.length
+                            ? ` · ${copy.childAgesLabel}: ${option.draft.hotel.childAges.join(", ")}` : ""}
+                        </p>
+                      ) : null}
                       {tags.length > 0 ? (
                         <div className="concierge-ai__option-tags">
                           {tags.map((tag) => (
@@ -978,11 +1058,11 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
                       ) : null}
                       <div className="concierge-ai__option-footer">
                         <div>
-                          <strong>{total ?? copy.livePrice}</strong>
+                          <strong>{total ? `${copy.estimated} ${total}` : copy.livePrice}</strong>
                           {option.approxTotal?.note ? <small>{option.approxTotal.note}</small> : null}
                         </div>
-                        <button type="button" onClick={() => onApplyOption(option)}>
-                          {appliedOptionId === option.id ? copy.applied : copy.apply}
+                        <button type="button" disabled={Boolean(applyingOptionId)} onClick={() => void onApplyOption(option)}>
+                          {applyingOptionId === option.id ? copy.applying : appliedOptionId === option.id ? copy.applied : copy.apply}
                         </button>
                       </div>
                     </article>
@@ -995,6 +1075,7 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
 
         <form className="concierge-ai__input" onSubmit={onSubmit}>
           <textarea
+            ref={inputRef}
             value={inputValue}
             placeholder={copy.placeholder}
             onChange={(event) => setInputValue(event.target.value)}
@@ -1009,10 +1090,17 @@ export default function PackageBuilderAiChat({ locale, context, initialOpen = fa
           </button>
         </form>
 
-        {dynamicQuickPrompts.length > 0 ? (
+        {dynamicQuickPrompts.prompts.length > 0 ? (
           <div className="concierge-ai__quick-prompts">
-            {dynamicQuickPrompts.map((prompt) => (
-              <button key={prompt} type="button" onClick={() => sendMessage(prompt)} disabled={isSending}>
+            {dynamicQuickPrompts.prompts.map((prompt) => (
+              <button key={prompt} type="button" onClick={() => {
+                if (dynamicQuickPrompts.requiresInput) {
+                  setInputValue(prompt);
+                  window.requestAnimationFrame(() => inputRef.current?.focus());
+                } else {
+                  void sendMessage(prompt);
+                }
+              }} disabled={isSending}>
                 {prompt}
               </button>
             ))}

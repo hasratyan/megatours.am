@@ -6,6 +6,8 @@ import { quoteEfesTravelCost } from "@/lib/efes-client";
 import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import { DEFAULT_SERVICE_FLAGS } from "@/lib/package-builder-state";
 import { getServiceFlags } from "@/lib/service-flags";
+import { extractStreamingMessage } from "@/lib/package-assistant-stream";
+import { getDestinationData, destinationSlugs } from "@/lib/destination-data";
 import type { Locale } from "@/lib/i18n";
 import type {
   AoryxRoomSearch,
@@ -45,13 +47,18 @@ const OPENAI_PACKAGE_MODEL_PRIMARY =
   typeof process.env.OPENAI_PACKAGE_ASSISTANT_MODEL === "string" &&
   process.env.OPENAI_PACKAGE_ASSISTANT_MODEL.trim().length > 0
     ? process.env.OPENAI_PACKAGE_ASSISTANT_MODEL.trim()
-    : "gpt-5-mini";
+    : "gpt-6-sol";
 const OPENAI_PACKAGE_MODEL_FALLBACK =
   typeof process.env.OPENAI_PACKAGE_ASSISTANT_MODEL_FALLBACK === "string" &&
   process.env.OPENAI_PACKAGE_ASSISTANT_MODEL_FALLBACK.trim().length > 0
     ? process.env.OPENAI_PACKAGE_ASSISTANT_MODEL_FALLBACK.trim()
-    : "gpt-4o-mini";
-const OPENAI_TIMEOUT_MS = 30000;
+    : "gpt-6-luna";
+const OPENAI_TIMEOUT_MS = 60000;
+const OPENAI_REASONING_EFFORT = ["none", "low", "medium", "high"].includes(
+  process.env.OPENAI_PACKAGE_ASSISTANT_REASONING_EFFORT ?? ""
+)
+  ? process.env.OPENAI_PACKAGE_ASSISTANT_REASONING_EFFORT
+  : "high";
 const MAX_CONVERSATION_MESSAGES = 14;
 const MAX_TOOL_ROUNDS = 5;
 const MAX_PACKAGE_OPTIONS = 3;
@@ -146,7 +153,9 @@ type AssistantGenerationInput = {
   context?: PackageAssistantContext | null;
   sessionId?: string | null;
   userId?: string | null;
+  ownerKey?: string | null;
   onProgress?: (event: PackageAssistantProgressEvent) => void | Promise<void>;
+  onTextDelta?: (delta: string) => void | Promise<void>;
 };
 
 export type AssistantGenerationOutput = {
@@ -163,6 +172,7 @@ type AssistantPersistenceInput = {
   sessionId: string;
   locale: Locale;
   userId?: string | null;
+  ownerKey: string;
   userMessage: string | null;
   context: PackageAssistantContext | null;
   reply: PackageAssistantReply;
@@ -348,22 +358,18 @@ const uniqueStrings = (values: string[], max = 8) => {
   return output.slice(0, max);
 };
 
-const buildRooms = (adults: number, children: number, roomCount: number): AoryxRoomSearch[] => {
+const buildRooms = (adults: number, childAges: number[], roomCount: number): AoryxRoomSearch[] => {
   const safeRoomCount = Math.max(1, roomCount);
   const safeAdults = Math.max(safeRoomCount, adults);
-  const safeChildren = Math.max(0, children);
   const adultBase = Math.floor(safeAdults / safeRoomCount);
   const adultRemainder = safeAdults % safeRoomCount;
-  const childBase = Math.floor(safeChildren / safeRoomCount);
-  const childRemainder = safeChildren % safeRoomCount;
 
   return Array.from({ length: safeRoomCount }, (_, index) => {
     const adultCount = adultBase + (index < adultRemainder ? 1 : 0);
-    const childCount = childBase + (index < childRemainder ? 1 : 0);
     return {
       roomIdentifier: index + 1,
       adults: Math.max(1, adultCount),
-      childrenAges: Array.from({ length: childCount }, () => 8),
+      childrenAges: childAges.filter((_, childIndex) => childIndex % safeRoomCount === index),
     };
   });
 };
@@ -490,7 +496,7 @@ const resolveUaeDestinationMatches = async (query: string, limit = 30) => {
   }
 };
 
-const isAllowedUaeDestinationCode = async (value: string | null | undefined) => {
+export const isAllowedUaeDestinationCode = async (value: string | null | undefined) => {
   const destinationCode = toTrimmedString(value);
   if (!destinationCode) return false;
   const normalizedCode = destinationCode.toUpperCase();
@@ -1271,7 +1277,46 @@ const applyPackageReplyPolicies = (
     locale
   );
 
+const requireVerifiedHotelOptions = (
+  reply: PackageAssistantReply,
+  evidence: ToolPriceEvidence,
+  currentHotelCode: string | null | undefined,
+  locale: Locale
+): PackageAssistantReply => {
+  const options = reply.packageOptions.filter((option) => {
+    const code = toTrimmedString(option.draft.hotel?.hotelCode)?.toLowerCase();
+    if (!code) return false;
+    return code === currentHotelCode?.toLowerCase() ||
+      evidence.hotels.some((hotel) => hotel.hotelCode?.toLowerCase() === code);
+  });
+  if (options.length === reply.packageOptions.length) return reply;
+  if (options.length > 0) return { ...reply, packageOptions: options };
+  return {
+    ...reply,
+    message: locale === "hy"
+      ? "Նախ ստուգեմ հյուրանոցի հասանելիությունը։ Խնդրում եմ նշեք ԱՄԷ ուղղությունը, ամսաթվերը և ուղևորների կազմը։"
+      : locale === "ru"
+        ? "Сначала проверю наличие номеров. Укажите направление в ОАЭ, даты и состав туристов."
+        : "Let me verify live hotel availability first. Please share your UAE destination, dates, and travelers.",
+    stage: "collecting",
+    missing: uniqueStrings([...reply.missing, "hotel"], 8),
+    packageOptions: [],
+  };
+};
+
 const toolDefinitions = [
+  {
+    type: "function",
+    name: "lookup_destination_guide",
+    description: "Read Megatours' published UAE destination guide for a city. This is editorial guidance, not live inventory or visa advice.",
+    strict: false,
+    parameters: {
+      type: "object",
+      properties: { city: { type: "string" } },
+      required: ["city"],
+      additionalProperties: false,
+    },
+  },
   {
     type: "function",
     name: "lookup_destinations",
@@ -1303,6 +1348,7 @@ const toolDefinitions = [
         roomCount: { type: "integer", minimum: 1, maximum: 4 },
         adults: { type: "integer", minimum: 1, maximum: 12 },
         children: { type: "integer", minimum: 0, maximum: 8 },
+        childAges: { type: "array", items: { type: "integer", minimum: 0, maximum: 17 } },
         countryCode: { type: "string" },
         nationality: { type: "string" },
         currency: { type: "string" },
@@ -1435,6 +1481,10 @@ const buildSystemPrompt = (
     "- Hotel-first rule: every package option must include hotel. Never propose transfer/excursion/insurance without hotel.",
     "- Flights are external airline redirects only. Do not include flight in package drafts, do not quote flight prices, and tell users to select a hotel first and use the Flight service to continue on the airline website.",
     "- Personalize suggestions using recent user signals when available.",
+    "- If a package already exists, explain the change from the current package; never imply it was applied until the user taps Add to Package.",
+    "- For UAE travel advice, use lookup_destination_guide. Its editorial content is not evidence of live price, availability, opening hours, or entry rules.",
+    "- Missing fields must use plain-language names, not code identifiers. Ask for child ages when children travel; do not assume ages.",
+    "- Every hotel draft must include children (count) and childAges (ages explicitly confirmed by the user); use 0 and [] when no children travel.",
     "- If insurance is selected and dates/travelers are known, call quote_insurance before returning insurance price.",
     "- Destination policy: support UAE destinations only. If user requests another country, decline and ask for a UAE destination.",
     "When proposing options:",
@@ -1651,6 +1701,12 @@ const normalizeHotelDraft = (value: unknown): PackageAssistantHotelDraft | undef
     checkOutDate: toIsoDate(record.checkOutDate),
     roomCount: toFiniteNumber(record.roomCount),
     guestCount: toFiniteNumber(record.guestCount),
+    children: toFiniteNumber(record.children),
+    childAges: Array.isArray(record.childAges)
+      ? record.childAges.filter((age): age is number =>
+          typeof age === "number" && Number.isInteger(age) && age >= 0 && age <= 17
+        ).slice(0, 8)
+      : null,
     mealPlan: toTrimmedString(record.mealPlan),
     nonRefundable: toBoolean(record.nonRefundable),
     price: toFiniteNumber(record.price),
@@ -1946,6 +2002,9 @@ const executeSearchHotels = async (
   const roomCount = clampInteger(args.roomCount ?? context?.roomCount, 1, 4, 1);
   const adults = clampInteger(args.adults ?? context?.adults, 1, 12, 2);
   const children = clampInteger(args.children ?? context?.children, 0, 8, 0);
+  const childAges = Array.isArray(args.childAges)
+    ? args.childAges
+    : Array.isArray(context?.childAges) ? context.childAges : [];
   const currency = toCurrencyCode(args.currency) ?? toCurrencyCode(context?.budgetCurrency) ?? "USD";
   const requestedCountryCode = toTrimmedString(args.countryCode)?.toUpperCase() ?? null;
   const countryCode = AI_ALLOWED_DESTINATION_COUNTRY;
@@ -1958,6 +2017,11 @@ const executeSearchHotels = async (
       error:
         "Missing required inputs for hotel search. Need checkInDate, checkOutDate and destinationCode/hotelCode.",
     };
+  }
+  if (childAges.length !== children || childAges.some((age) =>
+    typeof age !== "number" || !Number.isInteger(age) || age < 0 || age > 17
+  )) {
+    return { ok: false, tool: "search_hotels", error: "Need each child's actual age before searching hotels." };
   }
 
   if (requestedCountryCode && requestedCountryCode !== AI_ALLOWED_DESTINATION_COUNTRY) {
@@ -1997,7 +2061,7 @@ const executeSearchHotels = async (
       checkInDate,
       checkOutDate,
       currency,
-      rooms: buildRooms(adults, children, roomCount),
+      rooms: buildRooms(adults, childAges, roomCount),
     });
 
     return {
@@ -2012,6 +2076,7 @@ const executeSearchHotels = async (
           roomCount,
           adults,
           children,
+          childAges,
           currency,
         },
         destination: result.destination,
@@ -2287,6 +2352,33 @@ const executeToolCall = async (
 ): Promise<ToolExecutionResult> => {
   const args = parseToolArgs(toolCall.arguments);
   switch (toolCall.name) {
+    case "lookup_destination_guide": {
+      const query = toTrimmedString(args.city)?.toLowerCase() ?? "";
+      const slug = destinationSlugs.find((entry) => {
+        const guide = getDestinationData(entry);
+        return entry === query || guide?.name.en.toLowerCase() === query;
+      });
+      const guide = slug ? getDestinationData(slug) : null;
+      return guide
+        ? {
+            ok: true,
+            tool: toolCall.name,
+            data: {
+              source: `Megatours destination guide: /${context.locale}/${slug}`,
+              city: guide.name[context.locale],
+              summary: guide.heroSummary[context.locale],
+              highlights: guide.highlights.slice(0, 5).map((item) => ({
+                title: item.title[context.locale],
+                description: item.description[context.locale],
+              })),
+              facts: guide.facts.map((item) => ({
+                label: item.label[context.locale],
+                value: item.value[context.locale],
+              })),
+            },
+          }
+        : { ok: false, tool: toolCall.name, error: "No Megatours UAE guide for this city." };
+    }
     case "lookup_destinations":
       return executeLookupDestinations(args);
     case "search_hotels":
@@ -2383,10 +2475,11 @@ const appendToolPriceEvidence = (
 };
 
 const loadAssistantSessionState = async (
-  sessionId: string | null | undefined
+  sessionId: string | null | undefined,
+  ownerKey: string | null | undefined
 ): Promise<AssistantSessionState | null> => {
   const normalizedSessionId = toTrimmedString(sessionId);
-  if (!normalizedSessionId) return null;
+  if (!normalizedSessionId || !ownerKey) return null;
 
   try {
     const db = await getDb();
@@ -2394,7 +2487,7 @@ const loadAssistantSessionState = async (
       "package_assistant_sessions"
     );
     const session = await sessionCollection.findOne(
-      { _id: normalizedSessionId },
+      { _id: normalizedSessionId, ownerKey },
       {
         projection: {
           lastOpenAiResponseId: 1,
@@ -2417,7 +2510,8 @@ const loadAssistantSessionState = async (
 
 const runOpenAiResponse = async (
   model: string,
-  request: OpenAiResponseRequest
+  request: OpenAiResponseRequest,
+  onTextDelta?: (delta: string) => void | Promise<void>
 ): Promise<OpenAiResponsePayload> => {
   if (!OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is missing");
@@ -2433,11 +2527,9 @@ const runOpenAiResponse = async (
       input: request.input,
       previous_response_id: request.previousResponseId ?? undefined,
       store: true,
-      reasoning: {
-        effort: "none",
-      },
-      temperature: 0.35,
-      top_p: 0.95,
+      ...(model.startsWith("gpt-6") ? { reasoning: { effort: OPENAI_REASONING_EFFORT } } : {}),
+      ...(model.startsWith("gpt-6") ? { temperature: 0.35, top_p: 0.95 } : {}),
+      stream: Boolean(onTextDelta),
       text: {
         verbosity: "medium",
         format: packageAssistantResponseFormat,
@@ -2460,7 +2552,48 @@ const runOpenAiResponse = async (
       throw new Error(`OpenAI error ${response.status}: ${errorBody}`);
     }
 
-    return (await response.json()) as OpenAiResponsePayload;
+    if (!onTextDelta) return (await response.json()) as OpenAiResponsePayload;
+    if (!response.body) throw new Error("OpenAI stream has no body");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let textSoFar = "";
+    let sentMessage = "";
+    let completed: OpenAiResponsePayload | null = null;
+    const handleEvent = async (block: string) => {
+      const data = block.split("\n").filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trim()).join("\n");
+      if (!data || data === "[DONE]") return;
+      const event = JSON.parse(data) as {
+        type?: string; delta?: string; response?: OpenAiResponsePayload; message?: string;
+      };
+      if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+        textSoFar += event.delta;
+        const nextMessage = extractStreamingMessage(textSoFar);
+        if (nextMessage.startsWith(sentMessage) && nextMessage.length > sentMessage.length) {
+          await onTextDelta(nextMessage.slice(sentMessage.length));
+          sentMessage = nextMessage;
+        }
+      }
+      if (event.type === "response.completed" && event.response) completed = event.response;
+      if (event.type === "response.failed" || event.type === "error") {
+        throw new Error(event.message ?? "OpenAI response failed");
+      }
+    };
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer = (buffer + decoder.decode(value, { stream: true })).replace(/\r\n/g, "\n");
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary !== -1) {
+        await handleEvent(buffer.slice(0, boundary));
+        buffer = buffer.slice(boundary + 2);
+        boundary = buffer.indexOf("\n\n");
+      }
+    }
+    if (buffer.trim()) await handleEvent(buffer);
+    if (!completed) throw new Error("OpenAI stream ended before completion");
+    return completed;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -2468,7 +2601,8 @@ const runOpenAiResponse = async (
 
 const runOpenAiWithFallback = async (
   request: OpenAiResponseRequest,
-  preferredModel?: string | null
+  preferredModel?: string | null,
+  onTextDelta?: (delta: string) => void | Promise<void>
 ): Promise<{ payload: OpenAiResponsePayload; model: string }> => {
   const candidates = Array.from(
     new Set(
@@ -2481,7 +2615,7 @@ const runOpenAiWithFallback = async (
 
   for (const model of candidates) {
     try {
-      const payload = await runOpenAiResponse(model, request);
+      const payload = await runOpenAiResponse(model, request, onTextDelta);
       return { payload, model };
     } catch (error) {
       lastError = error;
@@ -2507,7 +2641,7 @@ export async function generatePackageAssistantReply(
   };
   const [projectContext, sessionState] = await Promise.all([
     loadAssistantProjectContext(userId),
-    loadAssistantSessionState(sessionId),
+    loadAssistantSessionState(sessionId, input.ownerKey),
   ]);
 
   if (sanitizedMessages.length === 0) {
@@ -2565,7 +2699,8 @@ export async function generatePackageAssistantReply(
           input: responseInput,
           previousResponseId,
         },
-        preferredModel
+        preferredModel,
+        input.onTextDelta
       );
     } catch (error) {
       if (round === 0 && allowStatelessBootstrapRetry) {
@@ -2629,7 +2764,10 @@ export async function generatePackageAssistantReply(
     }
     const normalized = normalizeReplyFromModel(extractTextFromResponse(completion.payload), locale);
     const restricted = applyPackageReplyPolicies(normalized, projectContext.serviceFlags, locale);
-    const audited = applyHardPriceAudit(restricted, priceEvidence);
+    const verified = requireVerifiedHotelOptions(
+      restricted, priceEvidence, context?.currentPackage?.hotel?.hotelCode, locale
+    );
+    const audited = applyHardPriceAudit(verified, priceEvidence);
     return {
       reply: audited.reply,
       meta: {
@@ -2667,7 +2805,7 @@ export async function persistPackageAssistantTurn(input: AssistantPersistenceInp
     );
 
     await sessionCollection.updateOne(
-      { _id: input.sessionId },
+      { _id: input.sessionId, ownerKey: input.ownerKey },
       {
         $set: {
           locale: input.locale,
@@ -2688,6 +2826,7 @@ export async function persistPackageAssistantTurn(input: AssistantPersistenceInp
         },
         $setOnInsert: {
           createdAt: now,
+          ownerKey: input.ownerKey,
         },
       },
       { upsert: true }

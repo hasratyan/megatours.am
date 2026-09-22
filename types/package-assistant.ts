@@ -40,8 +40,21 @@ export type PackageAssistantContext = {
   roomCount?: number | null;
   adults?: number | null;
   children?: number | null;
+  childAges?: number[] | null;
   budgetAmount?: number | null;
   budgetCurrency?: string | null;
+  currentPackage?: {
+    hotel?: {
+      hotelCode?: string | null;
+      hotelName?: string | null;
+      destinationCode?: string | null;
+      checkInDate?: string | null;
+      checkOutDate?: string | null;
+      roomCount?: number | null;
+      guestCount?: number | null;
+    } | null;
+    services?: Array<"transfer" | "excursion" | "insurance" | "flight">;
+  } | null;
 };
 
 export type PackageAssistantHotelDraft = {
@@ -54,6 +67,8 @@ export type PackageAssistantHotelDraft = {
   checkOutDate?: string | null;
   roomCount?: number | null;
   guestCount?: number | null;
+  children?: number | null;
+  childAges?: number[] | null;
   mealPlan?: string | null;
   nonRefundable?: boolean | null;
   price?: number | null;

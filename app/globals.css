@@ -9433,6 +9433,12 @@ html.zoho-salesiq-handoff-only:not(.zoho-salesiq-live-agent-requested) #zsiq_flo
         overflow-wrap: anywhere;
       }
 
+      .concierge-ai__option-details{
+        color: #9dddcf;
+        font-size: 0.8rem;
+        line-height: 1.5;
+      }
+
       .concierge-ai__option-tags{
         display: flex;
         flex-wrap: wrap;
