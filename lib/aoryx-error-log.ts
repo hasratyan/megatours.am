@@ -31,6 +31,7 @@ type AoryxEndpointErrorLogEntry = {
 
 const AORYX_ERROR_LOG_PATH = path.join(process.cwd(), "logs", "aoryx-erros.log");
 const AORYX_ERROR_EMAIL_TO = "contracting8@aoryx.ae";
+const AORYX_ERROR_EMAIL_CC = "reservation16@aoryx.ae";
 const AORYX_ERROR_EMAIL_FROM = "MEGATOURS | Support <support@megatours.am>";
 const MAX_STRING_LENGTH = 500;
 const MAX_ARRAY_ITEMS = 8;
@@ -169,6 +170,7 @@ const sendAoryxErrorEmail = (entry: AoryxEndpointErrorLogEntry) => {
 
   void sendOperationalEmail({
     to: AORYX_ERROR_EMAIL_TO,
+    cc: AORYX_ERROR_EMAIL_CC,
     from: AORYX_ERROR_EMAIL_FROM,
     subject: `[Megatours] Aoryx API error: ${entry.endpoint}`,
     html: `

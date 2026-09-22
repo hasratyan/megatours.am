@@ -23,6 +23,7 @@ type BookingEmailInput = {
 
 type OperationalEmailInput = {
   to: string;
+  cc?: string;
   subject: string;
   html: string;
   text?: string;
@@ -304,6 +305,7 @@ const resolveFromAddress = (explicitFrom?: string | null) =>
 
 export async function sendOperationalEmail({
   to,
+  cc,
   subject,
   html,
   text,
@@ -327,6 +329,7 @@ export async function sendOperationalEmail({
     await transport.sendMail({
       from,
       to,
+      cc,
       subject,
       html,
       text,
