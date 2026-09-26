@@ -1,6 +1,7 @@
 import { convertToAmd, normalizeCurrencyCode, type AmdRates } from "@/lib/currency";
 import { getAmdRateForCurrency, getAmdRates } from "@/lib/pricing";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
+import { isAoryxBookingResultConfirmed } from "@/lib/booking-status";
 
 export type BookingAddonServiceKey = "transfer" | "excursion" | "insurance" | "flight";
 
@@ -569,14 +570,7 @@ export const calculateBookingAddonAmountAmd = async (
 };
 
 export const isBookingConfirmed = (booking: AoryxBookingResult | null | undefined) => {
-  if (!booking) return false;
-  const status = resolveString(booking.status);
-  if (status === "2") return true;
-  return Boolean(
-    resolveString(booking.hotelConfirmationNumber) ||
-      resolveString(booking.supplierConfirmationNumber) ||
-      resolveString(booking.adsConfirmationNumber)
-  );
+  return isAoryxBookingResultConfirmed(booking);
 };
 
 export const isBookingCanceled = (booking: AoryxBookingResult | null | undefined) => {

@@ -13,7 +13,7 @@ import {
 import { parseBookingPayload, validatePrebookState } from "@/lib/aoryx-booking";
 import { clearPrebookCookie, getPrebookState, getSessionFromCookie } from "@/app/api/aoryx/_shared";
 import { isBookingModificationClosed } from "@/lib/booking-modification";
-import { resolveBookingStatusKey } from "@/lib/booking-status";
+import { isAoryxBookingResultConfirmed } from "@/lib/booking-status";
 import {
   calculateBookingAddonAmountAmd,
   isBookingCanceled,
@@ -46,14 +46,6 @@ const parseSessionId = (input: unknown): string | undefined => {
   const trimmed = resolveString(input);
   return trimmed.length > 0 ? trimmed : undefined;
 };
-
-const isBookingResultConfirmed = (result: AoryxBookingResult | null | undefined) =>
-  resolveBookingStatusKey(result?.status) === "confirmed" ||
-  Boolean(
-    result?.hotelConfirmationNumber ||
-      result?.supplierConfirmationNumber ||
-      result?.adsConfirmationNumber
-  );
 
 const shouldAttemptBookReconciliation = (error: unknown) => {
   if (error instanceof AoryxClientError) {
@@ -89,7 +81,7 @@ const bookWithRecovery = async (payload: AoryxBookingPayload): Promise<AoryxBook
 
     try {
       const recovered = await bookingDetails(payload.sessionId);
-      if (isBookingResultConfirmed(recovered)) {
+      if (isAoryxBookingResultConfirmed(recovered)) {
         console.info("[AdminCheckout] BookingDetails recovery confirmed booking", {
           sessionId: payload.sessionId,
           customerRefNumber: payload.customerRefNumber ?? null,

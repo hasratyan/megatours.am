@@ -60,6 +60,10 @@ export async function runAoryxSearch(
       hotels: safeResult.hotels.map((hotel) => ({
         ...hotel,
         minPrice: applyMarkup(hotel.minPrice, hotelMarkup) ?? hotel.minPrice,
+        availableRates: hotel.availableRates?.map((rate) => ({
+          ...rate,
+          amount: applyMarkup(rate.amount, hotelMarkup) ?? rate.amount,
+        })),
       })),
     };
   }

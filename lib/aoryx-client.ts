@@ -19,6 +19,7 @@ import {
 import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import { logAoryxEndpointError } from "@/lib/aoryx-error-log";
 import { logAoryxFlow } from "@/lib/aoryx-flow-logger";
+import { resolveAoryxMealCode } from "@/lib/aoryx-meals";
 import type {
   AoryxSearchParams,
   AoryxSearchRequest,
@@ -31,7 +32,6 @@ import type {
   AoryxHotelInfoRequest,
   AoryxHotelInfoResponse,
   AoryxHotelInfoResult,
-  AoryxRoomDetailsRequest,
   AoryxRoomDetailItem,
   AoryxRoomDetailsResponse,
   AoryxRoomOption,
@@ -44,10 +44,7 @@ import type {
 
 // Endpoint configurations
 const DISTRIBUTION_ENDPOINTS = {
-  search: "Search",
-  roomDetails: "RoomDetails",
-  priceBreakup: "PriceBreakup",
-  cancellationPolicy: "CancellationPolicy",
+  availabilityDetail: "AvailabilityDetail",
   preBook: "PreBook",
   book: "Book",
   cancel: "Cancel",
@@ -90,10 +87,7 @@ interface AoryxRequestOptions {
 }
 
 const IDEMPOTENT_ENDPOINTS = new Set<AoryxDistributionEndpoint | AoryxStaticEndpoint>([
-  DISTRIBUTION_ENDPOINTS.search,
-  DISTRIBUTION_ENDPOINTS.roomDetails,
-  DISTRIBUTION_ENDPOINTS.priceBreakup,
-  DISTRIBUTION_ENDPOINTS.cancellationPolicy,
+  DISTRIBUTION_ENDPOINTS.availabilityDetail,
   DISTRIBUTION_ENDPOINTS.preBook,
   DISTRIBUTION_ENDPOINTS.bookingDetails,
   STATIC_ENDPOINTS.destinationInfo,
@@ -574,6 +568,20 @@ async function coreRequest<TRequest, TResponse>(
 // Normalize hotel from search response
 function normalizeSearchHotel(hotel: AoryxSearchHotel, currency: string | null): AoryxHotelSummary {
   const info = hotel.HotelInfo;
+  const roomNode = isRecord(hotel.Rooms) ? hotel.Rooms.Room : hotel.Rooms;
+  const mealPrices = new Map<string, number | null>();
+  normalizeArray(roomNode).filter(isRecord).forEach((room) => {
+    const status = toStringValue(room.Status)?.toLowerCase();
+    if (status && status !== "available") return;
+    const mealCode = resolveAoryxMealCode(room.MealCode ?? room.Meal);
+    if (!mealCode) return;
+    const amount = toNumber(isRecord(room.Price) ? room.Price.Gross : null);
+    const current = mealPrices.get(mealCode);
+    if (current === undefined || (amount !== null && (current === null || amount < current))) {
+      mealPrices.set(mealCode, amount);
+    }
+  });
+  const rates = Array.from(mealPrices, ([mealCode, amount]) => ({ mealCode, amount }));
   // Prioritize HotelInfo.Name as it contains the actual hotel name
   // hotel.Name at the top level may contain the hotel code instead
   return {
@@ -587,6 +595,7 @@ function normalizeSearchHotel(hotel: AoryxSearchHotel, currency: string | null):
     imageUrl: toStringValue(info?.Image), // API uses "Image" not "imageUrl"
     latitude: toNumber(info?.Lat), // Direct string, not in geoCode
     longitude: toNumber(info?.Lon), // Direct string, not in geoCode
+    availableRates: rates,
   };
 }
 
@@ -1001,7 +1010,10 @@ function normalizeRoomOptions(response: AoryxRoomDetailsResponse | Record<string
   }, []);
   const resolvedRoomItems = roomItems.length > 0 ? roomItems : findRoomCandidates(response);
 
-  return resolvedRoomItems.map((room, index) => {
+  return resolvedRoomItems.filter((room) => {
+    const status = toStringValue(room.Status)?.toLowerCase();
+    return !status || status === "available";
+  }).map((room, index) => {
     const id =
       toStringValue(room.RoomCode ?? room.RateKey ?? room.RoomIndex ?? room.Id) ??
       `room-${index + 1}`;
@@ -1015,6 +1027,7 @@ function normalizeRoomOptions(response: AoryxRoomDetailsResponse | Record<string
       room.BoardType ?? room.MealType ?? room.MealPlan ?? room.Meal ?? room.Board
     );
     const meal = toStringValue(room.Meal ?? room.MealType ?? room.MealPlan ?? room.BoardType);
+    const mealCode = resolveAoryxMealCode(room.MealCode ?? room.Meal);
     const rateType = toStringValue(room.RateType ?? room.ContractType ?? room.RateCategory);
     const childInfo = normalizeChildAges(room.Children);
     const priceDetails = normalizePriceDetails(room.Price);
@@ -1048,6 +1061,8 @@ function normalizeRoomOptions(response: AoryxRoomDetailsResponse | Record<string
         ? refundableValue
         : nonRefundableValue !== null
         ? !nonRefundableValue
+        : rateType?.toLowerCase() === "refundable" ? true
+        : rateType?.toLowerCase() === "non-refundable" ? false
         : null;
 
     const priceCandidates = [
@@ -1059,19 +1074,21 @@ function normalizeRoomOptions(response: AoryxRoomDetailsResponse | Record<string
       room.NetPrice,
       room.Amount,
     ];
-    let amount: number | null = null;
+    let amount: number | null = priceDetails?.gross ?? null;
     let currency: string | null = null;
-    for (const candidate of priceCandidates) {
-      const money = extractMoney(candidate);
-      if (money.amount !== null) {
-        amount = money.amount;
-        currency = money.currency ?? currency;
-        break;
+    if (amount === null) {
+      for (const candidate of priceCandidates) {
+        const money = extractMoney(candidate);
+        if (money.amount !== null) {
+          amount = money.amount;
+          currency = money.currency ?? currency;
+          break;
+        }
       }
     }
 
     if (amount === null) {
-      amount = priceDetails?.net ?? priceDetails?.gross ?? null;
+      amount = priceDetails?.gross ?? priceDetails?.net ?? null;
     }
 
     if (!currency) {
@@ -1098,6 +1115,7 @@ function normalizeRoomOptions(response: AoryxRoomDetailsResponse | Record<string
       availableRooms,
       cancellationPolicy,
       meal,
+      mealCode,
       rateKey,
       groupCode,
       roomIdentifier,
@@ -1153,6 +1171,19 @@ function buildSearchRequest(params: AoryxSearchParams): AoryxSearchRequest {
     tassProInfo.RegionID = resolvedRegionId;
   }
 
+  const mealCodes = new Set<string>();
+  for (const selected of params.meals ?? []) {
+    const family = resolveAoryxMealCode(selected);
+    if (!family) continue;
+    const variants: Record<string, string[]> = {
+      RO: ["RO"], BB: ["BB"],
+      HB: ["HB", "HBP", "HBD", "HBPR"],
+      FB: ["FB", "FBP", "FBD", "FBPR"],
+      AI: ["AI", "AIP", "AID", "AIL", "SAI", "UAI", "PAI"],
+    };
+    variants[family]?.forEach((code) => mealCodes.add(code));
+  }
+
   return {
     SearchParameter: {
       DestinationCode: params.destinationCode,
@@ -1162,6 +1193,7 @@ function buildSearchRequest(params: AoryxSearchParams): AoryxSearchRequest {
       Currency: currency,
       CheckInDate: normalizeDate(params.checkInDate),
       CheckOutDate: normalizeDate(params.checkOutDate),
+      ...(mealCodes.size > 0 ? { Meals: Array.from(mealCodes).join(",") } : {}),
       Rooms: {
         Room: rooms, // Must always be an array
       },
@@ -1245,7 +1277,8 @@ type AoryxBookingDetailsRequest = {
 };
 
 type AoryxBookingDetailsResponse = {
-  GeneralInfo?: { SessionId?: string | null } | null;
+  GeneralInfo?: { SessionId?: string | null; GenericBookingInfo?: unknown } | null;
+  GenericBookingInfo?: unknown;
   Status?: string | null;
   BookingStatus?: string | number | null;
   HotelConfirmationNumber?: string | null;
@@ -1390,7 +1423,7 @@ export async function searchWithOptions(
   const request = buildSearchRequest(params);
 
   const response = await coreRequest<AoryxSearchRequest, AoryxSearchResponse>(
-    DISTRIBUTION_ENDPOINTS.search,
+    DISTRIBUTION_ENDPOINTS.availabilityDetail,
     request,
     {
       ...options,
@@ -1399,9 +1432,9 @@ export async function searchWithOptions(
     }
   );
 
-  if (!response.IsSuccess && response.ExceptionMessage) {
+  if (response.IsSuccess === false || response.ExceptionMessage || response.ErrorInfo?.Description) {
     throw new AoryxServiceError(
-      response.ExceptionMessage,
+      response.ExceptionMessage ?? response.ErrorInfo?.Description ?? "Availability request failed",
       "SEARCH_ERROR",
       response.StatusCode ?? undefined,
       response.Errors
@@ -1445,11 +1478,26 @@ export async function roomDetailsWithOptions(
     throw new AoryxServiceError("Hotel code is required for room details", "INVALID_PARAMS");
   }
 
-  const { sessionId, currency } = await searchWithOptions(params, options);
-  return roomDetailsBySession(sessionId, params, {
-    ...options,
-    currency,
-  });
+  const request = buildSearchRequest(params);
+  const response = await coreRequest<AoryxSearchRequest, AoryxSearchResponse>(
+    DISTRIBUTION_ENDPOINTS.availabilityDetail,
+    request,
+    { ...options, timeoutMs: options.timeoutMs ?? AORYX_SEARCH_TIMEOUT_MS, idempotent: options.idempotent ?? false }
+  );
+  if (response.IsSuccess === false || response.ExceptionMessage || response.ErrorInfo?.Description) {
+    throw new AoryxServiceError(
+      response.ExceptionMessage ?? response.ErrorInfo?.Description ?? "Availability request failed",
+      response.ErrorInfo?.Code ?? "AVAILABILITY_ERROR",
+      response.StatusCode ?? undefined,
+      response.Errors
+    );
+  }
+  const hotelNode = normalizeArray(response.Hotels?.Hotel).find((hotel) => hotel.Code === params.hotelCode);
+  return {
+    sessionId: extractSessionId(response.GeneralInfo ?? undefined),
+    currency: toStringValue(response.Monetary?.Currency?.Code) ?? params.currency ?? null,
+    rooms: hotelNode ? normalizeRoomOptions({ Hotel: hotelNode }) : [],
+  };
 }
 
 export async function roomDetailsBySession(
@@ -1465,37 +1513,9 @@ export async function roomDetailsBySession(
     throw new AoryxServiceError("Session ID is required for room details", "INVALID_PARAMS");
   }
 
-  const searchRequest = buildSearchRequest(params);
-  const request: AoryxRoomDetailsRequest = {
-    hotelCode: params.hotelCode,
-    searchParameter: searchRequest.SearchParameter,
-    sessionId,
-  };
-
-  const response = await coreRequest<AoryxRoomDetailsRequest, AoryxRoomDetailsResponse>(
-    DISTRIBUTION_ENDPOINTS.roomDetails,
-    request,
-    options
-  );
-
-  if (response.IsSuccess === false || response.ErrorInfo?.Description) {
-    throw new AoryxServiceError(
-      response.ExceptionMessage ?? response.ErrorInfo?.Description ?? "RoomDetails request failed",
-      response.ErrorInfo?.Code ?? "ROOM_DETAILS_ERROR",
-      response.StatusCode ?? undefined,
-      response.Errors
-    );
-  }
-
-  const responseRecord = response as Record<string, unknown>;
-  const monetary = isRecord(responseRecord.Monetary) ? responseRecord.Monetary : null;
-  const currencyInfo = monetary && isRecord(monetary.Currency) ? monetary.Currency : null;
-
-  return {
-    sessionId,
-    currency: toStringValue(currencyInfo?.Code) ?? options.currency ?? params.currency ?? null,
-    rooms: normalizeRoomOptions(response),
-  };
+  // AvailabilityDetail includes rooms but does not expose the old RoomDetails
+  // endpoint. Refresh this hotel and use its new session with its rate keys.
+  return roomDetailsWithOptions(params, options);
 }
 
 /**
@@ -1653,7 +1673,14 @@ export async function bookingDetails(
     );
   }
 
-  const roomsContainer = (response.Rooms as { Room?: unknown } | null | undefined)?.Room ?? response.Rooms;
+  const genericBooking = isRecord(response.GenericBookingInfo)
+    ? response.GenericBookingInfo
+    : isRecord(response.GeneralInfo?.GenericBookingInfo)
+      ? response.GeneralInfo.GenericBookingInfo
+      : null;
+  const bookingInfo = isRecord(genericBooking?.BookingInfo) ? genericBooking.BookingInfo : null;
+  const roomsNode = response.Rooms ?? bookingInfo?.Rooms;
+  const roomsContainer = isRecord(roomsNode) ? roomsNode.Room : roomsNode;
   const roomsArray = Array.isArray(roomsContainer)
     ? roomsContainer
     : roomsContainer
@@ -1662,13 +1689,14 @@ export async function bookingDetails(
 
   return {
     sessionId: toStringValue(response.GeneralInfo?.SessionId) ?? sessionId,
-    status: toStringValue(response.Status) ?? toStringValue(response.BookingStatus),
-    hotelConfirmationNumber: toStringValue(response.HotelConfirmationNumber),
+    status: toStringValue(genericBooking?.Status ?? response.Status ?? response.BookingStatus),
+    hotelConfirmationNumber: toStringValue(response.HotelConfirmationNumber ?? bookingInfo?.HotelConfirmationNumber),
     adsConfirmationNumber: toStringValue(
+      genericBooking?.ADSConfirmationNumber ?? genericBooking?.AdsConfirmationNumber ??
       response.ADSConfirmationNumber ?? response.AdsConfirmationNumber ?? response.adsConfirmationNumber
     ),
-    supplierConfirmationNumber: toPrimarySupplierConfirmation(response.SupplierConfirmationNumber),
-    customerRefNumber: toStringValue(response.CustomerRefNumber),
+    supplierConfirmationNumber: toPrimarySupplierConfirmation(response.SupplierConfirmationNumber ?? bookingInfo?.SupplierConfirmationNumber),
+    customerRefNumber: toStringValue(genericBooking?.CustomerRefNumber ?? response.CustomerRefNumber),
     rooms: roomsArray.map((room) => ({
       roomIdentifier: toInteger((room as { RoomIdentifier?: unknown }).RoomIdentifier),
       rateKey: toStringValue((room as { RateKey?: unknown }).RateKey),

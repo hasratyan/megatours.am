@@ -19,6 +19,7 @@ export interface AoryxSearchParams {
   currency?: string;
   regionId?: string;
   customerCode?: string;
+  meals?: string[];
   rooms: AoryxRoomSearch[];
 }
 
@@ -48,6 +49,7 @@ export interface AoryxSearchParameter {
   Currency: string;
   CheckInDate: string;
   CheckOutDate: string;
+  Meals?: string;
   Rooms: {
     Room: AoryxRoomOccupancy[]; // Must always be an array
   };
@@ -165,6 +167,7 @@ export interface AoryxRoomDetailItem {
   MealType?: string | null;
   MealPlan?: string | null;
   Meal?: string | null;
+  MealCode?: string | null;
   Refundable?: boolean | string | number | null;
   IsRefundable?: boolean | string | number | null;
   NonRefundable?: boolean | string | number | null;
@@ -238,6 +241,7 @@ export interface AoryxSearchHotel {
 }
 
 export interface AoryxSearchResponse {
+  ErrorInfo?: { Code?: string | null; Description?: string | null } | null;
   GeneralInfo?: {
     SessionId?: string | null;
     [key: string]: unknown;
@@ -277,6 +281,7 @@ export interface AoryxHotelSummary {
   imageUrl: string | null;
   latitude: number | null;
   longitude: number | null;
+  availableRates?: Array<{ mealCode: string | null; amount: number | null }>;
 }
 
 export interface AoryxSearchResult {
@@ -349,6 +354,7 @@ export interface AoryxRoomOption {
   availableRooms: number | null;
   cancellationPolicy: string | null;
   meal?: string | null;
+  mealCode?: string | null;
   rateKey?: string | null;
   groupCode?: number | null;
   roomIdentifier?: number | null;

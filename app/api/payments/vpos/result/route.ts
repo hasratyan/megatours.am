@@ -16,7 +16,7 @@ import { recordUserBooking, type AppliedBookingCoupon } from "@/lib/user-data";
 import { sendBookingConfirmationEmail } from "@/lib/email";
 import { incrementCouponSuccessfulOrders } from "@/lib/coupons";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
-import { resolveBookingStatusKey } from "@/lib/booking-status";
+import { isAoryxBookingResultConfirmed } from "@/lib/booking-status";
 import {
   mergeBookingAddonPayload,
   parseBookingAddonServices,
@@ -131,14 +131,6 @@ const summarizeEfesInsurance = (payload: AoryxBookingPayload | undefined) => {
   };
 };
 
-const isBookingResultConfirmed = (result: AoryxBookingResult | null | undefined) =>
-  resolveBookingStatusKey(result?.status) === "confirmed" ||
-  Boolean(
-    result?.hotelConfirmationNumber ||
-    result?.supplierConfirmationNumber ||
-    result?.adsConfirmationNumber
-  );
-
 const shouldAttemptBookReconciliation = (error: unknown) => {
   if (error instanceof AoryxClientError) {
     const endpoint = resolveString(error.endpoint).toLowerCase();
@@ -179,7 +171,7 @@ const bookWithRecovery = async (
 
     try {
       const recovered = await bookingDetails(payload.sessionId);
-      if (isBookingResultConfirmed(recovered)) {
+      if (isAoryxBookingResultConfirmed(recovered)) {
         console.info("[Vpos][result] BookingDetails recovery confirmed booking", {
           orderId: context.orderId,
           orderNumber: context.orderNumber,

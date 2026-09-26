@@ -17,8 +17,16 @@ import { formatCurrencyAmount, normalizeAmount, withDisplayCurrencyParam, type A
 import { resolveSafeErrorFromUnknown, resolveSafeErrorMessage } from "@/lib/error-utils";
 import { useAmdRates } from "@/lib/use-amd-rates";
 import { fetchResultsSearch } from "@/lib/results-search-client";
+import { resolveAoryxMealCode } from "@/lib/aoryx-meals";
 
 const ratingOptions = [5, 4, 3, 2, 1] as const;
+const mealOptions = [
+  { code: "RO", key: "roomOnly", query: "room-only" },
+  { code: "BB", key: "breakfast", query: "breakfast" },
+  { code: "HB", key: "halfBoard", query: "half-board" },
+  { code: "FB", key: "fullBoard", query: "full-board" },
+  { code: "AI", key: "allInclusive", query: "all-inclusive" },
+] as const;
 const intlLocales: Record<AppLocale, string> = {
   hy: "hy-AM",
   en: "en-GB",
@@ -213,6 +221,10 @@ export default function ResultsClient({
     key: string;
     values: number[];
   }>(() => ({ key: searchKey, values: [] }));
+  const [selectedMealsState, setSelectedMealsState] = useState<{
+    key: string;
+    values: string[];
+  }>(() => ({ key: searchKey, values: [] }));
   const [priceRangeOverrideState, setPriceRangeOverrideState] = useState<{
     key: string;
     value: { min: number; max: number } | null;
@@ -224,6 +236,10 @@ export default function ResultsClient({
   const selectedRatings = useMemo(
     () => (selectedRatingsState.key === resultsKey ? selectedRatingsState.values : []),
     [resultsKey, selectedRatingsState.key, selectedRatingsState.values]
+  );
+  const selectedMeals = useMemo(
+    () => (selectedMealsState.key === resultsKey ? selectedMealsState.values : []),
+    [resultsKey, selectedMealsState.key, selectedMealsState.values]
   );
   const priceRangeOverride =
     priceRangeOverrideState.key === priceOverrideKey ? priceRangeOverrideState.value : null;
@@ -371,8 +387,15 @@ export default function ResultsClient({
   const hotelsWithPricing = useMemo<HotelWithPricing[]>(() => {
     return (result?.hotels ?? []).map((hotel) => {
       const baseCurrency = hotel.currency ?? result?.currency ?? null;
-      const basePrice =
-        typeof hotel.minPrice === "number" && !Number.isNaN(hotel.minPrice)
+      const matchedRates = selectedMeals.length > 0
+        ? (hotel.availableRates ?? []).filter((rate) => rate.mealCode && selectedMeals.includes(resolveAoryxMealCode(rate.mealCode) ?? ""))
+        : [];
+      const mealPrices = matchedRates
+        .map((rate) => rate.amount)
+        .filter((amount): amount is number => typeof amount === "number" && Number.isFinite(amount));
+      const basePrice = selectedMeals.length > 0
+        ? (mealPrices.length > 0 ? Math.min(...mealPrices) : null)
+        : typeof hotel.minPrice === "number" && Number.isFinite(hotel.minPrice)
           ? hotel.minPrice
           : null;
       const normalized = normalizeAmount(basePrice, baseCurrency, amdRates, displayCurrency);
@@ -388,7 +411,13 @@ export default function ResultsClient({
         displayCurrency: displayCurrencyCode,
       };
     });
-  }, [amdRates, displayCurrency, result?.currency, result?.hotels]);
+  }, [amdRates, displayCurrency, result?.currency, result?.hotels, selectedMeals]);
+  const availableMeals = useMemo(() => {
+    const codes = new Set((result?.hotels ?? []).flatMap((hotel) =>
+      (hotel.availableRates ?? []).map((rate) => resolveAoryxMealCode(rate.mealCode))
+    ));
+    return mealOptions.filter((option) => codes.has(option.code));
+  }, [result?.hotels]);
   const mapHotelRates = useMemo(() => {
     const entries: Record<
       string,
@@ -462,11 +491,15 @@ export default function ResultsClient({
     const hotels = [...hotelsWithPricing];
     if (!hotels.length) return [];
     const ratingSet = new Set(selectedRatings);
+    const mealSet = new Set(selectedMeals);
     const hasActivePriceFilter =
       priceBounds &&
       priceRange &&
       (priceRange.min > priceBounds.min || priceRange.max < priceBounds.max);
     const filteredHotels = hotels.filter((hotel) => {
+      if (mealSet.size > 0 && !(hotel.availableRates ?? []).some((rate) =>
+        mealSet.has(resolveAoryxMealCode(rate.mealCode) ?? "")
+      )) return false;
       if (priceBounds && priceRange) {
         if (typeof hotel.displayPrice === "number") {
           if (hotel.displayPrice < priceRange.min || hotel.displayPrice > priceRange.max) return false;
@@ -519,7 +552,7 @@ export default function ResultsClient({
         break;
     }
     return filteredHotels;
-  }, [hotelsWithPricing, priceBounds, priceRange, selectedRatings, sortBy]);
+  }, [hotelsWithPricing, priceBounds, priceRange, selectedRatings, selectedMeals, sortBy]);
   const filteredPlacesLabel =
     sortedHotels.length > 0 ? formatPlural(sortedHotels.length, t.results.placesFound) : null;
 
@@ -654,6 +687,31 @@ export default function ResultsClient({
               ))}
             </div>
           </div>
+          {availableMeals.length > 0 && (
+            <div className="filters-section">
+              <h3>{t.results.filters.meals}</h3>
+              <div className="filter-options filter-options--meals">
+                {availableMeals.map((option) => (
+                  <label key={option.code} className="filter-option">
+                    <input
+                      type="checkbox"
+                      checked={selectedMeals.includes(option.code)}
+                      onChange={() => setSelectedMealsState((current) => {
+                        const values = current.key === resultsKey ? current.values : [];
+                        return {
+                          key: resultsKey,
+                          values: values.includes(option.code)
+                            ? values.filter((code) => code !== option.code)
+                            : [...values, option.code],
+                        };
+                      })}
+                    />
+                    {t.hotel.roomOptions.mealPlans[option.key]}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </aside>
       ) : null}
       {finalError ? (
@@ -753,12 +811,15 @@ export default function ResultsClient({
                           parsed.payload.destinationCode ?? result?.destination?.code ?? undefined,
                       })
                     : null;
+                const selectedDetailMeal = selectedMeals.length === 1
+                  ? mealOptions.find((option) => option.code === selectedMeals[0])?.query
+                  : null;
                 const detailHref =
                   detailQuery && hotel.code
                     ? (withDisplayCurrencyParam(
                         `/${locale}/hotels/${hotel.code}?${detailQuery}${
                           result?.searchToken ? `&searchToken=${encodeURIComponent(result.searchToken)}` : ""
-                        }`,
+                        }${selectedDetailMeal ? `&meal=${selectedDetailMeal}` : ""}`,
                         displayCurrency
                       ) as Route)
                     : null;

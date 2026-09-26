@@ -28,14 +28,18 @@ const {
 function normalizeBaseUrl(url: string): string {
   if (!url) return url;
   const trimmed = url.trim().replace(/\/+$/, "");
-  // Aoryx API requires HTTPS
-  if (trimmed.startsWith("http://apiv2.giinfotech.ae")) {
+  // The previous hosts served the v2 distribution contract. The v3 contract
+  // uses AvailabilityDetail on the current ads-lb host.
+  if (/^https?:\/\/apiv2\.giinfotech\.ae(?:\/|$)/i.test(trimmed)) {
+    return "https://ads-lb.giinfotech.ae/ads.out.v2.production/api/v2/hotel";
+  }
+  if (trimmed.startsWith("http://uat-apiv2.giinfotech.ae")) {
     return trimmed.replace(/^http:/, "https:");
   }
   return trimmed;
 }
 
-export const AORYX_BASE_URL = normalizeBaseUrl(RAW_AORYX_BASE_URL);
+export const AORYX_BASE_URL = normalizeBaseUrl(RAW_AORYX_BASE_URL || "https://ads-lb.giinfotech.ae/ads.out.v2.production/api/v2/hotel");
 export const AORYX_TEST_URL = normalizeBaseUrl(RAW_AORYX_TEST_URL);
 export {
   AORYX_API_KEY,

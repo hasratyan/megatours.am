@@ -941,6 +941,7 @@ export type Translation = {
       title: string;
       priceRange: string;
       rating: string;
+      meals: string;
       noPricing: string;
     };
     loading: string;

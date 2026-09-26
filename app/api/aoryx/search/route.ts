@@ -83,12 +83,22 @@ export async function POST(request: NextRequest) {
       getAoryxHotelPlatformFee(),
     ]);
 
-    const { sessionId: _sessionId, ...safeResult } = result;
+    const safeResult = {
+      currency: result.currency,
+      propertyCount: result.propertyCount,
+      responseTime: result.responseTime,
+      destination: result.destination,
+      hotels: result.hotels,
+    };
     const markedHotels =
       hotelMarkup && Array.isArray(safeResult.hotels)
         ? safeResult.hotels.map((hotel) => ({
             ...hotel,
             minPrice: applyMarkup(hotel.minPrice, hotelMarkup) ?? hotel.minPrice,
+            availableRates: hotel.availableRates?.map((rate) => ({
+              ...rate,
+              amount: applyMarkup(rate.amount, hotelMarkup) ?? rate.amount,
+            })),
           }))
         : safeResult.hotels;
     const response = NextResponse.json({

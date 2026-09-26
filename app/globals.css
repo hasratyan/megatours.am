@@ -3272,6 +3272,21 @@ main.results{
       gap: 0.75em;
     }
 
+    .filter-options--meals{
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .filter-options--meals .filter-option{
+      justify-content: flex-start;
+      padding-inline: 0.75em;
+    }
+
+    .filter-options--meals .filter-option input{
+      display: inline-block;
+      accent-color: #ffef00;
+    }
+
     .filter-option{
       display: flex;
       align-items: center;
