@@ -2803,7 +2803,7 @@ footer{
           border: 1px solid #34d3994d;
           border-radius: 999px;
           padding: .5em 1em;
-          font-size: 0.8em;
+          font-size: .85em;
           font-weight: 700;
           text-wrap: nowrap;
           line-height: normal;
@@ -2884,7 +2884,7 @@ footer{
           &:hover {
             transform: translateY(-2px);
             outline-width: 1px;
-            outline-offset: 3px;
+            outline-offset: 4px;
           }
           span{
             font-size: 1.25rem;
@@ -3101,10 +3101,8 @@ main.results{
         .header{
           .rating{
             color: #ffef00;
-            text-wrap: nowrap;
             background: #ffef0017;
             border: 2px solid rgb(255 239 0 / 37%);
-            font-size: 0.85rem;
           }
         }
       }
