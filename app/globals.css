@@ -2829,7 +2829,7 @@ footer{
       .footer {
         margin-top:  auto;
         display:  flex;
-        align-items:  center;
+        align-items:  end;
         justify-content:  space-between;
         gap:  1em;
 
@@ -2841,10 +2841,9 @@ footer{
         }
 
         .price {
-          margin: 0;
           color: #fff;
           font-weight: 700;
-          font-size: 1.2em;
+          font-size: 1.25em;
 
           .old-price{
             color: #ff4848;
@@ -3099,26 +3098,25 @@ main.results{
       background-color: #ffffff1a;
       .content{
         .meal-starting-prices{
-          display: flex;
           flex-wrap: wrap;
-          gap: 0.4em;
+          gap: .75em;
           margin-top: auto;
+          display: flex;
         }
         .meal-starting-price{
-          border: 1px solid rgba(255, 239, 0, 0.35);
-          border-radius: 0.55em;
-          background: rgba(255, 239, 0, 0.08);
           color: #f8fafc;
-          font-size: 0.78rem;
-          line-height: 1.3;
-          padding: 0.35em 0.55em;
+          background: #ffef0014;
+          border: 1px solid #ffef0059;
+          border-radius: .75em;
+          padding: .25em .5em;
+          font-size: .85em;
         }
         .price-meal{
-          display: block;
           color: #ffef00;
-          font-size: 0.78rem;
+          font-size: .8rem;
           font-weight: 600;
-          line-height: 1.3;
+          display: block;
+          padding-block: 0.25em;
         }
         .header{
           .rating{
