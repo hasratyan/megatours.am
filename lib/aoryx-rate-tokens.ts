@@ -229,7 +229,9 @@ export const obfuscateRoomOptions = (
       ...room,
       id: obfuscatedId ?? room.id,
       rateKey: token,
+      rateIdentity: rateKey ? hashRateKey(rateKey) : null,
       groupCode: null,
+      groupIdentity: groupCode !== null ? hashRateKey(`group:${groupCode}`) : null,
     };
   });
 
