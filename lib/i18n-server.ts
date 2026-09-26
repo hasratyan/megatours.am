@@ -2957,7 +2957,7 @@ const translations: Record<Locale, Translation> = {
         viewAria: "View hotel location on map",
         showButton: "Show Location on Map",
         title: "Hotel Location",
-        iframeTitle: "Google Maps - Hotel Location",
+        iframeTitle: "Hotel location map",
         ariaLabel: "Interactive hotel map",
         closeLabel: "Close map",
       },

@@ -1273,7 +1273,11 @@ export default function HotelClient({
   const roomOptionsErrorPopoverId = "room-options-error-popover";
   const mapPopoverId = "hotel-map-popover";
   const mapEmbedSrc = hotelCoordinates
-    ? `https://www.google.com/maps?q=${hotelCoordinates.lat},${hotelCoordinates.lon}&output=embed`
+    ? `https://www.openstreetmap.org/export/embed.html?${new URLSearchParams({
+        bbox: `${hotelCoordinates.lon - 0.01},${hotelCoordinates.lat - 0.01},${hotelCoordinates.lon + 0.01},${hotelCoordinates.lat + 0.01}`,
+        layer: "mapnik",
+        marker: `${hotelCoordinates.lat},${hotelCoordinates.lon}`,
+      })}`
     : null;
   const hotelAddressLine = hotelInfo?.address?.line1 && hotelInfo?.address?.line2 ? `${hotelInfo?.address?.line1}, ${hotelInfo?.address?.line2}` : hotelInfo?.address?.line1 ?? null;
   const hotelDestinationLabel = hotelInfo?.destinationName ?? hotelInfo?.address?.cityName ?? null;
