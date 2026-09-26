@@ -356,8 +356,12 @@ export interface AoryxRoomOption {
   meal?: string | null;
   mealCode?: string | null;
   rateKey?: string | null;
+  rateIdentity?: string | null;
   groupCode?: number | null;
+  groupIdentity?: string | null;
   roomIdentifier?: number | null;
+  roomCombinationId?: number | null;
+  marriageIdentifier?: number | null;
   rateType?: string | null;
   price?: AoryxRoomPrice | null;
   adultCount?: number | null;

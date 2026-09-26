@@ -963,6 +963,7 @@ export type Translation = {
       unnamed: string;
       locationFallback: string;
       startingFrom: string;
+      forRooms: string;
     };
     viewOptions: string;
     errors: {
@@ -1124,6 +1125,8 @@ export type Translation = {
       lowestPrice: string;
       highestPrice: string;
       roomOptionFallback: string;
+      roomBundleTitle: string;
+      forRooms: string;
       mealPlans: {
         roomOnly: string;
         breakfast: string;

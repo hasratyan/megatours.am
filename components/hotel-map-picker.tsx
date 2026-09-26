@@ -3,6 +3,9 @@
 import { useEffect, useRef, useMemo, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { maplibreGL } from "@maplibre/maplibre-gl-leaflet";
+import { setWorkerUrl } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
@@ -122,7 +125,9 @@ export default function HotelMapPicker({
     return template.replace("{count}", count.toString());
   }, [pluralRules]);
   const selectedHotelId = selectedHotel?.value ?? null;
-  selectedHotelIdRef.current = selectedHotelId;
+  useEffect(() => {
+    selectedHotelIdRef.current = selectedHotelId;
+  }, [selectedHotelId]);
   const mapUiCopy = useMemo(() => {
     if (locale === "hy") {
       return {
@@ -227,15 +232,15 @@ export default function HotelMapPicker({
     const map = L.map(mapRef.current, {
       center: defaultCenter,
       zoom: 11,
+      minZoom: 1,
+      maxZoom: 19,
       zoomControl: true,
       scrollWheelZoom: true,
     });
 
-    // Add tile layer (OpenStreetMap light theme)
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      subdomains: "abcd",
-      maxZoom: 19,
+    setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+    maplibreGL({
+      style: "https://tiles.openfreemap.org/styles/positron",
     }).addTo(map);
 
     // Fit to bounds if we have hotels
@@ -253,6 +258,7 @@ export default function HotelMapPicker({
 
     markerCluster.addTo(map);
     markerClusterRef.current = markerCluster;
+    const markers = markersRef.current;
 
     mapInstanceRef.current = map;
     const cancelScheduledResize = scheduleMapResizeSync();
@@ -264,7 +270,7 @@ export default function HotelMapPicker({
       markerClusterRef.current = null;
       map.remove();
       mapInstanceRef.current = null;
-      markersRef.current.clear();
+      markers.clear();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [validHotels.length > 0]);

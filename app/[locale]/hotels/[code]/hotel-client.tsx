@@ -12,6 +12,7 @@ import { useCurrency } from "@/components/currency-provider";
 import { ApiError, postJson } from "@/lib/api-helpers";
 import { parseSearchParams } from "@/lib/search-query";
 import { resolveAoryxMealCode } from "@/lib/aoryx-meals";
+import { groupCompleteRoomOptions } from "@/lib/aoryx-room-groups";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { resolveHotelPrimaryImageUrl } from "@/lib/hotel-share";
 import { useLanguage, useTranslations } from "@/components/language-provider";
@@ -328,12 +329,12 @@ const intlLocales: Record<AppLocale, string> = {
   ru: "ru-RU",
 };
 
-const getGroupMealLabel = (group: { option: AoryxRoomOption; items: AoryxRoomOption[] }) =>
-  pickMealLabel(group.option.boardType) ??
-  pickMealLabel(group.option.meal) ??
-  pickMealLabel(group.items.find((item) => pickMealLabel(item.boardType))?.boardType) ??
-  pickMealLabel(group.items.find((item) => pickMealLabel(item.meal))?.meal) ??
-  null;
+const getGroupMealLabel = (group: { option: AoryxRoomOption; items: AoryxRoomOption[] }) => {
+  const labels = Array.from(new Set(group.items.map((item) =>
+    pickMealLabel(item.boardType) ?? pickMealLabel(item.meal)
+  ).filter((label): label is string => Boolean(label))));
+  return labels.length > 0 ? labels.join(" / ") : null;
+};
 
 const buildTransferId = (transfer: AoryxTransferRate) =>
   transfer._id ??
@@ -1273,18 +1274,15 @@ export default function HotelClient({
   const roomOptionsErrorPopoverId = "room-options-error-popover";
   const mapPopoverId = "hotel-map-popover";
   const mapEmbedSrc = hotelCoordinates
-    ? `https://www.openstreetmap.org/export/embed.html?${new URLSearchParams({
-        bbox: `${hotelCoordinates.lon - 0.01},${hotelCoordinates.lat - 0.01},${hotelCoordinates.lon + 0.01},${hotelCoordinates.lat + 0.01}`,
-        layer: "mapnik",
-        marker: `${hotelCoordinates.lat},${hotelCoordinates.lon}`,
-      })}`
+    ? `https://www.google.com/maps?q=${hotelCoordinates.lat},${hotelCoordinates.lon}&output=embed`
     : null;
   const hotelAddressLine = hotelInfo?.address?.line1 && hotelInfo?.address?.line2 ? `${hotelInfo?.address?.line1}, ${hotelInfo?.address?.line2}` : hotelInfo?.address?.line1 ?? null;
   const hotelDestinationLabel = hotelInfo?.destinationName ?? hotelInfo?.address?.cityName ?? null;
   const hotelAddressText = [hotelAddressLine, hotelDestinationLabel].filter(Boolean).join(", ");
   const fallbackCurrency = hotelInfo?.currencyCode ?? parsed.payload?.currency ?? null;
   const tripAdvisorRating = hotelInfo?.tripAdvisorRating ?? null;
-  const roomCount = roomDetailsPayload?.rooms.length ?? 1;
+  const requestedRooms = roomDetailsPayload?.rooms ?? [];
+  const roomCount = requestedRooms.length || 1;
   const groupedRoomOptions = useMemo(() => {
     const resolveDisplayPrice = (option: AoryxRoomOption) => {
       if (typeof option.displayTotalPrice === "number" && Number.isFinite(option.displayTotalPrice)) {
@@ -1296,39 +1294,8 @@ export default function HotelClient({
       return null;
     };
 
-    if (roomCount <= 1) {
-      return roomOptions.map((option, index) => ({
-        key: `${option.id}-${index}`,
-        option,
-        items: [option],
-        totalPrice: option.totalPrice,
-        displayTotalPrice: resolveDisplayPrice(option),
-        currency: option.currency ?? fallbackCurrency,
-      }));
-    }
-
-    const groups = new Map<
-      string,
-      { key: string; option: AoryxRoomOption; items: AoryxRoomOption[] }
-    >();
-
-    roomOptions.forEach((option) => {
-      const groupKey = [
-        option.id,
-        option.boardType ?? "",
-        option.refundable ?? "",
-        option.cancellationPolicy ?? "",
-      ].join("|");
-      const existing = groups.get(groupKey);
-      if (existing) {
-        existing.items.push(option);
-      } else {
-        groups.set(groupKey, { key: groupKey, option, items: [option] });
-      }
-    });
-
-    return Array.from(groups.values()).map((group) => {
-      const items = group.items.slice(0, Math.max(1, roomCount));
+    return groupCompleteRoomOptions(roomOptions, requestedRooms).map((group) => {
+      const items = group.items;
       const hasAllPrices = items.every((item) => typeof item.totalPrice === "number");
       const totalPrice = hasAllPrices
         ? items.reduce((sum, item) => sum + (item.totalPrice ?? 0), 0)
@@ -1339,20 +1306,21 @@ export default function HotelClient({
         ? displayPrices.reduce((sum, price) => sum + (price ?? 0), 0)
         : null;
       const currency =
-        group.option.currency ??
+        items[0].currency ??
         fallbackCurrency ??
         items.find((item) => item.currency)?.currency ??
         null;
 
       return {
-        ...group,
+        key: group.key,
+        option: items[0],
         items,
         totalPrice,
         displayTotalPrice,
         currency,
       };
     });
-  }, [fallbackCurrency, roomCount, roomOptions]);
+  }, [fallbackCurrency, requestedRooms, roomOptions]);
   const mealOptions = useMemo(() => (
     (Object.entries(mealPlanFilterValues) as Array<[MealPlanKey, string]>).map(([key, value]) => ({
       value,
@@ -1363,11 +1331,12 @@ export default function HotelClient({
     let filtered = groupedRoomOptions;
     if (mealFilter !== ALL_MEALS_FILTER) {
       filtered = filtered.filter((group) => {
-        const mealLabel = getGroupMealLabel(group);
-        if (mealFilter === "ultra-all-inclusive") return getMealFilterValue(mealLabel) === mealFilter;
-        const mealCode = resolveAoryxMealCode(mealLabel);
-        if (mealCode) return mealCode === supplierMealFilterCodes[mealFilter];
-        return getMealFilterValue(mealLabel) === mealFilter;
+        return group.items.every((item) => {
+          const mealLabel = pickMealLabel(item.boardType) ?? pickMealLabel(item.meal);
+          if (mealFilter === "ultra-all-inclusive") return getMealFilterValue(mealLabel) === mealFilter;
+          const mealCode = resolveAoryxMealCode(item.mealCode) ?? resolveAoryxMealCode(mealLabel);
+          return mealCode ? mealCode === supplierMealFilterCodes[mealFilter] : getMealFilterValue(mealLabel) === mealFilter;
+        });
       });
     }
     if (priceSort === "default") return filtered;
@@ -2193,6 +2162,14 @@ export default function HotelClient({
     }) => {
       if (!hotelCode) return;
 
+      const searchedRooms = parsed.payload?.rooms ?? [];
+      if (group.items.length !== searchedRooms.length || (
+        searchedRooms.length > 1 && group.items.some((item, index) => item.roomIdentifier !== searchedRooms[index].roomIdentifier)
+      )) {
+        setBookingError(t.hotel.errors.missingRateKeys);
+        return;
+      }
+
       const rateKeys = group.items
         .map((item) => item.rateKey)
         .filter((key): key is string => typeof key === "string" && key.length > 0);
@@ -2319,6 +2296,18 @@ export default function HotelClient({
           currency: prebookCurrency,
           locale,
         });
+        if (result.isBookable === false || result.isSoldOut === true) {
+          setBookingError(t.hotel.errors.prebookFailed);
+          return;
+        }
+        if (searchedRooms.length > 1) {
+          const returnedIdentifiers = new Set((result.rooms ?? []).map((room) => room.roomIdentifier));
+          if (returnedIdentifiers.size !== searchedRooms.length ||
+              !searchedRooms.every((room) => returnedIdentifiers.has(room.roomIdentifier))) {
+            setBookingError(t.hotel.errors.prebookFailed);
+            return;
+          }
+        }
         const mergedRooms = mergePrebookExtras(group.items, result.rooms);
         const guests = buildBookingGuests(mergedRooms, roomDetailsPayload?.rooms ?? null);
         if (guests.length === 0) {
@@ -2469,6 +2458,12 @@ export default function HotelClient({
 
   const handleBook = useCallback(async () => {
     if (!activePrebook || !hotelCode) return;
+    if (activePrebook.isBookable === false || activePrebook.isSoldOut === true ||
+        bookingGuests.length !== (parsed.payload?.rooms.length ?? 0) ||
+        !parsed.payload?.rooms.every((room) => bookingGuests.some((guestRoom) => guestRoom.roomIdentifier === room.roomIdentifier))) {
+      setBookingError(t.hotel.errors.prebookFailed);
+      return;
+    }
     if (authStatus === "loading") {
       setBookingError(t.hotel.errors.checkingSignIn);
       return;
@@ -2897,12 +2892,14 @@ export default function HotelClient({
                             group.items,
                             group.currency ?? fallbackCurrency
                           );
-                          const canBook = rateKeys.length > 0;
+                          const canBook = rateKeys.length === roomCount;
                           const isPrebooking = prebookingKey === group.key;
                           return (
                             <div key={group.key} className="room-card">
                               <div className="room-card-main">
-                                <h3>{group.option.name ?? t.hotel.roomOptions.roomOptionFallback}</h3>
+                                <h3>{roomCount > 1
+                                  ? fillTemplate(t.hotel.roomOptions.roomBundleTitle, { count: roomCount })
+                                  : group.option.name ?? t.hotel.roomOptions.roomOptionFallback}</h3>
                                 {discountMessages.length > 0 && (
                                   <ul className="room-discounts" aria-label={t.hotel.roomOptions.promotionLabel}>
                                     {discountMessages.map((message) => (
@@ -2942,7 +2939,7 @@ export default function HotelClient({
                               </div>
                               <div className="room-card-price">
                                 {price ? (
-                                  <span className="room-price">{price} <span>/ {night}</span></span>
+                                  <span className="room-price">{price} <span>/ {night}{roomCount > 1 ? ` • ${fillTemplate(t.hotel.roomOptions.forRooms, { count: roomCount })}` : ""}</span></span>
                                 ) : (
                                   <span className="room-price-muted">{t.common.contactForRates}</span>
                                 )}
@@ -2959,7 +2956,8 @@ export default function HotelClient({
                                           className="room-breakdown-item"
                                         >
                                           {fillTemplate(t.hotel.roomOptions.roomBreakdown, {
-                                            index: itemIndex + 1,
+                                            index: item.roomIdentifier ?? itemIndex + 1,
+                                            name: item.name ?? t.hotel.roomOptions.roomOptionFallback,
                                             price: itemPrice ?? t.common.contact,
                                           })}
                                         </span>
@@ -2971,7 +2969,7 @@ export default function HotelClient({
                                   <button
                                     type="button"
                                     className="room-book-button"
-                                    disabled={(!canBook && isSignedIn) || bookingPreparing}
+                                    disabled={!canBook || bookingPreparing}
                                     onClick={() => handlePrebook(group)}
                                   >
                                     {!isSignedIn

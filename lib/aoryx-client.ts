@@ -20,6 +20,7 @@ import { resolveSafeErrorMessage } from "@/lib/error-utils";
 import { logAoryxEndpointError } from "@/lib/aoryx-error-log";
 import { logAoryxFlow } from "@/lib/aoryx-flow-logger";
 import { resolveAoryxMealCode } from "@/lib/aoryx-meals";
+import { groupCompleteRoomOptions } from "@/lib/aoryx-room-groups";
 import type {
   AoryxSearchParams,
   AoryxSearchRequest,
@@ -566,16 +567,33 @@ async function coreRequest<TRequest, TResponse>(
 }
 
 // Normalize hotel from search response
-function normalizeSearchHotel(hotel: AoryxSearchHotel, currency: string | null): AoryxHotelSummary {
+function normalizeSearchHotel(hotel: AoryxSearchHotel, currency: string | null, requestedRooms: AoryxSearchParams["rooms"]): AoryxHotelSummary {
   const info = hotel.HotelInfo;
   const roomNode = isRecord(hotel.Rooms) ? hotel.Rooms.Room : hotel.Rooms;
-  const mealPrices = new Map<string, number | null>();
-  normalizeArray(roomNode).filter(isRecord).forEach((room) => {
+  const roomOptions = normalizeArray(roomNode).filter(isRecord).filter((room) => {
     const status = toStringValue(room.Status)?.toLowerCase();
-    if (status && status !== "available") return;
-    const mealCode = resolveAoryxMealCode(room.MealCode) ?? resolveAoryxMealCode(room.Meal);
-    if (!mealCode) return;
-    const amount = toNumber(isRecord(room.Price) ? room.Price.Gross : null);
+    return !status || status === "available";
+  }).map((room) => ({
+    id: toStringValue(room.RateKey),
+    rateIdentity: toStringValue(room.RateKey),
+    roomIdentifier: toInteger(room.RoomIdentifier ?? room.RoomIndex ?? room.RoomNo ?? room.RoomNumber),
+    groupCode: toInteger(room.GroupCode ?? room.SupplierGroupCode ?? hotel.GroupCode),
+    roomCombinationId: toInteger(room.RoomCombinationId),
+    marriageIdentifier: toInteger(room.MarriageIdentifier),
+    rateKey: toStringValue(room.RateKey),
+    mealCode: resolveAoryxMealCode(room.MealCode) ?? resolveAoryxMealCode(room.Meal),
+    totalPrice: toNumber(isRecord(room.Price) ? room.Price.Gross : null),
+  }));
+  const completeGroups = groupCompleteRoomOptions(roomOptions, requestedRooms);
+  const mealPrices = new Map<string, number | null>();
+  const bundlePrices: number[] = [];
+  completeGroups.forEach(({ items }) => {
+    const prices = items.map((room) => room.totalPrice);
+    if (!prices.every((price): price is number => typeof price === "number" && Number.isFinite(price))) return;
+    const amount = prices.reduce((sum, price) => sum + price, 0);
+    bundlePrices.push(amount);
+    const mealCode = items[0].mealCode;
+    if (!mealCode || !items.every((room) => room.mealCode === mealCode)) return;
     const current = mealPrices.get(mealCode);
     if (current === undefined || (amount !== null && (current === null || amount < current))) {
       mealPrices.set(mealCode, amount);
@@ -587,7 +605,9 @@ function normalizeSearchHotel(hotel: AoryxSearchHotel, currency: string | null):
   return {
     code: toStringValue(hotel.Code),
     name: toStringValue(info?.Name) ?? toStringValue(hotel.Name),
-    minPrice: toNumber(hotel.MinPrice),
+    minPrice: requestedRooms.length > 1
+      ? (bundlePrices.length > 0 ? Math.min(...bundlePrices) : null)
+      : toNumber(hotel.MinPrice),
     currency: currency,
     rating: toNumber(info?.StarRating), // API uses "StarRating" as string
     address: toStringValue(info?.Add1), // API uses "Add1" for address
@@ -1022,6 +1042,8 @@ function normalizeRoomOptions(response: AoryxRoomDetailsResponse | Record<string
       room.RoomIdentifier ?? room.RoomIndex ?? room.RoomNo ?? room.RoomNumber
     );
     const groupCode = toInteger(room.GroupCode ?? room.SupplierGroupCode);
+    const roomCombinationId = toInteger(room.RoomCombinationId);
+    const marriageIdentifier = toInteger(room.MarriageIdentifier);
     const name = toStringValue(room.RoomName ?? room.RoomType ?? room.Name ?? room.Room);
     const boardType = toStringValue(
       room.BoardType ?? room.MealType ?? room.MealPlan ?? room.Meal ?? room.Board
@@ -1119,6 +1141,8 @@ function normalizeRoomOptions(response: AoryxRoomDetailsResponse | Record<string
       rateKey,
       groupCode,
       roomIdentifier,
+      roomCombinationId,
+      marriageIdentifier,
       rateType,
       price: resolvedPriceDetails,
       adultCount,
@@ -1445,7 +1469,7 @@ export async function searchWithOptions(
   const currency = toStringValue(response.Monetary?.Currency?.Code);
   const hotelsRaw = response.Hotels?.Hotel ?? [];
   const hotelsArray = Array.isArray(hotelsRaw) ? hotelsRaw : hotelsRaw ? [hotelsRaw] : [];
-  const hotels = hotelsArray.map((h) => normalizeSearchHotel(h, currency));
+  const hotels = hotelsArray.map((h) => normalizeSearchHotel(h, currency, params.rooms));
 
   return {
     sessionId,

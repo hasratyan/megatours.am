@@ -299,6 +299,10 @@ export default function ResultsClient({
     nightsCount && nightsCount > 0
       ? formatPlural(nightsCount, t.common.night)
       : null;
+  const requestedRoomCount = parsed.payload?.rooms.length ?? 1;
+  const roomsPriceLabel = requestedRoomCount > 1
+    ? t.results.hotel.forRooms.replace("{count}", String(requestedRoomCount))
+    : null;
   const matchedHotel = parsed.payload?.hotelCode
     ? result?.hotels.find((hotel) => hotel.code === parsed.payload?.hotelCode)
     : null;
@@ -838,6 +842,7 @@ export default function ResultsClient({
                       </div>
                       {hotel.mealStartingPrices.length > 0 && (
                         <div className="meal-starting-prices" aria-label={t.results.filters.meals}>
+                          {roomsPriceLabel && <span className="meal-starting-caption">{roomsPriceLabel}</span>}
                           {hotel.mealStartingPrices.map((rate) => {
                             const option = mealOptions.find((item) => item.code === rate.code);
                             return option ? (
@@ -856,6 +861,7 @@ export default function ResultsClient({
                                 {primaryMeal && <span className="price-meal">{t.hotel.roomOptions.mealPlans[primaryMeal.key]} {t.results.hotel.startingFrom}</span>}
                                 {formattedPrice}
                                 {nightsLabel && <small> • {nightsLabel}</small>}
+                                {roomsPriceLabel && <small> • {roomsPriceLabel}</small>}
                               </>
                             ) : (
                               <span className="result-price-muted">{t.common.contactForRates}</span>
