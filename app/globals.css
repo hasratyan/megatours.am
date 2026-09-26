@@ -3167,7 +3167,6 @@ main.results{
     }
 
     h3{
-      font-size: 0.95rem;
       font-weight: 600;
       border-bottom: 1px solid #475569;
       padding-bottom: 0.5em;
@@ -3182,7 +3181,6 @@ main.results{
     .filter-range-values{
       display: flex;
       justify-content: space-between;
-      font-size: 0.9rem;
       color: #cbd5e1;
     }
 
@@ -3279,7 +3277,7 @@ main.results{
 
     .filter-options--meals .filter-option{
       justify-content: flex-start;
-      padding-inline: 0.75em;
+      padding: 0.75em;
     }
 
     .filter-options--meals .filter-option input{
@@ -3290,13 +3288,14 @@ main.results{
     .filter-option{
       display: flex;
       align-items: center;
-      gap: 0.5em;
+      gap: 0.75em;
       font-size: 0.9rem;
       color: #ffef00;
       text-wrap: nowrap;
       background: #ffef0017;
       border: 2px solid #ffef005e;
-      border-radius: 0.5em;
+      border-radius: 0.75em;
+      line-height: normal;
       cursor: pointer;
       padding-block: .5em;
       width: 100%;
