@@ -33,3 +33,8 @@ export function resolveAoryxMealCode(input: unknown): string | null {
   if (!value) return null;
   return mealFamilies[value] ?? mealNames[value] ?? mealFamilies[value.split(/[\s-]/)[0]] ?? null;
 }
+
+export function normalizeAoryxMealSelection(input: unknown): string[] {
+  const values = Array.isArray(input) ? input : typeof input === "string" ? input.split(",") : [];
+  return Array.from(new Set(values.map(resolveAoryxMealCode).filter((code): code is string => Boolean(code))));
+}

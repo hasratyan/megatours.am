@@ -13,11 +13,12 @@ import ProgressiveList from "@/components/progressive-list";
 import { useCurrency } from "@/components/currency-provider";
 import { useLanguage, useTranslations } from "@/components/language-provider";
 import type { Locale as AppLocale, PluralForms } from "@/lib/i18n";
-import { formatCurrencyAmount, normalizeAmount, withDisplayCurrencyParam, type AmdRates } from "@/lib/currency";
+import { formatCurrencyAmount, withDisplayCurrencyParam, type AmdRates } from "@/lib/currency";
 import { resolveSafeErrorFromUnknown, resolveSafeErrorMessage } from "@/lib/error-utils";
 import { useAmdRates } from "@/lib/use-amd-rates";
 import { fetchResultsSearch } from "@/lib/results-search-client";
 import { resolveAoryxMealCode } from "@/lib/aoryx-meals";
+import { summarizeHotelMealPrices } from "@/lib/aoryx-meal-pricing";
 
 const ratingOptions = [5, 4, 3, 2, 1] as const;
 const mealOptions = [
@@ -55,7 +56,11 @@ type StoredLocation = {
 type HotelWithPricing = SafeSearchResult["hotels"][number] & {
   displayPrice: number | null;
   displayCurrency: string | null;
+  primaryMealCode: string | null;
+  mealStartingPrices: Array<{ code: string; amount: number; currency: string }>;
 };
+
+const emptyMeals: string[] = [];
 
 type ResultsClientProps = {
   initialResult: SafeSearchResult | null;
@@ -221,10 +226,6 @@ export default function ResultsClient({
     key: string;
     values: number[];
   }>(() => ({ key: searchKey, values: [] }));
-  const [selectedMealsState, setSelectedMealsState] = useState<{
-    key: string;
-    values: string[];
-  }>(() => ({ key: searchKey, values: [] }));
   const [priceRangeOverrideState, setPriceRangeOverrideState] = useState<{
     key: string;
     value: { min: number; max: number } | null;
@@ -237,10 +238,7 @@ export default function ResultsClient({
     () => (selectedRatingsState.key === resultsKey ? selectedRatingsState.values : []),
     [resultsKey, selectedRatingsState.key, selectedRatingsState.values]
   );
-  const selectedMeals = useMemo(
-    () => (selectedMealsState.key === resultsKey ? selectedMealsState.values : []),
-    [resultsKey, selectedMealsState.key, selectedMealsState.values]
-  );
+  const selectedMeals = parsed.payload?.meals ?? emptyMeals;
   const priceRangeOverride =
     priceRangeOverrideState.key === priceOverrideKey ? priceRangeOverrideState.value : null;
   const result = resultState;
@@ -252,7 +250,9 @@ export default function ResultsClient({
 
   const handleSearchSubmit = useCallback(
     (_payload: AoryxSearchParams, params: URLSearchParams) => {
-      const nextQuery = params.toString();
+      const nextParams = new URLSearchParams(params);
+      if (selectedMeals.length > 0) nextParams.set("meals", selectedMeals.join(","));
+      const nextQuery = nextParams.toString();
       if (nextQuery === searchKey) {
         return;
       }
@@ -267,8 +267,23 @@ export default function ResultsClient({
         router.push(nextHref);
       });
     },
-    [displayCurrency, locale, router, searchKey, startTransition]
+    [displayCurrency, locale, router, searchKey, selectedMeals, startTransition]
   );
+
+  const toggleMeal = useCallback((code: string) => {
+    const nextMeals = selectedMeals.includes(code)
+      ? selectedMeals.filter((selected) => selected !== code)
+      : [...selectedMeals, code];
+    const nextParams = new URLSearchParams(searchKey);
+    if (nextMeals.length > 0) nextParams.set("meals", nextMeals.join(","));
+    else nextParams.delete("meals");
+    const nextHref = withDisplayCurrencyParam(
+      `/${locale}/results?${nextParams.toString()}`,
+      displayCurrency
+    ) as Route;
+    document.cookie = "megatours-results-csr=1;path=/;max-age=5;SameSite=Lax";
+    startTransition(() => router.replace(nextHref, { scroll: false }));
+  }, [displayCurrency, locale, router, searchKey, selectedMeals, startTransition]);
 
   const nightsCount = (() => {
     if (!parsed.payload?.checkInDate || !parsed.payload?.checkOutDate) return null;
@@ -385,39 +400,11 @@ export default function ResultsClient({
   }, [isSearchSticky, searchRoomCount, searchExpanded]);
 
   const hotelsWithPricing = useMemo<HotelWithPricing[]>(() => {
-    return (result?.hotels ?? []).map((hotel) => {
-      const baseCurrency = hotel.currency ?? result?.currency ?? null;
-      const matchedRates = selectedMeals.length > 0
-        ? (hotel.availableRates ?? []).filter((rate) => rate.mealCode && selectedMeals.includes(resolveAoryxMealCode(rate.mealCode) ?? ""))
-        : [];
-      const mealPrices = matchedRates
-        .map((rate) => rate.amount)
-        .filter((amount): amount is number => typeof amount === "number" && Number.isFinite(amount));
-      const basePrice = selectedMeals.length > 0
-        ? (mealPrices.length > 0 ? Math.min(...mealPrices) : null)
-        : typeof hotel.minPrice === "number" && Number.isFinite(hotel.minPrice)
-          ? hotel.minPrice
-          : null;
-      const normalized = normalizeAmount(basePrice, baseCurrency, amdRates, displayCurrency);
-      const displayPrice = normalized
-        ? Math.round(normalized.amount)
-        : basePrice !== null
-          ? Math.round(basePrice)
-          : null;
-      const displayCurrencyCode = normalized ? normalized.currency : baseCurrency ?? "USD";
-      return {
-        ...hotel,
-        displayPrice,
-        displayCurrency: displayCurrencyCode,
-      };
-    });
+    return (result?.hotels ?? []).map((hotel) => ({
+      ...hotel,
+      ...summarizeHotelMealPrices(hotel, result?.currency ?? null, selectedMeals, amdRates, displayCurrency),
+    }));
   }, [amdRates, displayCurrency, result?.currency, result?.hotels, selectedMeals]);
-  const availableMeals = useMemo(() => {
-    const codes = new Set((result?.hotels ?? []).flatMap((hotel) =>
-      (hotel.availableRates ?? []).map((rate) => resolveAoryxMealCode(rate.mealCode))
-    ));
-    return mealOptions.filter((option) => codes.has(option.code));
-  }, [result?.hotels]);
   const mapHotelRates = useMemo(() => {
     const entries: Record<
       string,
@@ -497,7 +484,7 @@ export default function ResultsClient({
       priceRange &&
       (priceRange.min > priceBounds.min || priceRange.max < priceBounds.max);
     const filteredHotels = hotels.filter((hotel) => {
-      if (mealSet.size > 0 && !(hotel.availableRates ?? []).some((rate) =>
+      if (mealSet.size > 0 && (hotel.availableRates?.length ?? 0) > 0 && !(hotel.availableRates ?? []).some((rate) =>
         mealSet.has(resolveAoryxMealCode(rate.mealCode) ?? "")
       )) return false;
       if (priceBounds && priceRange) {
@@ -558,7 +545,7 @@ export default function ResultsClient({
 
   return (
     <main className="results">
-      {!isSearching && result?.hotels.length ? (
+      {!isSearching && parsed.payload ? (
         <aside
           id="results-filters"
           className={`results-filters${filtersOpen ? " is-open" : ""}`}
@@ -687,31 +674,21 @@ export default function ResultsClient({
               ))}
             </div>
           </div>
-          {availableMeals.length > 0 && (
-            <div className="filters-section">
-              <h3>{t.results.filters.meals}</h3>
-              <div className="filter-options filter-options--meals">
-                {availableMeals.map((option) => (
-                  <label key={option.code} className="filter-option">
-                    <input
-                      type="checkbox"
-                      checked={selectedMeals.includes(option.code)}
-                      onChange={() => setSelectedMealsState((current) => {
-                        const values = current.key === resultsKey ? current.values : [];
-                        return {
-                          key: resultsKey,
-                          values: values.includes(option.code)
-                            ? values.filter((code) => code !== option.code)
-                            : [...values, option.code],
-                        };
-                      })}
-                    />
-                    {t.hotel.roomOptions.mealPlans[option.key]}
-                  </label>
-                ))}
-              </div>
+          <div className="filters-section">
+            <h3>{t.results.filters.meals}</h3>
+            <div className="filter-options filter-options--meals">
+              {mealOptions.map((option) => (
+                <label key={option.code} className="filter-option">
+                  <input
+                    type="checkbox"
+                    checked={selectedMeals.includes(option.code)}
+                    onChange={() => toggleMeal(option.code)}
+                  />
+                  {t.hotel.roomOptions.mealPlans[option.key]}
+                </label>
+              ))}
             </div>
-          )}
+          </div>
         </aside>
       ) : null}
       {finalError ? (
@@ -802,6 +779,7 @@ export default function ResultsClient({
                   hotel.displayCurrency,
                   intlLocale
                 );
+                const primaryMeal = mealOptions.find((option) => option.code === hotel.primaryMealCode);
                 const detailQuery =
                   parsed.payload && hotel.code
                     ? buildSearchQuery({
@@ -858,11 +836,24 @@ export default function ResultsClient({
                           </span>
                         )}
                       </div>
+                      {hotel.mealStartingPrices.length > 0 && (
+                        <div className="meal-starting-prices" aria-label={t.results.filters.meals}>
+                          {hotel.mealStartingPrices.map((rate) => {
+                            const option = mealOptions.find((item) => item.code === rate.code);
+                            return option ? (
+                              <span className="meal-starting-price" key={rate.code} title={t.hotel.roomOptions.mealPlans[option.key]}>
+                                {rate.code} {t.results.hotel.startingFrom} {formatCurrencyAmount(rate.amount, rate.currency, intlLocale)}
+                              </span>
+                            ) : null;
+                          })}
+                        </div>
+                      )}
                       <div className="footer">
                         <div>
                           <div className="price">
                             {formattedPrice ? (
                               <>
+                                {primaryMeal && <span className="price-meal">{t.hotel.roomOptions.mealPlans[primaryMeal.key]} {t.results.hotel.startingFrom}</span>}
                                 {formattedPrice}
                                 {nightsLabel && <small> • {nightsLabel}</small>}
                               </>

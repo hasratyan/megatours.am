@@ -11,6 +11,7 @@ import ProgressiveList from "@/components/progressive-list";
 import { useCurrency } from "@/components/currency-provider";
 import { ApiError, postJson } from "@/lib/api-helpers";
 import { parseSearchParams } from "@/lib/search-query";
+import { resolveAoryxMealCode } from "@/lib/aoryx-meals";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { resolveHotelPrimaryImageUrl } from "@/lib/hotel-share";
 import { useLanguage, useTranslations } from "@/components/language-provider";
@@ -25,7 +26,6 @@ import {
   type MealPlanKey,
 } from "@/lib/meal-plans";
 import { useAmdRates } from "@/lib/use-amd-rates";
-import Image from "next/image";
 import ImageGallery from "./ImageGallery";
 import {
   PACKAGE_BUILDER_SESSION_MS,
@@ -79,6 +79,14 @@ const mealPlanFilterValues: Record<MealPlanKey, string> = {
   fullBoard: "full-board",
   allInclusive: "all-inclusive",
   ultraAllInclusive: "ultra-all-inclusive",
+};
+const supplierMealFilterCodes: Record<string, string> = {
+  "room-only": "RO",
+  breakfast: "BB",
+  "half-board": "HB",
+  "full-board": "FB",
+  "all-inclusive": "AI",
+  "ultra-all-inclusive": "AI",
 };
 
 const getMealFilterValue = (value: string | null): string | null => {
@@ -1067,8 +1075,11 @@ export default function HotelClient({
       const nextParams = new URLSearchParams(searchParamsString);
       if (normalizedMealFilter === ALL_MEALS_FILTER) {
         nextParams.delete(MEAL_FILTER_QUERY_PARAM);
+        nextParams.delete("meals");
       } else {
         nextParams.set(MEAL_FILTER_QUERY_PARAM, normalizedMealFilter);
+        const supplierCode = supplierMealFilterCodes[normalizedMealFilter];
+        if (supplierCode) nextParams.set("meals", supplierCode);
       }
 
       const nextQuery = nextParams.toString();
@@ -1338,36 +1349,21 @@ export default function HotelClient({
       };
     });
   }, [fallbackCurrency, roomCount, roomOptions]);
-  const mealOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    groupedRoomOptions.forEach((group) => {
-      const mealPlan = getGroupMealLabel(group);
-      const label = localizeMealPlan(
-        mealPlan,
-        t.hotel.roomOptions.mealPlans
-      );
-      const value = getMealFilterValue(mealPlan);
-      if (!label || !value) return;
-      if (!map.has(value)) {
-        map.set(value, label);
-      }
-    });
-    return Array.from(map.entries())
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [groupedRoomOptions, t.hotel.roomOptions.mealPlans]);
-  useEffect(() => {
-    if (roomsLoading || groupedRoomOptions.length === 0) return;
-    if (mealFilter !== ALL_MEALS_FILTER && !mealOptions.some((option) => option.value === mealFilter)) {
-      updateMealFilterInUrl(ALL_MEALS_FILTER);
-    }
-  }, [groupedRoomOptions.length, mealFilter, mealOptions, roomsLoading, updateMealFilterInUrl]);
+  const mealOptions = useMemo(() => (
+    (Object.entries(mealPlanFilterValues) as Array<[MealPlanKey, string]>).map(([key, value]) => ({
+      value,
+      label: t.hotel.roomOptions.mealPlans[key],
+    }))
+  ), [t.hotel.roomOptions.mealPlans]);
   const visibleRoomOptions = useMemo(() => {
     let filtered = groupedRoomOptions;
     if (mealFilter !== ALL_MEALS_FILTER) {
       filtered = filtered.filter((group) => {
-        const value = getMealFilterValue(getGroupMealLabel(group));
-        return value === mealFilter;
+        const mealLabel = getGroupMealLabel(group);
+        if (mealFilter === "ultra-all-inclusive") return getMealFilterValue(mealLabel) === mealFilter;
+        const mealCode = resolveAoryxMealCode(mealLabel);
+        if (mealCode) return mealCode === supplierMealFilterCodes[mealFilter];
+        return getMealFilterValue(mealLabel) === mealFilter;
       });
     }
     if (priceSort === "default") return filtered;
@@ -2827,14 +2823,7 @@ export default function HotelClient({
                 {roomsLoading && (
                   <Loader text={t.hotel.roomOptions.loading} />
                 )}
-                {roomDetailsPayload && !roomsLoading && !roomsError && groupedRoomOptions.length === 0 && (
-                  // <p className="room-options-empty">{t.hotel.roomOptions.empty}</p>
-                  <div className="results-empty">
-                    <Image src="/images/icons/sad.gif" alt={t.results.emptyAlt} width={100} height={100} />
-                    <p>{t.hotel.roomOptions.empty}</p>
-                  </div>
-                )}
-                {roomDetailsPayload && !roomsLoading && !roomsError && groupedRoomOptions.length > 0 && (
+                {roomDetailsPayload && !roomsLoading && !roomsError && (
                   <>
                     <div className="room-options-header">
                       <h2>
@@ -2875,7 +2864,7 @@ export default function HotelClient({
                       </div>
                     </div>
                     {visibleRoomOptions.length === 0 ? (
-                      <p className="room-options-empty">{t.hotel.roomOptions.noMatch}</p>
+                      <p className="room-options-empty">{groupedRoomOptions.length === 0 ? t.hotel.roomOptions.empty : t.hotel.roomOptions.noMatch}</p>
                     ) : (
                       <div className="room-options-list">
                         <ProgressiveList items={visibleRoomOptions} batchSize={24} locale={locale} renderItem={(group) => {

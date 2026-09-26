@@ -1,4 +1,5 @@
 import type { AoryxSearchParams } from "@/types/aoryx";
+import { normalizeAoryxMealSelection } from "@/lib/aoryx-meals";
 
 export type ParsedSearch = {
   payload: AoryxSearchParams | null;
@@ -60,6 +61,7 @@ export function parseSearchParams(
   const checkInDate = searchParams.get("checkInDate") ?? undefined;
   const checkOutDate = searchParams.get("checkOutDate") ?? undefined;
   const { rooms, notice } = parseRooms(searchParams.get("rooms"), messages);
+  const meals = normalizeAoryxMealSelection(searchParams.get("meals"));
 
   if (!checkInDate || !checkOutDate) {
     return { payload: null, error: messages.missingDates };
@@ -79,6 +81,7 @@ export function parseSearchParams(
       checkInDate,
       checkOutDate,
       rooms,
+      ...(meals.length > 0 ? { meals } : {}),
     },
     notice,
   };
@@ -94,5 +97,7 @@ export function buildSearchQuery(params: AoryxSearchParams): string {
   search.set("checkInDate", params.checkInDate);
   search.set("checkOutDate", params.checkOutDate);
   search.set("rooms", JSON.stringify(params.rooms));
+  const meals = normalizeAoryxMealSelection(params.meals);
+  if (meals.length > 0) search.set("meals", meals.join(","));
   return search.toString();
 }

@@ -1255,6 +1255,7 @@ const translations: Record<Locale, Translation> = {
         fallbackName: "Հյուրանոց",
         unnamed: "Անվանված չէ",
         locationFallback: "ԱՄԷ",
+        startingFrom: "սկսած",
       },
       viewOptions: "Դիտել տարբերակները",
     errors: {
@@ -2811,6 +2812,7 @@ const translations: Record<Locale, Translation> = {
         fallbackName: "Hotel",
         unnamed: "Unnamed Hotel",
         locationFallback: "UAE",
+        startingFrom: "from",
       },
       viewOptions: "View Options",
     errors: {
@@ -4373,6 +4375,7 @@ const translations: Record<Locale, Translation> = {
         fallbackName: "Отель",
         unnamed: "Без названия",
         locationFallback: "ОАЭ",
+        startingFrom: "от",
       },
       viewOptions: "Смотреть варианты",
     errors: {

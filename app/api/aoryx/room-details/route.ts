@@ -12,6 +12,7 @@ import { getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
 import { localizeAoryxRoomOptions } from "@/lib/aoryx-room-localization";
 import { resolveTranslationLocale } from "@/lib/text-translation";
+import { normalizeAoryxMealSelection } from "@/lib/aoryx-meals";
 import { setSessionCookie } from "../_shared";
 
 export const runtime = "nodejs";
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
       currency,
       regionId: AORYX_TASSPRO_REGION_ID,
       customerCode: AORYX_TASSPRO_CUSTOMER_CODE,
+      meals: normalizeAoryxMealSelection(body.meals),
       rooms,
     };
 

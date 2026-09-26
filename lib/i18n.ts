@@ -962,6 +962,7 @@ export type Translation = {
       fallbackName: string;
       unnamed: string;
       locationFallback: string;
+      startingFrom: string;
     };
     viewOptions: string;
     errors: {

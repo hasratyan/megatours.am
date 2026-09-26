@@ -3098,6 +3098,28 @@ main.results{
       max-width: none;
       background-color: #ffffff1a;
       .content{
+        .meal-starting-prices{
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.4em;
+          margin-top: auto;
+        }
+        .meal-starting-price{
+          border: 1px solid rgba(255, 239, 0, 0.35);
+          border-radius: 0.55em;
+          background: rgba(255, 239, 0, 0.08);
+          color: #f8fafc;
+          font-size: 0.78rem;
+          line-height: 1.3;
+          padding: 0.35em 0.55em;
+        }
+        .price-meal{
+          display: block;
+          color: #ffef00;
+          font-size: 0.78rem;
+          font-weight: 600;
+          line-height: 1.3;
+        }
         .header{
           .rating{
             color: #ffef00;
@@ -9637,13 +9659,15 @@ html.zoho-salesiq-handoff-only:not(.zoho-salesiq-live-agent-requested) #zsiq_flo
   padding: 1.5rem;
   width: 100%;
   color: inherit;
+
+  span{
+    color: #fff;
+  }
 }
 .progressive-list-controls > button {
-  padding: .8rem 1.5rem;
-  border-radius: 999px;
   background: #fff;
-  color: #111327;
-  cursor: pointer;
+  padding: .8rem 1.25rem;
+  font-weight: bold;
 }
 .progressive-list-controls > button:focus-visible {
   outline: 3px solid #69c59f;

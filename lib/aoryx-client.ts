@@ -573,7 +573,7 @@ function normalizeSearchHotel(hotel: AoryxSearchHotel, currency: string | null):
   normalizeArray(roomNode).filter(isRecord).forEach((room) => {
     const status = toStringValue(room.Status)?.toLowerCase();
     if (status && status !== "available") return;
-    const mealCode = resolveAoryxMealCode(room.MealCode ?? room.Meal);
+    const mealCode = resolveAoryxMealCode(room.MealCode) ?? resolveAoryxMealCode(room.Meal);
     if (!mealCode) return;
     const amount = toNumber(isRecord(room.Price) ? room.Price.Gross : null);
     const current = mealPrices.get(mealCode);
