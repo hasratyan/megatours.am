@@ -570,129 +570,131 @@ export default function ResultsClient({
             </span>
             {!filtersOpen && t.results.filters.button}
           </button>
-          <div className="filters-header">
-            <h2>{t.results.filters.title}</h2>
-          </div>
-          <div className="filters-section">
-            <h3>{t.results.filters.priceRange}</h3>
-            {priceBounds ? (
-              <>
-                <div className="filter-range-values">
-                  <span>
-                    {formatCurrencyAmount(
-                      priceMinValue,
-                      amdRates ? displayCurrency : result?.currency ?? "USD",
-                      intlLocale
-                    )}
-                  </span>
-                  <span>
-                    {formatCurrencyAmount(
-                      priceMaxValue,
-                      amdRates ? displayCurrency : result?.currency ?? "USD",
-                      intlLocale
-                    )}
-                  </span>
-                </div>
-                <div className="range-slider">
-                  <div className="range-slider__track" />
-                  <div
-                    className="range-slider__range"
-                    style={{
-                      left: `${priceMinPercent}%`,
-                      right: `${100 - priceMaxPercent}%`,
-                    }}
-                  />
-                  <input
-                    type="range"
-                    min={priceBounds.min}
-                    max={priceBounds.max}
-                    step={1}
-                    value={priceMinValue}
-                    aria-label="Minimum price"
-                    className="range-slider__input range-slider__input--min"
-                    onChange={(event) => {
-                      const nextMin = Number(event.target.value);
-                      setPriceRangeOverrideState((current) => {
-                        const key = priceOverrideKey;
-                        const value = current.key === key ? current.value : null;
-                        const currentMax = value?.max ?? priceBounds.max;
-                        return {
-                          key,
-                          value: {
-                            min: Math.min(nextMin, currentMax),
-                            max: currentMax,
-                          },
-                        };
-                      });
-                    }}
-                  />
-                  <input
-                    type="range"
-                    min={priceBounds.min}
-                    max={priceBounds.max}
-                    step={1}
-                    value={priceMaxValue}
-                    aria-label="Maximum price"
-                    className="range-slider__input range-slider__input--max"
-                    onChange={(event) => {
-                      const nextMax = Number(event.target.value);
-                      setPriceRangeOverrideState((current) => {
-                        const key = priceOverrideKey;
-                        const value = current.key === key ? current.value : null;
-                        const currentMin = value?.min ?? priceBounds.min;
-                        return {
-                          key,
-                          value: {
-                            min: currentMin,
-                            max: Math.max(nextMax, currentMin),
-                          },
-                        };
-                      });
-                    }}
-                  />
-                </div>
-              </>
-            ) : (
-              <p className="filter-muted">{t.results.filters.noPricing}</p>
-            )}
-          </div>
-          <div className="filters-section">
-            <h3>{t.results.filters.rating}</h3>
-            <div className="filter-options">
-              {ratingOptions.map((rating) => (
-                <label key={rating} className="filter-option">
-                  <input
-                    type="checkbox"
-                    checked={selectedRatings.includes(rating)}
-                    onChange={() =>
-                      setSelectedRatingsState((current) => {
-                        const key = resultsKey;
-                        const values = current.key === key ? current.values : [];
-                        const nextValues = values.includes(rating)
-                          ? values.filter((value) => value !== rating)
-                          : [...values, rating];
-                        return { key, values: nextValues };
-                      })
-                    }
-                  />
-                  {rating} ★
-                </label>
-              ))}
+          <div>
+            <div className="filters-header">
+              <h2>{t.results.filters.title}</h2>
             </div>
-          </div>
-          <div className="filters-section">
-            <h3>{t.results.filters.meals}</h3>
-            <div className="filter-options filter-options--meals">
-              {mealOptions.map((option) => (
-                <label key={option.code} className="filter-option">
-                  <input
-                    type="checkbox"
-                    checked={selectedMeals.includes(option.code)}
-                    onChange={() => toggleMeal(option.code)}
-                  />
-                  {t.hotel.roomOptions.mealPlans[option.key]}
-                </label>
-              ))}
+            <div className="filters-section">
+              <h3>{t.results.filters.priceRange}</h3>
+              {priceBounds ? (
+                <>
+                  <div className="filter-range-values">
+                    <span>
+                      {formatCurrencyAmount(
+                        priceMinValue,
+                        amdRates ? displayCurrency : result?.currency ?? "USD",
+                        intlLocale
+                      )}
+                    </span>
+                    <span>
+                      {formatCurrencyAmount(
+                        priceMaxValue,
+                        amdRates ? displayCurrency : result?.currency ?? "USD",
+                        intlLocale
+                      )}
+                    </span>
+                  </div>
+                  <div className="range-slider">
+                    <div className="range-slider__track" />
+                    <div
+                      className="range-slider__range"
+                      style={{
+                        left: `${priceMinPercent}%`,
+                        right: `${100 - priceMaxPercent}%`,
+                      }}
+                    />
+                    <input
+                      type="range"
+                      min={priceBounds.min}
+                      max={priceBounds.max}
+                      step={1}
+                      value={priceMinValue}
+                      aria-label="Minimum price"
+                      className="range-slider__input range-slider__input--min"
+                      onChange={(event) => {
+                        const nextMin = Number(event.target.value);
+                        setPriceRangeOverrideState((current) => {
+                          const key = priceOverrideKey;
+                          const value = current.key === key ? current.value : null;
+                          const currentMax = value?.max ?? priceBounds.max;
+                          return {
+                            key,
+                            value: {
+                              min: Math.min(nextMin, currentMax),
+                              max: currentMax,
+                            },
+                          };
+                        });
+                      }}
+                    />
+                    <input
+                      type="range"
+                      min={priceBounds.min}
+                      max={priceBounds.max}
+                      step={1}
+                      value={priceMaxValue}
+                      aria-label="Maximum price"
+                      className="range-slider__input range-slider__input--max"
+                      onChange={(event) => {
+                        const nextMax = Number(event.target.value);
+                        setPriceRangeOverrideState((current) => {
+                          const key = priceOverrideKey;
+                          const value = current.key === key ? current.value : null;
+                          const currentMin = value?.min ?? priceBounds.min;
+                          return {
+                            key,
+                            value: {
+                              min: currentMin,
+                              max: Math.max(nextMax, currentMin),
+                            },
+                          };
+                        });
+                      }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <p className="filter-muted">{t.results.filters.noPricing}</p>
+              )}
+            </div>
+            <div className="filters-section">
+              <h3>{t.results.filters.rating}</h3>
+              <div className="filter-options">
+                {ratingOptions.map((rating) => (
+                  <label key={rating} className="filter-option">
+                    <input
+                      type="checkbox"
+                      checked={selectedRatings.includes(rating)}
+                      onChange={() =>
+                        setSelectedRatingsState((current) => {
+                          const key = resultsKey;
+                          const values = current.key === key ? current.values : [];
+                          const nextValues = values.includes(rating)
+                            ? values.filter((value) => value !== rating)
+                            : [...values, rating];
+                          return { key, values: nextValues };
+                        })
+                      }
+                    />
+                    {rating} ★
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="filters-section">
+              <h3>{t.results.filters.meals}</h3>
+              <div className="filter-options filter-options--meals">
+                {mealOptions.map((option) => (
+                  <label key={option.code} className="filter-option">
+                    <input
+                      type="checkbox"
+                      checked={selectedMeals.includes(option.code)}
+                      onChange={() => toggleMeal(option.code)}
+                    />
+                    {t.hotel.roomOptions.mealPlans[option.key]}
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
         </aside>
