@@ -3158,15 +3158,13 @@ main.results{
 
     .filters-toggle{
       font-size: 1rem;
+      font-weight: bold;
       position: absolute;
       translate: 100%;
-      background: rgba(2, 6, 23, 0.92);
-      border: 2px solid rgba(255, 255, 255, 0.2);
-      border-left: none;
+      background: #ffef00;
       border-radius: 0 999px 999px 0;
-      color: #e2e8f0;
+      color: #000;
       box-shadow: 0 15px 40px -25px rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(10px);
       top: 0;
       right: 0;
       bottom: 0;
