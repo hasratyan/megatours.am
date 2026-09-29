@@ -570,10 +570,8 @@ export default function ResultsClient({
             </span>
             {!filtersOpen && t.results.filters.button}
           </button>
+          <h2>{t.results.filters.title}</h2>
           <div>
-            <div className="filters-header">
-              <h2>{t.results.filters.title}</h2>
-            </div>
             <div className="filters-section">
               <h3>{t.results.filters.priceRange}</h3>
               {priceBounds ? (
