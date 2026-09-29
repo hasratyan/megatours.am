@@ -11,26 +11,18 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { useLanguage } from "@/components/language-provider";
 import type { PluralForms } from "@/lib/i18n";
+import type { SearchLocationOption } from "@/lib/search-locations";
+import { isHotelInAoryxArea } from "@/lib/aoryx-area-filter";
 
 // Types - exported for use in search-form
-export type MapLocationOption = {
-  value: string;
-  label: string;
-  rawId?: string;
-  type: "destination" | "hotel";
-  parentDestinationId?: string;
-  lat?: number;
-  lng?: number;
-  rating?: number;
-  imageUrl?: string;
-  price?: string;
-};
+export type MapLocationOption = SearchLocationOption;
 
 export type HotelMapPickerProps = {
   hotels: MapLocationOption[];
   selectedHotel: MapLocationOption | null;
   onSelectHotel: (hotel: MapLocationOption) => void;
   isOpen?: boolean;
+  areaId?: string;
 };
 
 const MARKER_SIZE_DEFAULT = 28;
@@ -109,6 +101,7 @@ export default function HotelMapPicker({
   selectedHotel,
   onSelectHotel,
   isOpen = true,
+  areaId,
 }: HotelMapPickerProps) {
   const { locale, t } = useLanguage();
   const mapRef = useRef<HTMLDivElement>(null);
@@ -187,10 +180,11 @@ export default function HotelMapPicker({
         lng !== 0 &&
         !isNaN(lat) &&
         !isNaN(lng) &&
-        !hasZeroRating
+        !hasZeroRating &&
+        (!areaId || isHotelInAoryxArea(lat, lng, areaId))
       );
     });
-  }, [hotels]);
+  }, [hotels, areaId]);
 
   // Build a lookup map for hotels
   useEffect(() => {

@@ -12,6 +12,7 @@ export interface AoryxRoomSearch {
 export interface AoryxSearchParams {
   destinationCode?: string;
   hotelCode?: string;
+  areaId?: string;
   countryCode: string;
   nationality: string;
   checkInDate: string;

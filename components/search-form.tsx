@@ -16,6 +16,8 @@ import type { Locale as AppLocale } from "@/lib/i18n";
 import type { HotelMapPickerProps } from "./hotel-map-picker";
 import type { SearchFormDateRange, SearchFormDateRangePickerProps } from "./search-form-date-range-picker";
 import type { SearchFormLocationSelectProps } from "./search-form-location-select";
+import { getAreaLocationOptions, type SearchLocationOption as LocationOption } from "@/lib/search-locations";
+import { buildSearchQuery } from "@/lib/search-query";
 
 const MapPickerLoading = () => {
   const { t } = useLanguage();
@@ -67,19 +69,6 @@ const SearchFormDateRangePicker = dynamic<SearchFormDateRangePickerProps>(
 );
 
 // Types
-type LocationOption = {
-  value: string;
-  label: string;
-  rawId?: string;
-  type: "destination" | "hotel";
-  parentDestinationId?: string;
-  lat?: number;
-  lng?: number;
-  rating?: number;
-  imageUrl?: string;
-  price?: string;
-};
-
 type RoomConfig = {
   adults: number;
   children: number;
@@ -343,6 +332,7 @@ type Props = {
   hideLocationFields?: boolean;
   presetDestination?: { id: string; label?: string; rawId?: string };
   presetHotel?: { id: string; label?: string };
+  presetAreaId?: string;
   mapHotelRates?: Record<string, MapHotelRateMeta>;
   initialDateRange?: { startDate: Date; endDate: Date };
   initialRooms?: RoomConfig[];
@@ -364,6 +354,7 @@ export default function SearchForm({
   hideLocationFields = false,
   presetDestination,
   presetHotel,
+  presetAreaId,
   mapHotelRates,
   initialDateRange,
   initialRooms,
@@ -384,24 +375,39 @@ export default function SearchForm({
   const { locale: appLocale } = useLanguage();
   const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[appLocale];
+  const presetDestinationId = presetDestination?.id;
+  const presetDestinationLabel = presetDestination?.label;
+  const presetDestinationRawId = presetDestination?.rawId;
+  const presetHotelId = presetHotel?.id;
+  const presetHotelLabel = presetHotel?.label;
 
-  const presetDestinationOption: LocationOption | null = presetDestination
+  const presetDestinationOption = useMemo<LocationOption | null>(() => presetDestinationId
     ? {
-        value: presetDestination.id,
-        label: presetDestination.label ?? presetDestination.id,
-        rawId: presetDestination.rawId ?? presetDestination.id,
+        value: presetDestinationId,
+        label: presetDestinationLabel ?? presetDestinationId,
+        rawId: presetDestinationRawId ?? presetDestinationId,
         type: "destination",
       }
-    : null;
+    : null, [presetDestinationId, presetDestinationLabel, presetDestinationRawId]);
 
-  const presetHotelOption: LocationOption | null = presetHotel
+  const presetHotelOption = useMemo<LocationOption | null>(() => presetHotelId
     ? {
-        value: presetHotel.id,
-        label: presetHotel.label ?? presetHotel.id,
+        value: presetHotelId,
+        label: presetHotelLabel ?? presetHotelId,
         type: "hotel",
-        parentDestinationId: presetDestination?.rawId ?? presetDestination?.id,
+        parentDestinationId: presetDestinationRawId ?? presetDestinationId,
       }
-    : null;
+    : null, [presetHotelId, presetHotelLabel, presetDestinationRawId, presetDestinationId]);
+
+  const presetLocationOption = useMemo(() => presetHotelOption ?? (
+    presetDestinationOption && presetAreaId
+      ? getAreaLocationOptions(presetDestinationOption).find((option) => option.areaId === presetAreaId)
+      : null
+  ) ?? presetDestinationOption, [presetHotelOption, presetDestinationOption, presetAreaId]);
+  const presetLocationKey = presetLocationOption
+    ? `${presetLocationOption.type}:${presetLocationOption.value}`
+    : "";
+  const previousPresetLocationKey = useRef(presetLocationKey);
 
   // Destinations state
   const [destinations, setDestinations] = useState<LocationOption[]>([]);
@@ -411,7 +417,7 @@ export default function SearchForm({
   // State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<LocationOption | null>(
-    presetHotelOption ?? presetDestinationOption,
+    presetLocationOption,
   );
   const [hotels, setHotels] = useState<LocationOption[]>([]);
   const [hotelsLoading, setHotelsLoading] = useState(false);
@@ -513,6 +519,7 @@ export default function SearchForm({
       rawId: location.rawId,
       label,
       parentDestinationId: location.parentDestinationId,
+      areaId: location.areaId,
     };
     try {
       sessionStorage.setItem("megatours:lastSearchLocation", JSON.stringify(payload));
@@ -733,41 +740,38 @@ export default function SearchForm({
   );
 
   useEffect(() => {
-    if (!presetDestinationOption && !presetHotelOption) return;
+    const changedPreset = previousPresetLocationKey.current !== presetLocationKey;
+    previousPresetLocationKey.current = presetLocationKey;
+    if (!presetLocationOption) return;
     setSelectedLocation((current) => {
-      if (!current) return presetHotelOption ?? presetDestinationOption;
-      if (presetHotelOption && current.type === "hotel" && current.value === presetHotelOption.value) {
-        const nextLabel = presetHotelOption.label?.trim() ?? "";
-        const nextIsFallback = !nextLabel || nextLabel === presetHotelOption.value;
-        if (!nextIsFallback && current.label !== presetHotelOption.label) {
-          return presetHotelOption;
-        }
-      }
-      if (presetDestinationOption && current.type === "destination" && current.value === presetDestinationOption.value) {
-        const currentRawId = current.rawId ?? current.value;
-        const nextRawId = presetDestinationOption.rawId ?? presetDestinationOption.value;
-        const nextLabel = presetDestinationOption.label?.trim() ?? "";
-        const nextIsFallback = !nextLabel || nextLabel === presetDestinationOption.value;
-        if (!nextIsFallback && (current.label !== presetDestinationOption.label || currentRawId !== nextRawId)) {
-          return presetDestinationOption;
-        }
+      if (changedPreset || !current) return presetLocationOption;
+      if (current.type !== presetLocationOption.type || current.value !== presetLocationOption.value) return current;
+      const nextLabel = presetLocationOption.label.trim();
+      if (nextLabel && nextLabel !== presetLocationOption.value && (
+        current.label !== nextLabel || current.rawId !== presetLocationOption.rawId ||
+        current.parentDestinationId !== presetLocationOption.parentDestinationId
+      )) {
+        return presetLocationOption;
       }
       return current;
     });
-  }, [presetDestinationOption, presetHotelOption]);
+  }, [presetLocationOption, presetLocationKey]);
 
   useEffect(() => {
     if (destinations.length === 0) return;
     setSelectedLocation((current) => {
-      if (!current || current.type !== "destination") return current;
+      if (!current || current.type === "hotel") return current;
+      const currentDestinationId = current.type === "area" ? current.parentDestinationId : current.rawId ?? current.value;
       const match = destinations.find(
         (option) =>
-          option.value === current.value ||
-          option.rawId === current.value ||
-          option.value === current.rawId ||
-          option.rawId === current.rawId
+          option.value === currentDestinationId || option.rawId === currentDestinationId
       );
       if (!match) return current;
+      if (current.type === "area") {
+        const area = getAreaLocationOptions(match).find((option) => option.areaId === current.areaId);
+        return area && (area.label !== current.label || area.parentDestinationId !== current.parentDestinationId)
+          ? area : current;
+      }
       const currentRawId = current.rawId ?? current.value;
       const nextRawId = match.rawId ?? match.value;
       if (current.label === match.label && currentRawId === nextRawId) return current;
@@ -807,6 +811,10 @@ export default function SearchForm({
     if (destinationsInitialized) return;
     if (!referrerChecked) return;
     if (destinations.length === 0) return;
+    if (presetLocationOption) {
+      queueMicrotask(() => setDestinationsInitialized(true));
+      return;
+    }
 
     const referrerDestination = referrerPreset
       ? destinations.find(
@@ -839,6 +847,7 @@ export default function SearchForm({
     hideLocationFields,
     referrerChecked,
     referrerPreset,
+    presetLocationOption,
   ]);
 
   useEffect(() => {
@@ -952,6 +961,7 @@ export default function SearchForm({
             ? location.rawId ?? location.value
             : location.parentDestinationId ?? undefined,
         hotelCode: location.type === "hotel" ? location.value : undefined,
+        areaId: location.type === "area" ? location.areaId : undefined,
         countryCode: "AE",
         nationality: "AM",
         currency: "USD",
@@ -964,15 +974,7 @@ export default function SearchForm({
         })),
       };
 
-      const params = new URLSearchParams();
-      if (searchPayload.destinationCode) params.set("destinationCode", searchPayload.destinationCode);
-      if (searchPayload.hotelCode) params.set("hotelCode", searchPayload.hotelCode);
-      params.set("countryCode", searchPayload.countryCode);
-      params.set("nationality", searchPayload.nationality);
-      params.set("currency", searchPayload.currency ?? "USD");
-      params.set("checkInDate", searchPayload.checkInDate);
-      params.set("checkOutDate", searchPayload.checkOutDate);
-      params.set("rooms", JSON.stringify(searchPayload.rooms));
+      const params = new URLSearchParams(buildSearchQuery(searchPayload));
 
       try {
         if (onSubmitSearch) {
@@ -1106,7 +1108,10 @@ export default function SearchForm({
   }, [supportsPopover]);
 
   const combinedOptions = useMemo(() => {
-    const merged = [...destinations, ...hotels];
+    const merged = [
+      ...destinations.flatMap((destination) => [destination, ...getAreaLocationOptions(destination)]),
+      ...hotels,
+    ];
     if (
       selectedLocation &&
       !merged.some((opt) => opt.value === selectedLocation.value && opt.type === selectedLocation.type)
@@ -1117,11 +1122,12 @@ export default function SearchForm({
   }, [destinations, hotels, selectedLocation]);
 
   const mapHotels = useMemo(() => {
-    if (selectedLocation?.type !== "destination") return hotels;
+    if (!selectedLocation || selectedLocation.type === "hotel") return hotels;
 
     const selectedDestinationIds = new Set([
       ...getDestinationIdAliases(selectedLocation.value),
       ...getDestinationIdAliases(selectedLocation.rawId),
+      ...getDestinationIdAliases(selectedLocation.parentDestinationId),
     ]);
 
     return hotels.filter((hotel) =>
@@ -1212,6 +1218,7 @@ export default function SearchForm({
           {isMapOpen && !hotelsLoading ? (
             <HotelMapPicker
               hotels={mapHotels}
+              areaId={selectedLocation?.type === "area" ? selectedLocation.areaId : undefined}
               selectedHotel={selectedLocation?.type === "hotel" ? selectedLocation : null}
               onSelectHotel={handleMapHotelSelect}
               isOpen={isMapOpen}

@@ -19,6 +19,7 @@ import { useAmdRates } from "@/lib/use-amd-rates";
 import { fetchResultsSearch } from "@/lib/results-search-client";
 import { resolveAoryxMealCode } from "@/lib/aoryx-meals";
 import { summarizeHotelMealPrices } from "@/lib/aoryx-meal-pricing";
+import { resolveAoryxSearchArea } from "@/lib/aoryx-areas";
 
 const ratingOptions = [5, 4, 3, 2, 1] as const;
 const mealOptions = [
@@ -101,6 +102,7 @@ export default function ResultsClient({
     [searchKey, t]
   );
   const requestKey = parsed.payload ? buildSearchQuery(parsed.payload) : null;
+  const selectedArea = resolveAoryxSearchArea(parsed.payload?.areaId, parsed.payload?.destinationCode, parsed.payload?.hotelCode);
   const initialSearchKeyRef = useRef(requestKey);
   const [resultState, setResultState] = useState<SafeSearchResult | null>(initialResult);
   const [errorState, setErrorState] = useState<string | null>(initialError);
@@ -716,6 +718,7 @@ export default function ResultsClient({
               copy={t.search}
               presetDestination={presetDestination}
               presetHotel={presetHotel}
+              presetAreaId={parsed.payload?.areaId}
               mapHotelRates={mapHotelRates}
               initialDateRange={initialDateRange}
               initialRooms={initialRooms}
@@ -740,7 +743,7 @@ export default function ResultsClient({
             <>
               <div className="results-top">
                 <h1>
-                  {destinationFromList?.name ?? result?.destination?.name ?? t.results.fallbackTitle}
+                  {selectedArea?.name ?? destinationFromList?.name ?? result?.destination?.name ?? t.results.fallbackTitle}
                   {filteredPlacesLabel && (
                     <span>
                       • {filteredPlacesLabel}

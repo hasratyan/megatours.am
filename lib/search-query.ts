@@ -1,5 +1,6 @@
 import type { AoryxSearchParams } from "@/types/aoryx";
 import { normalizeAoryxMealSelection } from "@/lib/aoryx-meals";
+import { resolveAoryxSearchArea } from "@/lib/aoryx-areas";
 
 export type ParsedSearch = {
   payload: AoryxSearchParams | null;
@@ -55,6 +56,7 @@ export function parseSearchParams(
 ): ParsedSearch {
   const destinationCode = searchParams.get("destinationCode") ?? undefined;
   const hotelCode = searchParams.get("hotelCode") ?? undefined;
+  const area = resolveAoryxSearchArea(searchParams.get("areaId"), destinationCode, hotelCode);
   const countryCode = searchParams.get("countryCode") ?? "AE";
   const nationality = searchParams.get("nationality") ?? "AM";
   const currency = searchParams.get("currency") ?? "USD";
@@ -75,6 +77,7 @@ export function parseSearchParams(
     payload: {
       destinationCode,
       hotelCode,
+      ...(area ? { areaId: area.id } : {}),
       countryCode,
       nationality,
       currency,
@@ -91,6 +94,8 @@ export function buildSearchQuery(params: AoryxSearchParams): string {
   const search = new URLSearchParams();
   if (params.destinationCode) search.set("destinationCode", params.destinationCode);
   if (params.hotelCode) search.set("hotelCode", params.hotelCode);
+  const area = resolveAoryxSearchArea(params.areaId, params.destinationCode, params.hotelCode);
+  if (area) search.set("areaId", area.id);
   search.set("countryCode", params.countryCode);
   search.set("nationality", params.nationality);
   search.set("currency", params.currency ?? "USD");

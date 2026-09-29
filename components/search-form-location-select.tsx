@@ -8,23 +8,11 @@ import Select, {
   type ControlProps,
   type OptionProps,
 } from "react-select";
-
-type LocationOption = {
-  value: string;
-  label: string;
-  rawId?: string;
-  type: "destination" | "hotel";
-  parentDestinationId?: string;
-  lat?: number;
-  lng?: number;
-  rating?: number;
-  imageUrl?: string;
-  price?: string;
-};
+import type { SearchLocationOption as LocationOption } from "@/lib/search-locations";
 
 const LocationControl = (props: ControlProps<LocationOption, false>) => {
   const current = props.getValue()[0];
-  const icon = current?.type === "hotel" ? "hotel" : current?.type === "destination" ? "location_city" : "travel_explore";
+  const icon = current?.type === "hotel" ? "hotel" : current?.type === "area" ? "location_on" : current?.type === "destination" ? "location_city" : "travel_explore";
   return (
     <selectComponents.Control {...props}>
       <span className="material-symbols-rounded" aria-hidden="true">{icon}</span>
@@ -35,11 +23,18 @@ const LocationControl = (props: ControlProps<LocationOption, false>) => {
 
 const LocationOptionRow = (props: OptionProps<LocationOption, false>) => (
   <selectComponents.Option {...props}>
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, paddingLeft: props.data.type === "area" ? 24 : 0 }}>
       <span className="material-symbols-rounded" aria-hidden="true" style={{ margin: 0 }}>
-        {props.data.type === "destination" ? "location_city" : "hotel"}
+        {props.data.type === "destination" ? "location_city" : props.data.type === "area" ? "location_on" : "hotel"}
       </span>
-      {props.data.type === "destination" ? <strong>{props.data.label}</strong> : <span>{props.data.label}</span>}
+      {props.data.type === "destination" ? <strong>{props.data.label}</strong> : (
+        <span>
+          {props.data.areaName ?? props.data.label}
+          {props.data.type === "area" && (
+            <small style={{ display: "block", opacity: 0.65 }}>{props.data.parentDestinationLabel}</small>
+          )}
+        </span>
+      )}
     </div>
   </selectComponents.Option>
 );

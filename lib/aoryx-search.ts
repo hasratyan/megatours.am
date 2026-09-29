@@ -15,6 +15,8 @@ import { applyMarkup } from "@/lib/pricing-utils";
 import { isTechnicalErrorMessage } from "@/lib/error-utils";
 import { createSearchToken } from "@/lib/aoryx-rate-tokens";
 import type { AoryxSearchParams, AoryxSearchResult } from "@/types/aoryx";
+import { resolveAoryxSearchArea } from "@/lib/aoryx-areas";
+import { isHotelInAoryxArea } from "@/lib/aoryx-area-filter";
 
 export type SafeSearchResult = Omit<AoryxSearchResult, "sessionId"> & {
   searchToken?: string | null;
@@ -46,12 +48,16 @@ export async function runAoryxSearch(
     timing.measure("pricing", () => getAoryxHotelB2BPlatformFee()),
   ]);
   options.signal?.throwIfAborted();
+  const area = resolveAoryxSearchArea(params.areaId, params.destinationCode, params.hotelCode);
+  const hotels = area
+    ? result.hotels.filter((hotel) => isHotelInAoryxArea(hotel.latitude, hotel.longitude, area.id))
+    : result.hotels;
   const safeResult: SafeSearchResult = {
     currency: result.currency,
-    propertyCount: result.propertyCount,
+    propertyCount: area ? hotels.length : result.propertyCount,
     responseTime: result.responseTime,
     destination: result.destination,
-    hotels: result.hotels,
+    hotels,
     searchToken: createSearchToken({ sessionId: result.sessionId, searchParams: params }),
   };
   if (hotelMarkup && Array.isArray(safeResult.hotels)) {
