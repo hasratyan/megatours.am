@@ -3195,6 +3195,9 @@ main.results{
           font-weight: 600;
           border-bottom: 1px solid #475569;
           padding-bottom: 0.75em;
+          display: flex;
+          align-items: center;
+          gap: 0.25em;
         }
       }
 

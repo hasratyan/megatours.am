@@ -573,7 +573,7 @@ export default function ResultsClient({
           <h2>{t.results.filters.title}</h2>
           <div>
             <div className="filters-section">
-              <h3>{t.results.filters.priceRange}</h3>
+              <h3><span className="material-symbols-rounded">attach_money</span>{t.results.filters.priceRange}</h3>
               {priceBounds ? (
                 <>
                   <div className="filter-range-values">
@@ -656,7 +656,7 @@ export default function ResultsClient({
               )}
             </div>
             <div className="filters-section">
-              <h3>{t.results.filters.rating}</h3>
+              <h3><span className="material-symbols-rounded">star</span>{t.results.filters.rating}</h3>
               <div className="filter-options">
                 {ratingOptions.map((rating) => (
                   <label key={rating} className="filter-option">
@@ -680,7 +680,7 @@ export default function ResultsClient({
               </div>
             </div>
             <div className="filters-section">
-              <h3>{t.results.filters.meals}</h3>
+              <h3><span className="material-symbols-rounded">restaurant</span>{t.results.filters.meals}</h3>
               <div className="filter-options filter-options--meals">
                 {mealOptions.map((option) => (
                   <label key={option.code} className="filter-option">
