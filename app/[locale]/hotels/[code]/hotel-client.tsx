@@ -1029,7 +1029,7 @@ export default function HotelClient({
   );
   const [roomsError, setRoomsError] = useState<string | null>(initialRoomsError);
   const [mealFilter, setMealFilter] = useState<string>(mealFilterFromUrl);
-  const [priceSort, setPriceSort] = useState<"default" | "asc" | "desc">("default");
+  const [priceSort, setPriceSort] = useState<"default" | "asc" | "desc">("asc");
   const [favoriteChecking, setFavoriteChecking] = useState(false);
   const [favoritePending, setFavoritePending] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
