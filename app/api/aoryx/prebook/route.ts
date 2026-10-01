@@ -4,6 +4,8 @@ import { getSessionFromCookie, setPrebookCookie } from "../_shared";
 import { decodeRateToken, hashRateKey, isRateToken } from "@/lib/aoryx-rate-tokens";
 import { localizeAoryxRoomOptions } from "@/lib/aoryx-room-localization";
 import { resolveTranslationLocale } from "@/lib/text-translation";
+import { getAoryxHotelPlatformFee } from "@/lib/pricing";
+import { withAoryxDisplayPrice } from "@/lib/aoryx-pricing";
 
 export const runtime = "nodejs";
 
@@ -119,7 +121,10 @@ export async function POST(request: NextRequest) {
         : request.headers.get("x-locale") ?? request.headers.get("accept-language")
     );
 
-    const result = await preBook(sessionId, hotelCode, resolvedGroupCode, rateKeys, currency);
+    const [result, hotelMarkup] = await Promise.all([
+      preBook(sessionId, hotelCode, resolvedGroupCode, rateKeys, currency),
+      getAoryxHotelPlatformFee(),
+    ]);
     const localizedRooms =
       requestedLocale === "en"
         ? result.rooms
@@ -129,13 +134,14 @@ export async function POST(request: NextRequest) {
           });
 
     const resolvedSessionId = result.sessionId || sessionId;
-    const rooms = localizedRooms.map((room) => ({
+    const rooms = localizedRooms.map((room) => withAoryxDisplayPrice({
       roomIdentifier: typeof room.roomIdentifier === "number" ? room.roomIdentifier : null,
+      totalPrice: room.totalPrice,
       price: room.price ?? null,
       policies: Array.isArray(room.policies) ? room.policies : [],
       remarks: Array.isArray(room.remarks) ? room.remarks : [],
       cancellationPolicy: room.cancellationPolicy ?? null,
-    }));
+    }, hotelMarkup));
 
     const response = NextResponse.json({
       isBookable: result.isBookable ?? null,

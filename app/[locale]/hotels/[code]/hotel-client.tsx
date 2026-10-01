@@ -412,6 +412,8 @@ type PrebookContext = {
 
 type PrebookRoomSnapshot = {
   roomIdentifier: number | null;
+  totalPrice?: number | null;
+  displayTotalPrice?: number | null;
   price?: AoryxRoomOption["price"] | null;
   policies: NonNullable<AoryxRoomOption["policies"]>;
   remarks: NonNullable<AoryxRoomOption["remarks"]>;
@@ -679,6 +681,8 @@ const mergePrebookExtras = (
     return {
       ...room,
       price: matched.price ?? room.price ?? null,
+      totalPrice: matched.totalPrice ?? room.totalPrice,
+      displayTotalPrice: matched.displayTotalPrice ?? room.displayTotalPrice,
       policies: matched.policies.length > 0 ? matched.policies : room.policies ?? [],
       remarks: matched.remarks.length > 0 ? matched.remarks : room.remarks ?? [],
       cancellationPolicy: matched.cancellationPolicy ?? room.cancellationPolicy ?? null,

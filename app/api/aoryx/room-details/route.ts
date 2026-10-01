@@ -9,7 +9,7 @@ import { AORYX_TASSPRO_CUSTOMER_CODE, AORYX_TASSPRO_REGION_ID } from "@/lib/env"
 import type { AoryxSearchParams, AoryxRoomSearch } from "@/types/aoryx";
 import { decodeSearchToken, hashSearchRooms, obfuscateRoomOptions } from "@/lib/aoryx-rate-tokens";
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
-import { applyMarkup } from "@/lib/pricing-utils";
+import { withAoryxDisplayPrice } from "@/lib/aoryx-pricing";
 import { localizeAoryxRoomOptions } from "@/lib/aoryx-room-localization";
 import { resolveTranslationLocale } from "@/lib/text-translation";
 import { normalizeAoryxMealSelection } from "@/lib/aoryx-meals";
@@ -146,16 +146,7 @@ export async function POST(request: NextRequest) {
             console.error("[Aoryx][room-details] Failed to localize room content", error);
             return obfuscatedRooms;
           });
-    const roomsWithDisplayPrice =
-      typeof hotelMarkup === "number"
-        ? localizedRooms.map((room) => ({
-            ...room,
-            displayTotalPrice:
-              typeof room.totalPrice === "number" && Number.isFinite(room.totalPrice)
-                ? applyMarkup(room.totalPrice, hotelMarkup) ?? room.totalPrice
-                : room.totalPrice,
-          }))
-        : localizedRooms;
+    const roomsWithDisplayPrice = localizedRooms.map((room) => withAoryxDisplayPrice(room, hotelMarkup));
     const response = NextResponse.json({
       currency: result.currency ?? null,
       rooms: roomsWithDisplayPrice,

@@ -10,7 +10,7 @@ import {
   AORYX_TASSPRO_CUSTOMER_CODE,
   AORYX_TASSPRO_REGION_ID,
 } from "@/lib/env";
-import { getAoryxHotelB2BPlatformFee } from "@/lib/pricing";
+import { getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { applyMarkup } from "@/lib/pricing-utils";
 import { isTechnicalErrorMessage } from "@/lib/error-utils";
 import { createSearchToken } from "@/lib/aoryx-rate-tokens";
@@ -45,7 +45,7 @@ export async function runAoryxSearch(
       environment: options.environment ?? AORYX_RUNTIME_ENV,
       signal: options.signal,
     })),
-    timing.measure("pricing", () => getAoryxHotelB2BPlatformFee()),
+    timing.measure("pricing", () => getAoryxHotelPlatformFee()),
   ]);
   options.signal?.throwIfAborted();
   const area = resolveAoryxSearchArea(params.areaId, params.destinationCode, params.hotelCode);

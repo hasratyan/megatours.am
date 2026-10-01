@@ -21,6 +21,7 @@ import { logAoryxEndpointError } from "@/lib/aoryx-error-log";
 import { logAoryxFlow } from "@/lib/aoryx-flow-logger";
 import { resolveAoryxMealCode } from "@/lib/aoryx-meals";
 import { groupCompleteRoomOptions } from "@/lib/aoryx-room-groups";
+import { getAoryxRateAmount } from "@/lib/aoryx-pricing";
 import type {
   AoryxSearchParams,
   AoryxSearchRequest,
@@ -582,7 +583,10 @@ function normalizeSearchHotel(hotel: AoryxSearchHotel, currency: string | null, 
     marriageIdentifier: toInteger(room.MarriageIdentifier),
     rateKey: toStringValue(room.RateKey),
     mealCode: resolveAoryxMealCode(room.MealCode) ?? resolveAoryxMealCode(room.Meal),
-    totalPrice: toNumber(isRecord(room.Price) ? room.Price.Gross : null),
+    totalPrice: getAoryxRateAmount(isRecord(room.Price) ? {
+      net: toNumber(room.Price.Net),
+      gross: toNumber(room.Price.Gross),
+    } : null),
   }));
   const completeGroups = groupCompleteRoomOptions(roomOptions, requestedRooms);
   const mealPrices = new Map<string, number | null>();
@@ -605,9 +609,9 @@ function normalizeSearchHotel(hotel: AoryxSearchHotel, currency: string | null, 
   return {
     code: toStringValue(hotel.Code),
     name: toStringValue(info?.Name) ?? toStringValue(hotel.Name),
-    minPrice: requestedRooms.length > 1
-      ? (bundlePrices.length > 0 ? Math.min(...bundlePrices) : null)
-      : toNumber(hotel.MinPrice),
+    minPrice: bundlePrices.length > 0
+      ? Math.min(...bundlePrices)
+      : requestedRooms.length > 1 ? null : toNumber(hotel.MinPrice),
     currency: currency,
     rating: toNumber(info?.StarRating), // API uses "StarRating" as string
     address: toStringValue(info?.Add1), // API uses "Add1" for address
@@ -1096,7 +1100,7 @@ function normalizeRoomOptions(response: AoryxRoomDetailsResponse | Record<string
       room.NetPrice,
       room.Amount,
     ];
-    let amount: number | null = priceDetails?.gross ?? null;
+    let amount: number | null = getAoryxRateAmount(priceDetails);
     let currency: string | null = null;
     if (amount === null) {
       for (const candidate of priceCandidates) {
@@ -1110,7 +1114,7 @@ function normalizeRoomOptions(response: AoryxRoomDetailsResponse | Record<string
     }
 
     if (amount === null) {
-      amount = priceDetails?.gross ?? priceDetails?.net ?? null;
+      amount = getAoryxRateAmount(priceDetails);
     }
 
     if (!currency) {

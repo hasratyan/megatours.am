@@ -10,11 +10,13 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier.startsWith("@/")) {
-      return next(pathToFileURL(`${root}${specifier.slice(2)}.ts`).href, context);
+      const extension = specifier.endsWith(".json") ? "" : ".ts";
+      return next(pathToFileURL(`${root}${specifier.slice(2)}${extension}`).href, context);
     }
     if (
       specifier.startsWith(".") &&
       !specifier.endsWith(".ts") &&
+      !specifier.endsWith(".json") &&
       context.parentURL?.startsWith(pathToFileURL(root).href) &&
       !context.parentURL.includes("/node_modules/")
     ) {
@@ -23,6 +25,13 @@ registerHooks({
     return next(specifier, context);
   },
   load(url, context, next) {
+    if (url.startsWith(pathToFileURL(root).href) && !url.includes("/node_modules/") && url.endsWith(".json")) {
+      return {
+        format: "module",
+        shortCircuit: true,
+        source: `export default ${readFileSync(fileURLToPath(url), "utf8")};`,
+      };
+    }
     if (url.startsWith(pathToFileURL(root).href) && url.endsWith(".ts")) {
       return {
         format: "module",
