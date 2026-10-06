@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState, useMemo, useCallback, useEffect, useRef, useId } from "react";
+import { FormEvent, useState, useMemo, useCallback, useEffect, useRef, useId, useSyncExternalStore } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -127,7 +127,9 @@ export type SearchCopy = {
   };
 };
 
-// Helper to build default dates
+// Calendar defaults use the visitor's clock after the static shell hydrates.
+const subscribeToHydration = () => () => {};
+
 const buildDefaultDates = () => {
   const today = new Date();
   const checkIn = new Date(today);
@@ -369,6 +371,7 @@ export default function SearchForm({
 }: Props) {
   "use memo";
 
+  const hydrated = useSyncExternalStore(subscribeToHydration, () => true, () => false);
   const defaults = useMemo(() => buildDefaultDates(), []);
   const reactSelectId = useId().replace(/:/g, "");
   const locationSelectInstanceId = `search-location-${reactSelectId}`;
@@ -1255,7 +1258,7 @@ export default function SearchForm({
               date_range
             </span>
             <span>
-              {dateRange.startDate && dateRange.endDate
+              {hydrated && dateRange.startDate && dateRange.endDate
                 ? (
                   <>
                     {formatDateDisplay(dateRange.startDate, intlLocale)}{" "}
