@@ -9,6 +9,12 @@ import RouteLoading from "@/components/route-loading";
 import { buildHotelShareTitle, resolveHotelPrimaryImageUrl } from "@/lib/hotel-share";
 import { buildHotelStructuredData } from "@/lib/structured-data";
 import type { AoryxHotelInfoResult } from "@/types/aoryx";
+import { navigation } from "next/cache";
+import { getHotelGalleryImages, getHotelPrefetchSummary } from "@/lib/hotel-presentation";
+import ImageGallery from "./ImageGallery";
+import HotelAmenities from "./HotelAmenities";
+
+export const ensureStatic = "prefetch";
 
 const resolveLocale = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
@@ -114,7 +120,7 @@ async function HotelContent({ params }: PageProps) {
     hotelInfoResult && hotelCode
       ? buildHotelStructuredData({
           locale: resolvedLocale,
-          hotel: hotelInfoResult,
+          hotel: { ...hotelInfoResult, imageUrls: hotelInfoResult.imageUrls.slice(0, 5) },
           path: `/${resolvedLocale}/hotels/${hotelCode}`,
         })
       : null;
@@ -126,7 +132,21 @@ async function HotelContent({ params }: PageProps) {
       ) : null}
       <Suspense fallback={null}>
         <HotelClient
-          initialHotelInfo={hotelInfoResult}
+          initialHotelInfo={hotelInfoResult ? getHotelPrefetchSummary(hotelInfoResult) : null}
+          gallery={hotelInfoResult && hotelCode ? (
+            <Suspense fallback={
+              <ImageGallery hotelCode={hotelCode}
+                images={getHotelGalleryImages(hotelInfoResult.imageUrls).slice(0, 1)}
+                altText={hotelInfoResult.name ?? t.results.hotel.fallbackName} />
+            }>
+              <HotelGallery hotelCode={hotelCode} locale={resolvedLocale} />
+            </Suspense>
+          ) : null}
+          amenities={hotelInfoResult && hotelCode ? (
+            <Suspense fallback={null}>
+              <HotelAmenityContent hotelCode={hotelCode} />
+            </Suspense>
+          ) : null}
           initialRoomDetails={null}
           initialHotelError={hotelError}
           initialRoomsError={null}
@@ -135,4 +155,22 @@ async function HotelContent({ params }: PageProps) {
       </Suspense>
     </>
   );
+}
+
+async function HotelGallery({ hotelCode, locale }: { hotelCode: string; locale: Locale }) {
+  await navigation();
+  const info = await getHotelInfoCached(hotelCode);
+  if (!info) return null;
+  const images = getHotelGalleryImages(info.imageUrls);
+  if (!images.length) return null;
+  return <ImageGallery hotelCode={hotelCode} images={images}
+    altText={info.name ?? getTranslations(locale).results.hotel.fallbackName} />;
+}
+
+async function HotelAmenityContent({ hotelCode }: { hotelCode: string }) {
+  await navigation();
+  const info = await getHotelInfoCached(hotelCode);
+  return info?.masterHotelAmenities?.length
+    ? <HotelAmenities key={hotelCode} amenities={info.masterHotelAmenities} />
+    : null;
 }

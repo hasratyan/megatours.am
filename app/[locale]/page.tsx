@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import RouteLoading from "@/components/route-loading";
 import { getTranslations } from "@/lib/i18n-server";
 import Home from "./home";
 import JsonLd from "@/components/json-ld";
@@ -5,6 +7,8 @@ import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { getFeaturedHotelCards, type FeaturedHotelCard } from "@/lib/featured-hotels";
 import { buildHomeStructuredData } from "@/lib/structured-data";
+
+export const ensureStatic = "navigation";
 
 type PageProps = {
   params: Promise<{ locale: string }>;
@@ -25,7 +29,11 @@ export async function generateMetadata({ params }: PageProps) {
   });
 }
 
-export default async function HomePage({ params }: PageProps) {
+export default function HomePage({ params }: PageProps) {
+  return <Suspense fallback={<RouteLoading />}><HomeContent params={params} /></Suspense>;
+}
+
+async function HomeContent({ params }: PageProps) {
   const { locale } = await params;
   const resolvedLocale = resolveLocale(locale);
   const t = getTranslations(resolvedLocale);

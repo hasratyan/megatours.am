@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useState, useMemo, useCallback, useEffect, useRef, useId, useSyncExternalStore } from "react";
+import { FormEvent, useState, useMemo, useCallback, useEffect, useRef, useId, Suspense } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import SearchDateRangeLabel from "./search-date-range-label";
 import { useCurrency } from "@/components/currency-provider";
 import { useLanguage } from "@/components/language-provider";
 import StarBorder from '@/components/StarBorder'
@@ -127,9 +128,6 @@ export type SearchCopy = {
   };
 };
 
-// Calendar defaults use the visitor's clock after the static shell hydrates.
-const subscribeToHydration = () => () => {};
-
 const buildDefaultDates = () => {
   const today = new Date();
   const checkIn = new Date(today);
@@ -148,14 +146,6 @@ const formatDateLocal = (date: Date): string => {
 };
 
 // Helper to format date for display (consistent between server and client)
-const formatDateDisplay = (date: Date, locale: string): string => {
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  // Use consistent format: DD.MM.YYYY for all locales to avoid hydration mismatch
-  return `${day}.${month}.${year}`;
-};
-
 const parseFiniteNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -371,8 +361,9 @@ export default function SearchForm({
 }: Props) {
   "use memo";
 
-  const hydrated = useSyncExternalStore(subscribeToHydration, () => true, () => false);
-  const defaults = useMemo(() => buildDefaultDates(), []);
+  const defaults = useMemo(() => typeof window === "undefined"
+    ? { checkIn: undefined, checkOut: undefined }
+    : buildDefaultDates(), []);
   const reactSelectId = useId().replace(/:/g, "");
   const locationSelectInstanceId = `search-location-${reactSelectId}`;
   const locationSelectInputId = `${locationSelectInstanceId}-input`;
@@ -1258,15 +1249,10 @@ export default function SearchForm({
               date_range
             </span>
             <span>
-              {hydrated && dateRange.startDate && dateRange.endDate
-                ? (
-                  <>
-                    {formatDateDisplay(dateRange.startDate, intlLocale)}{" "}
-                    <span className="material-symbols-rounded">arrow_forward</span>{" "}
-                    {formatDateDisplay(dateRange.endDate, intlLocale)}
-                  </>
-                )
-                : copy.datePlaceholder}
+              <Suspense fallback={copy.datePlaceholder}>
+                <SearchDateRangeLabel startDate={dateRange.startDate} endDate={dateRange.endDate}
+                  placeholder={copy.datePlaceholder} />
+              </Suspense>
             </span>
           </button>
           {showDatePicker && !isFormDisabled && (

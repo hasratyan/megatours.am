@@ -1,6 +1,10 @@
+import { Suspense } from "react";
+import RouteLoading from "@/components/route-loading";
 import { getTranslations } from "@/lib/i18n-server";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
+
+export const ensureStatic = "navigation";
 
 type PageProps = {
   params: Promise<{ locale: string }>;
@@ -21,7 +25,11 @@ export async function generateMetadata({ params }: PageProps) {
   });
 }
 
-export default async function PrivacyPolicyPage({ params }: PageProps) {
+export default function PrivacyPolicyPage({ params }: PageProps) {
+  return <Suspense fallback={<RouteLoading />}><PrivacyPolicyContent params={params} /></Suspense>;
+}
+
+async function PrivacyPolicyContent({ params }: PageProps) {
   const { locale } = await params;
   const t = getTranslations(resolveLocale(locale));
 

@@ -6,12 +6,14 @@ import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
+import dynamic from "next/dynamic";
 import { useSession } from "@/lib/auth-compat/react";
-import Select, {
-  type CSSObjectWithLabel,
-  type SingleValue,
-  type StylesConfig,
+import type {
+  CSSObjectWithLabel,
+  SingleValue,
+  StylesConfig,
 } from "react-select";
+import type { InsuranceSelectOption as AddressSelectOption, InsuranceSelectProps } from "./checkout-insurance-select";
 import { useCurrency } from "@/components/currency-provider";
 import { useLanguage } from "@/components/language-provider";
 import { ApiError, postJson } from "@/lib/api-helpers";
@@ -140,13 +142,9 @@ const paymentMethodOrder: CheckoutPaymentMethod[] = ["idram", "idbank_card", "am
 const isCheckoutPaymentMethod = (value: PaymentMethod): value is CheckoutPaymentMethod =>
   value !== "admin";
 
-type AddressSelectOption = {
-  value: string;
-  label: string;
-  flag?: string;
-  alpha2?: string | null;
-  alpha3?: string | null;
-};
+const InsuranceSelect = dynamic<InsuranceSelectProps>(() => import("./checkout-insurance-select"), {
+  loading: () => <div className="checkout-input" aria-hidden="true">…</div>,
+});
 
 const checkoutAddressSelectStyles: StylesConfig<AddressSelectOption, false> = {
   container: (base: CSSObjectWithLabel) => ({
@@ -4342,7 +4340,7 @@ export default function PackageCheckoutClient({
                           </label>
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.citizenship}</span>
-                            <Select<AddressSelectOption>
+                            <InsuranceSelect
                               options={citizenshipSelectOptions}
                               value={citizenshipSelectValue}
                               onChange={(selected: SingleValue<AddressSelectOption>) => {
@@ -4428,7 +4426,7 @@ export default function PackageCheckoutClient({
                         <div className="checkout-field-grid addresses">
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.country}</span>
-                            <Select<AddressSelectOption>
+                            <InsuranceSelect
                               options={efesCountryOptions}
                               value={countrySelectValue}
                               onChange={(selected: SingleValue<AddressSelectOption>) => {
@@ -4481,7 +4479,7 @@ export default function PackageCheckoutClient({
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.region}</span>
                             {useRegionSelect ? (
-                              <Select<AddressSelectOption>
+                              <InsuranceSelect
                                 options={regionSelectOptions}
                                 value={regionSelectValue}
                                 onChange={(selected: SingleValue<AddressSelectOption>) => {
@@ -4525,7 +4523,7 @@ export default function PackageCheckoutClient({
                           <label className="checkout-field">
                             <span>{t.packageBuilder.checkout.insuranceFields.city}</span>
                             {useCitySelect ? (
-                              <Select<AddressSelectOption>
+                              <InsuranceSelect
                                 options={citySelectOptions}
                                 value={citySelectValue}
                                 onChange={(selected: SingleValue<AddressSelectOption>) =>

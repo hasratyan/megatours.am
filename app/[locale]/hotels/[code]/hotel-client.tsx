@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signIn, useSession } from "@/lib/auth-compat/react";
 import SearchForm from "@/components/search-form";
@@ -27,7 +27,6 @@ import {
   type MealPlanKey,
 } from "@/lib/meal-plans";
 import { useAmdRates } from "@/lib/use-amd-rates";
-import ImageGallery from "./ImageGallery";
 import {
   PACKAGE_BUILDER_SESSION_MS,
   openPackageBuilder,
@@ -459,6 +458,8 @@ type SafeRoomDetails = {
 
 type HotelClientProps = {
   initialHotelInfo: AoryxHotelInfoResult | null;
+  gallery: ReactNode;
+  amenities: ReactNode;
   initialRoomDetails: SafeRoomDetails | null;
   initialHotelError?: string | null;
   initialRoomsError?: string | null;
@@ -833,6 +834,8 @@ const describePolicyCondition = (
 
 export default function HotelClient({
   initialHotelInfo,
+  gallery,
+  amenities,
   initialRoomDetails,
   initialHotelError = null,
   initialRoomsError = null,
@@ -1039,14 +1042,11 @@ export default function HotelClient({
   const [isFavorite, setIsFavorite] = useState(false);
   const [error, setError] = useState<string | null>(initialHotelError);
   const [resolvedDestinationCode, setResolvedDestinationCode] = useState<string | null>(null);
-  const amenitiesRef = useRef<HTMLDivElement | null>(null);
   const bookingPopoverRef = useRef<HTMLDivElement | null>(null);
   const roomOptionsErrorPopoverRef = useRef<HTMLDivElement | null>(null);
   const metaViewContentTrackedKeyRef = useRef<string | null>(null);
   const destinationCode =
     destinationCodeFromQuery ?? hotelInfo?.destinationId ?? resolvedDestinationCode ?? undefined;
-  const [amenitiesExpanded, setAmenitiesExpanded] = useState(false);
-  const [amenitiesOverflow, setAmenitiesOverflow] = useState(false);
   const finalError = error;
   const heroImageUrl = resolveHotelPrimaryImageUrl(hotelInfo);
 
@@ -1186,30 +1186,6 @@ export default function HotelClient({
   ]);
 
   useEffect(() => {
-    queueMicrotask(() => setAmenitiesExpanded(false));
-  }, [hotelInfo?.systemId]);
-
-  useEffect(() => {
-    const element = amenitiesRef.current;
-    if (!element) return;
-
-    const measure = () => {
-      if (amenitiesExpanded) return;
-      const isOverflowing = element.scrollHeight > element.clientHeight + 1;
-      setAmenitiesOverflow(isOverflowing);
-    };
-
-    measure();
-
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => {
-      observer.disconnect();
-    };
-  }, [amenitiesExpanded, hotelInfo?.masterHotelAmenities]);
-
-  useEffect(() => {
     const element = bookingPopoverRef.current;
     if (!element) return;
     const isOpen = element.matches?.(":popover-open");
@@ -1233,43 +1209,6 @@ export default function HotelClient({
     }
   }, [roomOptionsSurfaceError]);
   const roundedRating = Math.round(hotelInfo?.rating ?? 0);
-  const galleryImages = useMemo(() => {
-    const unique = new Map<string, { url: string; score: number }>();
-    const buildKeyAndScore = (value: string) => {
-      const trimmed = value.trim();
-      if (!trimmed) return null;
-      try {
-        const parsed = new URL(trimmed);
-        const normalizedPath = decodeURIComponent(parsed.pathname)
-          .replace(/\/(thumbnail|full)\//gi, "/")
-          .replace(/\/+$/g, "")
-          .toLowerCase();
-        const key = normalizedPath;
-        const score = /\/full\//i.test(parsed.pathname) ? 2 : /\/thumbnail\//i.test(parsed.pathname) ? 1 : 0;
-        return { key, score, url: trimmed };
-      } catch {
-        const normalizedPath = trimmed
-          .replace(/[?#].*$/g, "")
-          .replace(/\/(thumbnail|full)\//gi, "/")
-          .replace(/\/+$/g, "")
-          .toLowerCase();
-        const score = /\/full\//i.test(trimmed) ? 2 : /\/thumbnail\//i.test(trimmed) ? 1 : 0;
-        return { key: normalizedPath, score, url: trimmed };
-      }
-    };
-    const add = (value?: string | null) => {
-      if (typeof value === "string") {
-        const normalized = buildKeyAndScore(value);
-        if (!normalized) return;
-        const existing = unique.get(normalized.key);
-        if (!existing || normalized.score > existing.score) {
-          unique.set(normalized.key, { url: normalized.url, score: normalized.score });
-        }
-      }
-    };
-    (hotelInfo?.imageUrls ?? []).forEach(add);
-    return Array.from(unique.values()).map((entry) => entry.url);
-  }, [hotelInfo?.imageUrls]);
   const hotelCoordinates = useMemo(() => {
     const lat = toFinite(hotelInfo?.geoCode?.lat) ?? fallbackCoordinates?.lat ?? null;
     const lon = toFinite(hotelInfo?.geoCode?.lon) ?? fallbackCoordinates?.lon ?? null;
@@ -2767,44 +2706,11 @@ export default function HotelClient({
             </div>
           )}
 
-          {!finalError && galleryImages.length > 0 && (
-              <ImageGallery
-                hotelCode={hotelCode ?? ""}
-                images={galleryImages}
-                altText={hotelInfo?.name ?? t.results.hotel.fallbackName}
-              />
-          )}
+          {!finalError && gallery}
 
           {!finalError && (
             <div className="container">
-              {hotelInfo?.masterHotelAmenities?.length ? (
-                <div className="amenities-wrapper">
-                  <h2>{t.hotel.amenities.title}</h2>
-                  <div
-                    ref={amenitiesRef}
-                    className={`amenities${amenitiesExpanded ? " is-expanded" : ""}`}
-                    id="hotel-amenities"
-                  >
-                    {hotelInfo.masterHotelAmenities.map((amenity, index) => (
-                      <span key={`${amenity}-${index}`}>{amenity}</span>
-                    ))}
-                  </div>
-                  {amenitiesOverflow && (
-                    <button
-                      type="button"
-                      className="amenities-toggle"
-                      aria-expanded={amenitiesExpanded}
-                      aria-controls="hotel-amenities"
-                      onClick={() => setAmenitiesExpanded((prev) => !prev)}
-                    >
-                      <span className="material-symbols-rounded">
-                        {amenitiesExpanded ? "expand_less" : "expand_more"}
-                      </span>
-                      {amenitiesExpanded ? t.hotel.amenities.showLess : t.hotel.amenities.showAll}
-                    </button>
-                  )}
-                </div>
-              ) : null}
+              {amenities}
               <div className="search">
                 <SearchForm
                   copy={t.search}

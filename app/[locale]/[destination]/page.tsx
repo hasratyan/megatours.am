@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import RouteLoading from "@/components/route-loading";
 import { notFound } from "next/navigation";
 import DestinationPage from "@/components/destination-page";
 import JsonLd from "@/components/json-ld";
@@ -5,6 +7,8 @@ import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, type Locale, locales } from "@/lib/i18n";
 import { destinationSlugs, getDestinationData } from "@/lib/destination-data";
 import { buildDestinationStructuredData } from "@/lib/structured-data";
+
+export const ensureStatic = "navigation";
 
 type PageProps = {
   params: Promise<{
@@ -43,7 +47,11 @@ export async function generateMetadata({ params }: PageProps) {
   });
 }
 
-export default async function DestinationRoute({ params }: PageProps) {
+export default function DestinationRoute({ params }: PageProps) {
+  return <Suspense fallback={<RouteLoading />}><DestinationContent params={params} /></Suspense>;
+}
+
+async function DestinationContent({ params }: PageProps) {
   const { locale, destination } = await params;
   const resolvedLocale = resolveLocale(locale);
   const data = getDestinationData(destination);

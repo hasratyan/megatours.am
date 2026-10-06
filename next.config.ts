@@ -15,6 +15,9 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     turbopackRustReactCompiler: true,
+    // Keep the new experimental cache/compiler behavior in local development.
+    turbopackGc: process.env.NODE_ENV === "development",
+    turbopackLazyDynamicImports: process.env.NODE_ENV === "development",
   },
   turbopack: {
     root: path.resolve(process.cwd()),
