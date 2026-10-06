@@ -1,5 +1,5 @@
 {
-  "packageVersion": "0.47.5",
+  "packageVersion": "0.47.6",
   "fonts": {
     "outlined": {
       "availableIcons": [
@@ -4587,9 +4587,9 @@
         "wifi",
         "window"
       ],
-      "sourceBytes": 4001608,
-      "subsetBytes": 242948,
-      "sha256": "c6dc514e6310643066b6b87b54367970834bb3376c4d07e33650089d5a7579f1"
+      "sourceBytes": 4003088,
+      "subsetBytes": 243144,
+      "sha256": "344222d2373444b2f384608fc88bccb65de42edaccbf1217ee5211a7306b4976"
     },
     "rounded": {
       "availableIcons": [
@@ -9177,9 +9177,9 @@
         "wifi",
         "window"
       ],
-      "sourceBytes": 5399668,
-      "subsetBytes": 325364,
-      "sha256": "d9553ff532e78a355f5d83b772496142868970a7b5d23763d9347d1d88370c00"
+      "sourceBytes": 5399156,
+      "subsetBytes": 325216,
+      "sha256": "25caae2603db0434f3347c06cea7b4027762c375f1a544d7a7e6b46d6546ab3c"
     }
   }
 }
