@@ -10,7 +10,6 @@ import {
 } from "@/lib/env";
 import { logAoryxEndpointError } from "@/lib/aoryx-error-log";
 
-export const runtime = "nodejs";
 const AORYX_REQUEST_TIMEOUT_MS = 30000;
 const COUNTRY_INFO_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 

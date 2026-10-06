@@ -7,7 +7,6 @@ import { resolveTranslationLocale } from "@/lib/text-translation";
 import { getAoryxHotelPlatformFee } from "@/lib/pricing";
 import { withAoryxDisplayPrice } from "@/lib/aoryx-pricing";
 
-export const runtime = "nodejs";
 
 const parseRateKeys = (input: unknown): string[] => {
   if (!Array.isArray(input) || input.length === 0) {

@@ -2769,6 +2769,7 @@ export default function HotelClient({
 
           {!finalError && galleryImages.length > 0 && (
               <ImageGallery
+                hotelCode={hotelCode ?? ""}
                 images={galleryImages}
                 altText={hotelInfo?.name ?? t.results.hotel.fallbackName}
               />

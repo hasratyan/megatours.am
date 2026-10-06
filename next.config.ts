@@ -8,6 +8,8 @@ const withBundleAnalyzer = bundleAnalyzer({
 
 const nextConfig: NextConfig = {
   typedRoutes: true,
+  cacheComponents: true,
+  partialPrefetching: true,
   reactCompiler: {
     compilationMode: "annotation",
   },

@@ -16,7 +16,6 @@ import type { AoryxRoomSearch } from "@/types/aoryx";
 import type { PackageAssistantPackageOption } from "@/types/package-assistant";
 import type { PackageBuilderHotelSelection } from "@/lib/package-builder-state";
 
-export const runtime = "nodejs";
 
 const validDate = (value: unknown): value is string =>
   typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) &&

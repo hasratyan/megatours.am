@@ -2,6 +2,7 @@ import { getTranslations } from "@/lib/i18n-server";
 import Link from "next/link";
 import type { Route } from "next";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { getServerSession } from "@/lib/auth-compat/server";
 import PackageServiceClient from "@/components/package-service-client";
 import { authOptions } from "@/lib/auth";
@@ -73,6 +74,7 @@ export async function generateMetadata({ params }: PageProps) {
 }
 
 export default async function ServicePage({ params, searchParams }: PageProps) {
+  await connection();
   const { locale, service } = await params;
   const resolvedLocale = resolveLocale(locale);
   const t = getTranslations(resolvedLocale);

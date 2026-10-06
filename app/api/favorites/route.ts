@@ -1,10 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { ObjectId } from "mongodb";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 
-export const runtime = "nodejs";
 
 const normalizeUserId = (userId: string) => {
   const normalized = userId.trim();
@@ -35,6 +34,7 @@ const parseNumber = (value: unknown): number | null => {
 const clampLimit = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 export async function GET(request: NextRequest) {
+  await connection();
   const session = await getServerSession(authOptions);
   const userId = session?.user?.id;
   if (!userId) {

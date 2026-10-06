@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db";
-import { unstable_cache } from "next/cache";
+import { cacheLife, cacheTag } from "next/cache";
 
 export type PromoPopupConfig = {
   enabled: boolean;
@@ -87,14 +87,14 @@ const readPromoPopupDoc = async (): Promise<PromoPopupDoc | null> => {
     .findOne({ _id: DOC_ID });
 };
 
-const getPromoPopupConfigCached = unstable_cache(async (): Promise<PromoPopupConfig> => {
+async function getPromoPopupConfigCached(): Promise<PromoPopupConfig> {
+  "use cache";
+  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
+  cacheTag(PROMO_POPUP_CACHE_TAG);
   const doc = await readPromoPopupDoc();
   const config = doc && typeof doc === "object" ? doc.config : null;
   return normalizePromoPopupConfig(config ?? null);
-}, ["promo-popup-config"], {
-  tags: [PROMO_POPUP_CACHE_TAG],
-  revalidate: 60 * 60,
-});
+}
 
 export async function getPromoPopupConfig(): Promise<PromoPopupConfig> {
   return getPromoPopupConfigCached();

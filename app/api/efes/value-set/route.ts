@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchEfesValueSet } from "@/lib/efes-value-set";
 
-export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {

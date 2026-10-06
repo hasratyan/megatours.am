@@ -1,5 +1,5 @@
 import type { Collection, Filter, ObjectId, Sort } from "mongodb";
-import { unstable_cache } from "next/cache";
+import { cacheLife, cacheTag } from "next/cache";
 import type { Locale } from "@/lib/i18n";
 import { getB2bDb, getDb } from "@/lib/db";
 
@@ -495,7 +495,10 @@ export async function getAoryxHotelsByCodes(hotelCodes: string[]): Promise<Map<s
   return map;
 }
 
-const getFeaturedHotelCardsCached = unstable_cache(async (locale: Locale): Promise<FeaturedHotelCard[]> => {
+async function getFeaturedHotelCardsCached(locale: Locale): Promise<FeaturedHotelCard[]> {
+  "use cache";
+  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
+  cacheTag(FEATURED_HOTELS_CACHE_TAG);
   const selections = await getFeaturedHotelSelections();
   if (selections.length === 0) return [];
   const hotelMap = await getAoryxHotelsByCodes(selections.map((entry) => entry.hotelCode));
@@ -532,10 +535,7 @@ const getFeaturedHotelCardsCached = unstable_cache(async (locale: Locale): Promi
     });
   });
   return cards;
-}, ["featured-hotel-cards"], {
-  tags: [FEATURED_HOTELS_CACHE_TAG],
-  revalidate: 60 * 60,
-});
+}
 
 export async function getFeaturedHotelCards(locale: Locale): Promise<FeaturedHotelCard[]> {
   return getFeaturedHotelCardsCached(locale);

@@ -4,6 +4,7 @@ import Header from "@/components/header";
 import Footer from "@/components/footer";
 import JsonLd from "@/components/json-ld";
 import DeferredLayoutWidgets from "@/components/deferred-layout-widgets";
+import RouteLoading from "@/components/route-loading";
 import { LanguageProvider } from "@/components/language-provider";
 import { locales, Locale } from "@/lib/i18n";
 import { buildTravelAgencyStructuredData } from "@/lib/structured-data";
@@ -33,7 +34,9 @@ export default async function LocaleLayout({ children, params }: LayoutProps) {
       <JsonLd id="structured-data-travel-agency" data={buildTravelAgencyStructuredData(resolvedLocale)} />
       <div className="page">
         <Header />
-        {children}
+        <React.Suspense fallback={<RouteLoading />}>
+          {children}
+        </React.Suspense>
         <Footer locale={locale} />
         <React.Suspense fallback={null}>
           <DeferredLayoutWidgets locale={locale as Locale} />

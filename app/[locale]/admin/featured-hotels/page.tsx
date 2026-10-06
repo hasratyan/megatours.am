@@ -8,7 +8,6 @@ import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { getFeaturedHotelAdminItems } from "@/lib/featured-hotels";
 
-export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ locale: string }>;

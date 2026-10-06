@@ -32,7 +32,6 @@ import {
 } from "@/lib/insurance-policy-status";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
-export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ locale: string; bookingId: string }>;

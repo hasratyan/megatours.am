@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
@@ -10,7 +10,6 @@ import {
 } from "@/lib/featured-hotels";
 import { locales, type Locale } from "@/lib/i18n";
 
-export const runtime = "nodejs";
 
 type TranslationPayload = {
   badge?: string;
@@ -61,6 +60,7 @@ const revalidateFeaturedHotelPages = () => {
 };
 
 export async function GET() {
+  await connection();
   try {
     const session = await getServerSession(authOptions);
     const isAdmin = isAdminUser({ id: session?.user?.id ?? null, email: session?.user?.email ?? null });

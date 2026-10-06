@@ -5,7 +5,6 @@ import { authOptions } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin";
 import { getB2bDb } from "@/lib/db";
 
-export const runtime = "nodejs";
 
 type ManageRouteParams = {
   bookingId: string;

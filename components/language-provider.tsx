@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo } from "react";
 import type { Route } from "next";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { type Locale, type Translation, locales } from "@/lib/i18n";
 
 type LanguageContextValue = {
@@ -20,7 +20,6 @@ type LanguageProviderProps = {
 };
 
 export function LanguageProvider({ children, initialLocale: locale, translations }: LanguageProviderProps) {
-  const pathname = usePathname();
   const router = useRouter();
 
   const setLocale = useCallback((newLocale: Locale) => {
@@ -28,7 +27,8 @@ export function LanguageProvider({ children, initialLocale: locale, translations
     document.cookie = `megatours-locale=${newLocale};path=/;max-age=31536000`;
     
     // Navigate to the new locale path
-    const segments = pathname.split("/");
+    // Read URL data only in the browser event, keeping the shared shell prerenderable.
+    const segments = window.location.pathname.split("/");
     // Check if first segment is a locale
     if (segments[1] && locales.includes(segments[1] as Locale)) {
       segments[1] = newLocale;
@@ -41,7 +41,7 @@ export function LanguageProvider({ children, initialLocale: locale, translations
     const destination = `${newPath}${queryString}` as Route;
     
     router.push(destination);
-  }, [pathname, router]);
+  }, [router]);
 
   // Update document lang attribute when locale changes
   useEffect(() => {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition, ViewTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildSearchQuery, parseSearchParams } from "@/lib/search-query";
 import type { AoryxSearchParams, AoryxSearchResult } from "@/types/aoryx";
@@ -20,6 +20,7 @@ import { fetchResultsSearch } from "@/lib/results-search-client";
 import { resolveAoryxMealCode } from "@/lib/aoryx-meals";
 import { summarizeHotelMealPrices } from "@/lib/aoryx-meal-pricing";
 import { resolveAoryxSearchArea } from "@/lib/aoryx-areas";
+import { hotelImageTransitionName, isHotelSearchFresh, type CompletedHotelSearch } from "@/lib/hotel-navigation";
 
 const ratingOptions = [5, 4, 3, 2, 1] as const;
 const mealOptions = [
@@ -76,6 +77,8 @@ export default function ResultsClient({
   initialDestinations = [],
   initialAmdRates,
 }: ResultsClientProps) {
+  "use memo";
+
   const t = useTranslations();
   const { locale } = useLanguage();
   const { currency: displayCurrency } = useCurrency();
@@ -104,6 +107,8 @@ export default function ResultsClient({
   const requestKey = parsed.payload ? buildSearchQuery(parsed.payload) : null;
   const selectedArea = resolveAoryxSearchArea(parsed.payload?.areaId, parsed.payload?.destinationCode, parsed.payload?.hotelCode);
   const initialSearchKeyRef = useRef(requestKey);
+  const initialSearchConsumedRef = useRef(false);
+  const completedSearchRef = useRef<CompletedHotelSearch | null>(null);
   const [resultState, setResultState] = useState<SafeSearchResult | null>(initialResult);
   const [errorState, setErrorState] = useState<string | null>(initialError);
   const [isFetching, setIsFetching] = useState(
@@ -139,14 +144,21 @@ export default function ResultsClient({
 
   useEffect(() => {
     if (!requestKey) {
+      completedSearchRef.current = null;
       setIsFetching(false);
       setResultState(null);
       setErrorState(null);
       return;
     }
 
+    if (isHotelSearchFresh(completedSearchRef.current, requestKey, retryAttempt, Date.now())) {
+      return;
+    }
+
     const isInitialSearch = requestKey === initialSearchKeyRef.current;
-    if (retryAttempt === 0 && isInitialSearch && (initialResult || initialError)) {
+    if (!initialSearchConsumedRef.current && retryAttempt === 0 && isInitialSearch && (initialResult || initialError)) {
+      initialSearchConsumedRef.current = true;
+      if (initialResult) completedSearchRef.current = { key: requestKey, attempt: retryAttempt, receivedAt: Date.now() };
       setResultState(initialResult);
       setErrorState(initialError);
       setIsFetching(false);
@@ -155,6 +167,7 @@ export default function ResultsClient({
 
     let active = true;
     const controller = new AbortController();
+    completedSearchRef.current = null;
     setIsFetching(true);
     setResultState(null);
     setErrorState(null);
@@ -163,6 +176,7 @@ export default function ResultsClient({
       .then((response) => {
         if (!active || controller.signal.aborted) return;
         if (response.ok) {
+          completedSearchRef.current = { key: requestKey, attempt: retryAttempt, receivedAt: Date.now() };
           setResultState(response.data);
           return;
         }
@@ -811,6 +825,7 @@ export default function ResultsClient({
 
                 return (
                   <div className="hotel-card" key={hotel.code ?? hotel.name ?? idx}>
+                    <ViewTransition name={hotel.code ? hotelImageTransitionName(hotel.code) : undefined} default="none" share="hotel-image">
                     <div className="image">
                       {hotel.imageUrl ? (
                         <Image
@@ -823,6 +838,7 @@ export default function ResultsClient({
                         <span>{(hotel.name ?? t.results.hotel.fallbackName).charAt(0)}</span>
                       )}
                     </div>
+                    </ViewTransition>
                     <div className="content">
                       <div className="header">
                         <div>
@@ -871,16 +887,13 @@ export default function ResultsClient({
                             )}
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          disabled={!detailHref}
-                          onClick={() => {
-                            if (!detailHref) return;
-                            window.open(detailHref, "_blank", "noopener,noreferrer");
-                          }}
-                        >
-                          {t.results.viewOptions}
-                        </button>
+                        {detailHref ? (
+                          <Link href={detailHref} prefetch={true}>
+                            {t.results.viewOptions}
+                          </Link>
+                        ) : (
+                          <button type="button" disabled>{t.results.viewOptions}</button>
+                        )}
                       </div>
                     </div>
                   </div>

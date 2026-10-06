@@ -4,7 +4,6 @@ import { runAoryxSearch } from "@/lib/aoryx-search";
 import { authenticateB2bRequest, withB2bGatewayHeaders } from "@/lib/b2b-gateway";
 import type { AoryxRoomSearch, AoryxSearchParams } from "@/types/aoryx";
 
-export const runtime = "nodejs";
 
 const parseString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 const parseNumber = (value: unknown) => {

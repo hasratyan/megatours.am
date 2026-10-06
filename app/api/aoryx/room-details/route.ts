@@ -15,7 +15,6 @@ import { resolveTranslationLocale } from "@/lib/text-translation";
 import { normalizeAoryxMealSelection } from "@/lib/aoryx-meals";
 import { setSessionCookie } from "../_shared";
 
-export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {

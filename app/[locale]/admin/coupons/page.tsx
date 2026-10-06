@@ -8,7 +8,6 @@ import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { getAdminCoupons } from "@/lib/coupons";
 import AdminCouponsClient from "./admin-coupons-client";
 
-export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ locale: string }>;

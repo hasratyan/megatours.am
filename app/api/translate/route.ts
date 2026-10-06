@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTranslationLocale, translateTextBatch } from "@/lib/text-translation";
 
-export const runtime = "nodejs";
 
 const MAX_ITEMS = 100;
 const MAX_TEXT_LENGTH = 12000;

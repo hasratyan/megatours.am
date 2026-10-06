@@ -1,4 +1,5 @@
 import { getTranslations } from "@/lib/i18n-server";
+import { connection } from "next/server";
 import Link from "next/link";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
@@ -33,6 +34,7 @@ export async function generateMetadata({ params }: PageProps) {
 }
 
 export default async function ServicesHubPage({ params }: PageProps) {
+  await connection();
   const { locale } = await params;
   const resolvedLocale = resolveLocale(locale);
   const t = getTranslations(resolvedLocale);

@@ -1,6 +1,29 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Shared hotel photos keep their identity across results/detail navigation. */
+::view-transition-group(.hotel-image) {
+  animation-duration: 240ms;
+  animation-timing-function: ease-out;
+}
+
+::view-transition-old(.route-loading) {
+  animation: 120ms ease-out both hotel-loading-out;
+}
+
+@keyframes hotel-loading-out {
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 .popover{

@@ -19,7 +19,6 @@ import type {
   PackageAssistantResponse,
 } from "@/types/package-assistant";
 
-export const runtime = "nodejs";
 
 const MAX_MESSAGES = 30;
 const MAX_MESSAGE_CHARS = 2000;

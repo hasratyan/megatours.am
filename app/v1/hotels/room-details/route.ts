@@ -13,7 +13,6 @@ import { applyHotelMarkupToRooms } from "@/lib/b2b-hotel-markup";
 import { getAoryxHotelB2BPlatformFee } from "@/lib/pricing";
 import type { AoryxRoomSearch, AoryxSearchParams } from "@/types/aoryx";
 
-export const runtime = "nodejs";
 
 const parseString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 const parseNumber = (value: unknown) => {

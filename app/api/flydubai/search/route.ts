@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchFlydubai, FlydubaiClientError, FlydubaiServiceError } from "@/lib/flydubai-client";
 import type { FlydubaiSearchRequest } from "@/types/flydubai";
 
-export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {

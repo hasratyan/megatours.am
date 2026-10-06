@@ -11,7 +11,6 @@ type PageProps = {
   params: Promise<{ locale: string }>;
 };
 
-export const dynamic = "force-dynamic";
 
 const resolveLocale = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;

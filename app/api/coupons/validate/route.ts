@@ -4,7 +4,6 @@ import {
   type CouponValidationFailureReason,
 } from "@/lib/coupons";
 
-export const runtime = "nodejs";
 
 const ONE_MINUTE_MS = 60_000;
 const DEFAULT_RATE_LIMIT_PER_MINUTE = 15;

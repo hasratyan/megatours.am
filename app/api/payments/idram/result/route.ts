@@ -21,7 +21,6 @@ import { issueBookingAddonInsurance } from "@/lib/booking-addon-insurance-issuan
 import { resolveBookingAddonPaymentServiceOutcome } from "@/lib/booking-addon-payment-outcome";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
-export const runtime = "nodejs";
 
 type IdramPaymentRecord = {
   flow?: string | null;

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { EfesClientError, EfesServiceError, createEfesPoliciesFromBooking } from "@/lib/efes-client";
 import type { AoryxBookingPayload, BookingInsuranceSelection, BookingInsuranceTraveler } from "@/types/aoryx";
 
-export const runtime = "nodejs";
 
 const parseString = (value: unknown) =>
   typeof value === "string" ? value.trim() : "";

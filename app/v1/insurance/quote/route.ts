@@ -3,7 +3,6 @@ import { authenticateB2bRequest, withB2bGatewayHeaders } from "@/lib/b2b-gateway
 import { EfesClientError, EfesServiceError, quoteEfesTravelCost } from "@/lib/efes-client";
 import type { EfesQuoteRequest, EfesQuoteTraveler } from "@/types/efes";
 
-export const runtime = "nodejs";
 
 const parseString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 

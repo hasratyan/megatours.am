@@ -19,7 +19,6 @@ import {
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 import type { AppliedBookingCoupon } from "@/lib/user-data";
 
-export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ locale: string }>;

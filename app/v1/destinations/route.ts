@@ -1,9 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { AoryxClientError, AoryxServiceError } from "@/lib/aoryx-client";
 import { listAoryxDestinations } from "@/lib/aoryx-destinations";
 import { authenticateB2bRequest, withB2bGatewayHeaders } from "@/lib/b2b-gateway";
 
-export const runtime = "nodejs";
 
 const parseLimit = (value: string | null) => {
   if (!value) return undefined;
@@ -12,6 +11,7 @@ const parseLimit = (value: string | null) => {
 };
 
 export async function GET(request: NextRequest) {
+  await connection();
   const auth = authenticateB2bRequest(request, "hotels:search");
   if (!auth.ok) return auth.response;
 

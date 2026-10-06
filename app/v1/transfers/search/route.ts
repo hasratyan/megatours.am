@@ -3,7 +3,6 @@ import { fetchTransferRates } from "@/lib/aoryx-addons";
 import { authenticateB2bRequest, withB2bGatewayHeaders } from "@/lib/b2b-gateway";
 import { buildTransferFacets } from "@/lib/b2b-facets";
 
-export const runtime = "nodejs";
 
 const parseString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 

@@ -8,7 +8,6 @@ import type { AoryxSearchParams, AoryxRoomSearch } from "@/types/aoryx";
 import { setSessionCookie } from "../_shared";
 import { createSearchToken } from "@/lib/aoryx-rate-tokens";
 
-export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {

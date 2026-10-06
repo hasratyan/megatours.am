@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hotelsInfoByDestinationId, normalizeParentDestinationId, AoryxServiceError } from "@/lib/aoryx-client";
 
-export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {

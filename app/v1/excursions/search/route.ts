@@ -3,7 +3,6 @@ import { fetchExcursions } from "@/lib/aoryx-addons";
 import { authenticateB2bRequest, withB2bGatewayHeaders } from "@/lib/b2b-gateway";
 import { buildExcursionFacets } from "@/lib/b2b-facets";
 
-export const runtime = "nodejs";
 
 const parseLimit = (value: unknown) => {
   const parsed = Number(value);

@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin";
 import { searchAoryxHotels } from "@/lib/featured-hotels";
 
-export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
+  await connection();
   try {
     const session = await getServerSession(authOptions);
     const isAdmin = isAdminUser({ id: session?.user?.id ?? null, email: session?.user?.email ?? null });

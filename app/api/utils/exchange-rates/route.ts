@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { getAmdRates } from "@/lib/pricing";
 
-export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
+  await connection();
   try {
     void request;
     const rates = await getAmdRates();

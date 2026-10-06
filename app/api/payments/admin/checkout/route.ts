@@ -38,7 +38,6 @@ import { DEFAULT_SERVICE_FLAGS } from "@/lib/package-builder-state";
 import { getServiceFlags } from "@/lib/service-flags";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
-export const runtime = "nodejs";
 
 const resolveString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 

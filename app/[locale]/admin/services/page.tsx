@@ -9,7 +9,6 @@ import AdminServicesClient from "./admin-services-client";
 import { getServiceFlags } from "@/lib/service-flags";
 import { getPaymentMethodFlags } from "@/lib/payment-method-flags";
 
-export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ locale: string }>;

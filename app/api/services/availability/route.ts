@@ -1,10 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextResponse, connection } from "next/server";
 import { DEFAULT_SERVICE_FLAGS } from "@/lib/package-builder-state";
 import { getServiceFlags } from "@/lib/service-flags";
 
-export const runtime = "nodejs";
 
 export async function GET() {
+  await connection();
   try {
     const flags = await getServiceFlags();
     return NextResponse.json({ flags });

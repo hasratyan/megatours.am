@@ -9,7 +9,6 @@ import { sendBookingConfirmationEmail } from "@/lib/email";
 import { parseBookingPayload, validatePrebookState } from "@/lib/aoryx-booking";
 import { obfuscateBookingResult } from "@/lib/aoryx-rate-tokens";
 
-export const runtime = "nodejs";
 
 const parseSessionId = (input: unknown): string | undefined => {
   if (typeof input !== "string") return undefined;

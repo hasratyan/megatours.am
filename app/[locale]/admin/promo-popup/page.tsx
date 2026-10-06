@@ -8,7 +8,6 @@ import { defaultLocale, Locale, locales } from "@/lib/i18n";
 import { getPromoPopupAdminConfig } from "@/lib/promo-popup";
 import AdminPromoPopupClient from "./admin-promo-popup-client";
 
-export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ locale: string }>;

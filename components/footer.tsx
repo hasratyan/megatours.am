@@ -88,7 +88,8 @@ const contactLinks = [
   },
 ] as const;
 
-export default function Footer({ locale }: FooterProps) {
+export default async function Footer({ locale }: FooterProps) {
+  "use cache";
   const resolvedLocale = resolveLocale(locale);
   const t = getTranslations(resolvedLocale);
   const refundPolicyUrl = `/${resolvedLocale}/refund-policy` as const;

@@ -26,7 +26,6 @@ import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 import type { AppliedBookingCoupon } from "@/lib/user-data";
 import { resolveInsuranceIssuance } from "@/lib/insurance-policy-status";
 
-export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ locale: string; bookingId: string }>;

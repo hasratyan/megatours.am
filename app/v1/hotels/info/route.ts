@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateB2bRequest, withB2bGatewayHeaders } from "@/lib/b2b-gateway";
 import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
 
-export const runtime = "nodejs";
 
 const parseString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 

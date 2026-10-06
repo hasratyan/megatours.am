@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
 
-export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {

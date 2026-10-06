@@ -4,7 +4,6 @@ import { normalizeSearchError, runAoryxSearch, withAoryxDefaults } from "@/lib/a
 import { scheduleSearchHistory } from "@/lib/search-history";
 import { createSearchTiming } from "@/lib/search-timing";
 
-export const runtime = "nodejs";
 
 // Preserve the results page's existing markup and token policy. The older
 // /search endpoint serves other callers with a different pricing lookup.

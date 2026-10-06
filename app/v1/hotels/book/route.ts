@@ -11,7 +11,6 @@ import {
 } from "@/lib/b2b-service-booking";
 import type { AoryxBookingPayload } from "@/types/aoryx";
 
-export const runtime = "nodejs";
 
 const parseSessionId = (input: unknown): string | undefined => {
   if (typeof input !== "string") return undefined;

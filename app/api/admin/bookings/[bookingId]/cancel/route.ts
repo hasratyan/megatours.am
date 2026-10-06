@@ -18,7 +18,6 @@ import { refundVposPayment, type PaymentProvider } from "@/lib/vpos-refund";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 import { logAoryxEndpointError } from "@/lib/aoryx-error-log";
 
-export const runtime = "nodejs";
 const AORYX_REQUEST_TIMEOUT_MS = 30000;
 
 type CancelRouteParams = {

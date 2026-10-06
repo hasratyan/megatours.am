@@ -37,7 +37,6 @@ import {
 import { refreshBookingAddonInsurancePricing } from "@/lib/booking-addon-insurance-pricing";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
-export const runtime = "nodejs";
 
 const IDRAM_ACTION = "https://banking.idram.am/Payment/GetPayment";
 const DEFAULT_LANGUAGE = "EN";

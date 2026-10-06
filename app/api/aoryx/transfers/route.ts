@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchTransferRates } from "@/lib/aoryx-addons";
 
-export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {

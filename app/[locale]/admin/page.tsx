@@ -7,7 +7,6 @@ import { hasAdminConfig, isAdminUser } from "@/lib/admin";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
 
-export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ locale: string }>;

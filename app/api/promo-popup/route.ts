@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, connection } from "next/server";
 import { getPromoPopupConfig } from "@/lib/promo-popup";
 
-export const runtime = "nodejs";
 
 export async function GET() {
+  await connection();
   try {
     const config = await getPromoPopupConfig();
     return NextResponse.json({ config });

@@ -6,7 +6,6 @@ import { buildRoomFacets } from "@/lib/b2b-facets";
 import { applyHotelMarkupToRooms } from "@/lib/b2b-hotel-markup";
 import { getAoryxHotelB2BPlatformFee } from "@/lib/pricing";
 
-export const runtime = "nodejs";
 
 const parseString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 

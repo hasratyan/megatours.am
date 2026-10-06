@@ -4,7 +4,8 @@ import HotelClient from "./hotel-client";
 import JsonLd from "@/components/json-ld";
 import { buildLocalizedMetadata } from "@/lib/metadata";
 import { defaultLocale, Locale, locales } from "@/lib/i18n";
-import { getHotelInfoFromDb } from "@/lib/hotel-info-db";
+import { getHotelContent } from "@/lib/hotel-content";
+import RouteLoading from "@/components/route-loading";
 import { buildHotelShareTitle, resolveHotelPrimaryImageUrl } from "@/lib/hotel-share";
 import { buildHotelStructuredData } from "@/lib/structured-data";
 import type { AoryxHotelInfoResult } from "@/types/aoryx";
@@ -12,7 +13,7 @@ import type { AoryxHotelInfoResult } from "@/types/aoryx";
 const resolveLocale = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
 
-const getHotelInfoCached = cache(async (code: string) => getHotelInfoFromDb(code));
+const getHotelInfoCached = cache(getHotelContent);
 
 const buildHotelMetaDescription = (
   hotelName: string,
@@ -80,7 +81,15 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   });
 }
 
-export default async function HotelPage({ params }: PageProps) {
+export default function HotelPage({ params }: PageProps) {
+  return (
+    <Suspense fallback={<RouteLoading className="results" />}>
+      <HotelContent params={params} />
+    </Suspense>
+  );
+}
+
+async function HotelContent({ params }: PageProps) {
   const resolvedParams = await params;
   const resolvedLocale = resolveLocale(resolvedParams.locale);
   const t = getTranslations(resolvedLocale);

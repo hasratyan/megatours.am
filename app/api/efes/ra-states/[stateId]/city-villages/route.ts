@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { fetchEfesValueSet } from "@/lib/efes-value-set";
 
-export const runtime = "nodejs";
 
 const normalizeEfesList = (payload: unknown): Record<string, unknown>[] => {
   if (Array.isArray(payload)) {
@@ -24,6 +23,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ stateId: string }> }
 ) {
+  await connection();
   void request;
   const { stateId: rawStateId } = await params;
   const stateId = rawStateId?.trim();

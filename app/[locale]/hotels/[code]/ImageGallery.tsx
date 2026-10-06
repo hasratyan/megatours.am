@@ -1,18 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, ViewTransition } from "react";
 import Image from "next/image";
 import { useTranslations } from "@/components/language-provider";
+import { hotelImageTransitionName } from "@/lib/hotel-navigation";
 
 type ImageGalleryProps = {
   images: string[];
   altText: string;
+  hotelCode: string;
 };
 
-export default function ImageGallery({ images, altText }: ImageGalleryProps) {
+export default function ImageGallery({ images, altText, hotelCode }: ImageGalleryProps) {
+  "use memo";
+
   const t = useTranslations();
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  // A fullscreen overlay is transient, unlike the preserved results filters.
+  useLayoutEffect(() => () => setSelectedImageIndex(null), []);
   const buildAlt = (index: number) =>
     t.gallery.imageAlt.replace("{name}", altText).replace("{index}", String(index + 1));
 
@@ -148,6 +154,7 @@ export default function ImageGallery({ images, altText }: ImageGalleryProps) {
         <ul className="image-gallery">
           {images.map((src, idx) => (
             <li key={src} onClick={() => openFullSizeImage(idx)}>
+              <ViewTransition name={idx === 0 ? hotelImageTransitionName(hotelCode) : undefined} default="none" share={idx === 0 ? "hotel-image" : "none"}>
               <Image
                 src={src}
                 alt={buildAlt(idx)}
@@ -155,6 +162,7 @@ export default function ImageGallery({ images, altText }: ImageGalleryProps) {
                 height={0}
                 sizes="100vw"
               />
+              </ViewTransition>
             </li>
           ))}
         </ul>

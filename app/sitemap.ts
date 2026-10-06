@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
+import { cacheLife, cacheTag } from "next/cache";
 import { destinationSlugs } from "@/lib/destination-data";
-import { getFeaturedHotelSelections } from "@/lib/featured-hotels";
+import { FEATURED_HOTELS_CACHE_TAG, getFeaturedHotelSelections } from "@/lib/featured-hotels";
 import { defaultLocale, locales } from "@/lib/i18n";
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, "");
@@ -55,6 +56,9 @@ async function loadFeaturedHotelRouteDefinitions(): Promise<RouteDefinition[]> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  "use cache";
+  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
+  cacheTag(FEATURED_HOTELS_CACHE_TAG);
   const lastModified = new Date();
   const allRoutes = [...routeDefinitions, ...(await loadFeaturedHotelRouteDefinitions())];
   return allRoutes.flatMap((route) => {

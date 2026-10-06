@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, connection } from "next/server";
 import { fetchEfesValueSet } from "@/lib/efes-value-set";
 
-export const runtime = "nodejs";
 
 const normalizeEfesList = (payload: unknown): Record<string, unknown>[] => {
   if (Array.isArray(payload)) {
@@ -21,6 +20,7 @@ const readString = (value: unknown) =>
   typeof value === "string" ? value.trim() : "";
 
 export async function GET() {
+  await connection();
   try {
     const payload = await fetchEfesValueSet({ dicName: "dic_country_locations" });
     const regions = normalizeEfesList(payload).filter((item) => {

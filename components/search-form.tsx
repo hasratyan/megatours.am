@@ -367,6 +367,8 @@ export default function SearchForm({
   useGuestAbbreviations = false,
   onSubmitSearch,
 }: Props) {
+  "use memo";
+
   const defaults = useMemo(() => buildDefaultDates(), []);
   const reactSelectId = useId().replace(/:/g, "");
   const locationSelectInstanceId = `search-location-${reactSelectId}`;

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { revalidateTag } from "next/cache";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
@@ -9,9 +9,9 @@ import {
   savePromoPopupConfig,
 } from "@/lib/promo-popup";
 
-export const runtime = "nodejs";
 
 export async function GET() {
+  await connection();
   try {
     const session = await getServerSession(authOptions);
     const isAdmin = isAdminUser({ id: session?.user?.id ?? null, email: session?.user?.email ?? null });

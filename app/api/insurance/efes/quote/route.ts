@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { EfesClientError, EfesServiceError, quoteEfesTravelCost } from "@/lib/efes-client";
 import type { EfesQuoteRequest } from "@/types/efes";
 
-export const runtime = "nodejs";
 
 const parseString = (value: unknown) =>
   typeof value === "string" ? value.trim() : "";

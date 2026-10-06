@@ -13,7 +13,6 @@ type PageProps = {
 const resolveLocale = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
 
-export const revalidate = 3600;
 
 export async function generateMetadata({ params }: PageProps) {
   const { locale } = await params;

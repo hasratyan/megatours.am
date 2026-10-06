@@ -22,7 +22,6 @@ import type {
   BookingInsuranceTraveler,
 } from "@/types/aoryx";
 
-export const runtime = "nodejs";
 
 type ManageRouteParams = {
   bookingId: string;

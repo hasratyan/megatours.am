@@ -42,7 +42,6 @@ import {
 import { refreshBookingAddonInsurancePricing } from "@/lib/booking-addon-insurance-pricing";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
-export const runtime = "nodejs";
 
 type PaymentProvider = "idbank" | "ameriabank";
 

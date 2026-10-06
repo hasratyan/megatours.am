@@ -1,5 +1,5 @@
 import { hasPendingEfesPolicy } from "@/lib/insurance-policy-status";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { ObjectId, type Collection, type Document } from "mongodb";
 import { getDb } from "@/lib/db";
 import {
@@ -26,7 +26,6 @@ import { issueBookingAddonInsurance } from "@/lib/booking-addon-insurance-issuan
 import { resolveBookingAddonPaymentServiceOutcome } from "@/lib/booking-addon-payment-outcome";
 import type { AoryxBookingPayload, AoryxBookingResult } from "@/types/aoryx";
 
-export const runtime = "nodejs";
 
 type PaymentProvider = "idbank" | "ameriabank";
 
@@ -1647,6 +1646,7 @@ const handleResultCallback = async (request: NextRequest) => {
 };
 
 export async function GET(request: NextRequest) {
+  await connection();
   return handleResultCallback(request);
 }
 

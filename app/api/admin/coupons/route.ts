@@ -1,10 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin";
 import { getAdminCoupons, upsertCouponAdmin } from "@/lib/coupons";
 
-export const runtime = "nodejs";
 
 const isValidationError = (message: string) =>
   message.toLowerCase().includes("coupon") ||
@@ -12,6 +11,7 @@ const isValidationError = (message: string) =>
   message.toLowerCase().includes("usage limit");
 
 export async function GET() {
+  await connection();
   try {
     const session = await getServerSession(authOptions);
     const isAdmin = isAdminUser({ id: session?.user?.id ?? null, email: session?.user?.email ?? null });
