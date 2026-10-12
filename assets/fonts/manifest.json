@@ -1,5 +1,5 @@
 {
-  "packageVersion": "0.47.6",
+  "packageVersion": "0.48.0",
   "fonts": {
     "outlined": {
       "availableIcons": [
@@ -1977,7 +1977,6 @@
         "immunology",
         "import_contacts",
         "import_export",
-        "import_spark",
         "important_devices",
         "in_home_mode",
         "inactive_order",
@@ -2249,10 +2248,14 @@
         "logo_dev",
         "logout",
         "looks",
+        "looks_0",
         "looks_3",
         "looks_4",
         "looks_5",
         "looks_6",
+        "looks_7",
+        "looks_8",
+        "looks_9",
         "looks_one",
         "looks_two",
         "loop",
@@ -2311,7 +2314,6 @@
         "markdown_copy",
         "markdown_document",
         "markdown_paste",
-        "markdown_spark",
         "markunread",
         "markunread_mailbox",
         "masked_transitions",
@@ -4587,9 +4589,9 @@
         "wifi",
         "window"
       ],
-      "sourceBytes": 4003088,
-      "subsetBytes": 243144,
-      "sha256": "344222d2373444b2f384608fc88bccb65de42edaccbf1217ee5211a7306b4976"
+      "sourceBytes": 4001276,
+      "subsetBytes": 242940,
+      "sha256": "2b5fa671e361f84db3b112a10a5ac4e96657ba909684e6945a4224f12339e24e"
     },
     "rounded": {
       "availableIcons": [
@@ -6567,7 +6569,6 @@
         "immunology",
         "import_contacts",
         "import_export",
-        "import_spark",
         "important_devices",
         "in_home_mode",
         "inactive_order",
@@ -6839,10 +6840,14 @@
         "logo_dev",
         "logout",
         "looks",
+        "looks_0",
         "looks_3",
         "looks_4",
         "looks_5",
         "looks_6",
+        "looks_7",
+        "looks_8",
+        "looks_9",
         "looks_one",
         "looks_two",
         "loop",
@@ -6901,7 +6906,6 @@
         "markdown_copy",
         "markdown_document",
         "markdown_paste",
-        "markdown_spark",
         "markunread",
         "markunread_mailbox",
         "masked_transitions",
@@ -9177,9 +9181,9 @@
         "wifi",
         "window"
       ],
-      "sourceBytes": 5399156,
-      "subsetBytes": 325216,
-      "sha256": "25caae2603db0434f3347c06cea7b4027762c375f1a544d7a7e6b46d6546ab3c"
+      "sourceBytes": 5397756,
+      "subsetBytes": 325240,
+      "sha256": "6598eca84096d3873a89fb22bc27c5434622407abefb5efbd61b2e026c5adc52"
     }
   }
 }
