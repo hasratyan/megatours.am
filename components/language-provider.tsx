@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo } from "reac
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { type Locale, type Translation, locales } from "@/lib/i18n";
+import { useDestination } from "@/components/destinations/destination-provider";
+import { destinationTranslations } from "@/lib/destinations/translations";
 
 type LanguageContextValue = {
   locale: Locale;
@@ -21,6 +23,8 @@ type LanguageProviderProps = {
 
 export function LanguageProvider({ children, initialLocale: locale, translations }: LanguageProviderProps) {
   const router = useRouter();
+  const destinationId = useDestination();
+  const scopedTranslations = useMemo(() => destinationTranslations(translations, destinationId, locale), [translations, destinationId, locale]);
 
   const setLocale = useCallback((newLocale: Locale) => {
     // Set cookie for proxy to use on next navigation
@@ -49,8 +53,8 @@ export function LanguageProvider({ children, initialLocale: locale, translations
   }, [locale]);
 
   const value = useMemo<LanguageContextValue>(
-    () => ({ locale, setLocale, t: translations }),
-    [locale, setLocale, translations],
+    () => ({ locale, setLocale, t: scopedTranslations }),
+    [locale, setLocale, scopedTranslations],
   );
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;

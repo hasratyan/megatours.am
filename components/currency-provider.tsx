@@ -54,7 +54,17 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const notifyUrlChange = () => window.dispatchEvent(new Event(CURRENCY_URL_CHANGE_EVENT));
+    let active = true;
+    let queued = false;
+    // Next updates history during React's insertion phase; notify after that commit.
+    const notifyUrlChange = () => {
+      if (queued) return;
+      queued = true;
+      queueMicrotask(() => {
+        queued = false;
+        if (active) window.dispatchEvent(new Event(CURRENCY_URL_CHANGE_EVENT));
+      });
+    };
     const originalPushState = window.history.pushState;
     const originalReplaceState = window.history.replaceState;
 
@@ -98,6 +108,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     window.addEventListener("popstate", syncFromUrl);
     window.addEventListener(CURRENCY_URL_CHANGE_EVENT, syncFromUrl);
     return () => {
+      active = false;
       window.history.pushState = originalPushState;
       window.history.replaceState = originalReplaceState;
       window.removeEventListener("popstate", syncFromUrl);

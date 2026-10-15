@@ -8,6 +8,8 @@ import RouteLoading from "@/components/route-loading";
 import { LanguageProvider } from "@/components/language-provider";
 import { locales, Locale } from "@/lib/i18n";
 import { buildTravelAgencyStructuredData } from "@/lib/structured-data";
+import Loader from "@/components/loader";
+import { DestinationProvider } from "@/components/destinations/destination-provider";
 
 // Generate static params for all locales
 export function generateStaticParams() {
@@ -19,7 +21,11 @@ type LayoutProps = {
   params: Promise<{ locale: string }>;
 };
 
-export default async function LocaleLayout({ children, params }: LayoutProps) {
+export default function LocaleLayout(props: LayoutProps) {
+  return <React.Suspense fallback={<Loader text="MEGATOURS" />}><LocaleContent {...props} /></React.Suspense>;
+}
+
+async function LocaleContent({ children, params }: LayoutProps) {
   // Validate locale param - this ensures the route is valid
   const { locale } = await params;
   if (!locales.includes(locale as Locale)) {
@@ -30,10 +36,10 @@ export default async function LocaleLayout({ children, params }: LayoutProps) {
   const resolvedLocale = locale as Locale;
 
   return (
-    <LanguageProvider initialLocale={resolvedLocale} translations={getTranslations(resolvedLocale)}>
+    <React.Suspense fallback={<Loader text="MEGATOURS" />}><DestinationProvider><LanguageProvider initialLocale={resolvedLocale} translations={getTranslations(resolvedLocale)}>
       <JsonLd id="structured-data-travel-agency" data={buildTravelAgencyStructuredData(resolvedLocale)} />
       <div className="page">
-        <Header />
+        <React.Suspense fallback={null}><Header /></React.Suspense>
         <React.Suspense fallback={<RouteLoading />}>
           {children}
         </React.Suspense>
@@ -42,6 +48,6 @@ export default async function LocaleLayout({ children, params }: LayoutProps) {
           <DeferredLayoutWidgets locale={locale as Locale} />
         </React.Suspense>
       </div>
-    </LanguageProvider>
+    </LanguageProvider></DestinationProvider></React.Suspense>
   );
 }

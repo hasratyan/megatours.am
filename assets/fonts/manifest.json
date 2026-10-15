@@ -4489,9 +4489,11 @@
         "payments",
         "pending",
         "people",
+        "percent",
         "person",
         "phone",
         "phone_in_talk",
+        "photo",
         "php",
         "pill",
         "pinch",
@@ -4590,8 +4592,8 @@
         "window"
       ],
       "sourceBytes": 4001276,
-      "subsetBytes": 242940,
-      "sha256": "2b5fa671e361f84db3b112a10a5ac4e96657ba909684e6945a4224f12339e24e"
+      "subsetBytes": 243356,
+      "sha256": "b511d244e67e371a82169bb1cbb52d1ee9886ef1397079db6eb755ada807bdba"
     },
     "rounded": {
       "availableIcons": [
@@ -9081,9 +9083,11 @@
         "payments",
         "pending",
         "people",
+        "percent",
         "person",
         "phone",
         "phone_in_talk",
+        "photo",
         "php",
         "pill",
         "pinch",
@@ -9182,8 +9186,8 @@
         "window"
       ],
       "sourceBytes": 5397756,
-      "subsetBytes": 325240,
-      "sha256": "6598eca84096d3873a89fb22bc27c5434622407abefb5efbd61b2e026c5adc52"
+      "subsetBytes": 325940,
+      "sha256": "b35ee35d21b98978e71dcfe9e176d2435ebd42ce91b72b88fb86412262ffb44a"
     }
   }
 }

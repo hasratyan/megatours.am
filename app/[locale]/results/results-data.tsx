@@ -61,7 +61,7 @@ export default async function ResultsData({ locale, searchParams }: ResultsDataP
   let initialResult: SafeSearchResult | null = null;
   let initialError: string | null = null;
 
-  if (parsed.payload && (await shouldServerRenderSearch())) {
+  if (parsed.payload && parsed.payload.countryCode !== "CY" && (await shouldServerRenderSearch())) {
     try {
       initialResult = await runAoryxSearch(parsed.payload);
 

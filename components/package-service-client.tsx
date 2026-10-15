@@ -9,6 +9,8 @@ import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 import type { Locale as DateFnsLocale } from "date-fns";
 import { enGB, hy, ru } from "date-fns/locale";
+import { useDestination } from "@/components/destinations/destination-provider";
+import DestinationServiceOptions from "@/components/destinations/destination-service-options";
 import SearchForm from "@/components/search-form";
 import FeaturedHotelsMarquee from "@/components/featured-hotels-marquee";
 import { useCurrency } from "@/components/currency-provider";
@@ -398,6 +400,8 @@ export default function PackageServiceClient({
   bookingAddonContext = null,
 }: Props) {
   const { locale, t } = useLanguage();
+  const destinationId = useDestination();
+  const isCyprus = destinationId === "cyprus";
   const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[locale] ?? "en-GB";
   const dateFnsLocale = dateFnsLocales[locale] ?? enGB;
@@ -705,7 +709,7 @@ export default function PackageServiceClient({
     serviceKey === "transfer" && (!hasHotel || !transferMissingDestination);
 
   useEffect(() => {
-    if (serviceKey !== "transfer") return;
+    if (serviceKey !== "transfer" || isCyprus) return;
     if (!hasHotel || !hotelCode) return;
 
     let active = true;
@@ -737,7 +741,7 @@ export default function PackageServiceClient({
     return () => {
       active = false;
     };
-  }, [hasHotel, hotelCode, serviceKey]);
+  }, [isCyprus, hasHotel, hotelCode, serviceKey]);
   const insuranceStartDateRaw =
     insuranceDateDraft?.startDate ??
     insuranceSelection?.startDate ??
@@ -1248,6 +1252,8 @@ export default function PackageServiceClient({
   ]);
 
   useEffect(() => {
+    // Cyprus defaults are already quoted by the shared panel; other service pages must preserve them.
+    if (isCyprus && serviceKey !== "insurance") return;
     if (!insuranceSelection?.selected) {
       setInsuranceQuoteError(null);
       setInsuranceQuoteLoading(false);
@@ -1370,7 +1376,7 @@ export default function PackageServiceClient({
           t.packageBuilder.checkout.errors.insuranceQuoteFailed
         );
         const errorKind = resolveEfesErrorKind(message);
-        const shouldUnselectInsurance = errorKind !== "ageLimit";
+        const shouldUnselectInsurance = !isCyprus && errorKind !== "ageLimit";
         setInsuranceQuoteError(mappedMessage);
         updatePackageBuilderState((prev) => {
           if (!prev.insurance?.selected) return prev;
@@ -1409,6 +1415,8 @@ export default function PackageServiceClient({
       }
     };
   }, [
+    isCyprus,
+    serviceKey,
     insuranceQuoteRequest,
     insuranceSelection?.quoteError,
     insuranceSelection?.quoteLoading,
@@ -1644,7 +1652,7 @@ export default function PackageServiceClient({
   }, [excursionGuests, guestExcursions, hasHotel]);
 
   useEffect(() => {
-    if (serviceKey !== "excursion") return;
+    if (serviceKey !== "excursion" || isCyprus) return;
     if (excursionGuests.length === 0) return;
     const stored = builderState.excursion;
     if (!stored?.selected) return;
@@ -1662,7 +1670,7 @@ export default function PackageServiceClient({
     if (serializeGuestExcursions(rebuilt) !== serializeGuestExcursions(guestExcursions)) {
       setGuestExcursions(rebuilt);
     }
-  }, [builderState.excursion, excursionGuests, guestExcursions, serviceKey]);
+  }, [isCyprus, builderState.excursion, excursionGuests, guestExcursions, serviceKey]);
 
   useEffect(() => {
     if (excursionGuests.length === 0) {
@@ -1675,7 +1683,7 @@ export default function PackageServiceClient({
   }, [activeExcursionGuestId, excursionGuestMap, excursionGuests]);
 
   useEffect(() => {
-    if (!shouldFetchTransfers) return;
+    if (!shouldFetchTransfers || isCyprus) return;
     let active = true;
     const fetchTransfers = async () => {
       await Promise.resolve();
@@ -1722,6 +1730,7 @@ export default function PackageServiceClient({
       active = false;
     };
   }, [
+    isCyprus,
     hasHotel,
     transferPreviewDestinationCode,
     transferPreviewDestinationName,
@@ -1730,7 +1739,7 @@ export default function PackageServiceClient({
   ]);
 
   useEffect(() => {
-    if (serviceKey !== "excursion") return;
+    if (serviceKey !== "excursion" || isCyprus) return;
     let active = true;
     const fetchExcursions = async () => {
       await Promise.resolve();
@@ -1759,7 +1768,7 @@ export default function PackageServiceClient({
     return () => {
       active = false;
     };
-  }, [hasHotel, serviceKey, t.hotel.addons.excursions.loadFailed]);
+  }, [isCyprus, hasHotel, serviceKey, t.hotel.addons.excursions.loadFailed]);
 
   const transferIdMap = useMemo(() => {
     const map = new Map<AoryxTransferRate, string>();
@@ -1812,7 +1821,7 @@ export default function PackageServiceClient({
   ]);
 
   useEffect(() => {
-    if (serviceKey !== "transfer") return;
+    if (serviceKey !== "transfer" || isCyprus) return;
     if (!selectedTransferId) return;
     const transfer = transferById.get(selectedTransferId);
     if (!transfer) return;
@@ -1858,6 +1867,7 @@ export default function PackageServiceClient({
       };
     });
   }, [
+    isCyprus,
     includeReturnTransfer,
     getTransferTotals,
     transferGuestCounts,
@@ -2250,7 +2260,7 @@ export default function PackageServiceClient({
   ]);
 
   useEffect(() => {
-    if (serviceKey !== "excursion") return;
+    if (serviceKey !== "excursion" || isCyprus) return;
 
     if (excursionSelectionCount === 0) {
       if (builderState.excursion?.selected && !storedExcursionHasSelections) {
@@ -2292,6 +2302,7 @@ export default function PackageServiceClient({
       updatedAt: Date.now(),
     }));
   }, [
+    isCyprus,
     builderState.excursion?.currency,
     builderState.excursion?.items,
     builderState.excursion?.price,
@@ -2470,10 +2481,13 @@ export default function PackageServiceClient({
         insuranceSelection?.selected &&
         currentTargetRiskAmount === plan.riskAmount &&
         insuranceSelection.riskCurrency === plan.riskCurrency &&
-        insuranceSelection.riskLabel === plan.riskLabel
+        insuranceSelection.riskLabel === plan.riskLabel &&
+        !insuranceSelection.quoteError
       ) {
         return;
       }
+      insuranceQuoteKeyRef.current = null;
+      insuranceQuoteRequestIdRef.current += 1;
       const availableGuestIds = new Set(insuranceGuestIds);
       const existingRiskByGuest = insuranceSelection?.riskByGuest ?? {};
       const nextRiskByGuest = Object.entries(existingRiskByGuest).reduce<Record<string, number>>(
@@ -2552,6 +2566,7 @@ export default function PackageServiceClient({
       insuranceSelection?.riskByGuest,
       insuranceSelection?.riskCurrency,
       insuranceSelection?.riskLabel,
+      insuranceSelection?.quoteError,
       insuranceSelection?.selected,
       insuranceSelection?.subrisks,
       insuranceSelection?.travelCountries,
@@ -2926,7 +2941,7 @@ export default function PackageServiceClient({
   };
 
   const renderExcursionControls = () => {
-    if (serviceKey !== "excursion") return null;
+    if (serviceKey !== "excursion" || isCyprus) return null;
     if (excursionLoading) return null;
     if (excursionError) return null;
     if (excursionOptionsWithId.length === 0) return null;
@@ -3530,7 +3545,7 @@ export default function PackageServiceClient({
         <div className="panel">
           <div className="empty">
             <p>{t.packageBuilder.warningSelectHotel}</p>
-            <Link href={`/${locale}/services/hotel`} className="service-builder__cta">
+            <Link href={(isCyprus ? `/${locale}/cyprus` : `/${locale}/services/hotel`) as Route} className="service-builder__cta">
               {t.packageBuilder.services.hotel}
             </Link>
           </div>
@@ -4064,7 +4079,7 @@ export default function PackageServiceClient({
   };
 
   return (
-    <main className="service-builder">
+    <main className="service-builder" data-destination={destinationId}>
       <div className="container">
         <div className="header">
           <h1>{pageCopy.title}</h1>
@@ -4122,7 +4137,7 @@ export default function PackageServiceClient({
             <p>{selectionWarning ?? t.packageBuilder.warningSelectHotel}</p>
           </div>
           <Link
-            href={`/${locale}/services/hotel`}
+            href={(isCyprus ? `/${locale}/cyprus` : `/${locale}/services/hotel`) as Route}
             className="service-builder__cta"
             onClick={dismissSelectionWarning}
           >
@@ -4136,6 +4151,8 @@ export default function PackageServiceClient({
               <SearchForm copy={t.search} />
             </div>
           </>
+        ) : isCyprus && (serviceKey === "flight" || serviceKey === "transfer" || serviceKey === "excursion") ? (
+          <DestinationServiceOptions service={serviceKey === "excursion" ? "attraction" : serviceKey} state={builderState} />
         ) : serviceKey === "flight" ? (
           renderFlightPanel()
         ) : serviceKey === "transfer" ? (
@@ -4158,7 +4175,7 @@ export default function PackageServiceClient({
             {!hasHotel ? (
               <div className="empty">
                 <p>{t.packageBuilder.warningSelectHotel}</p>
-                <Link href={`/${locale}/services/hotel`} className="service-builder__cta">
+                <Link href={(isCyprus ? `/${locale}/cyprus` : `/${locale}/services/hotel`) as Route} className="service-builder__cta">
                   {t.packageBuilder.services.hotel}
                 </Link>
               </div>

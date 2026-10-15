@@ -183,7 +183,7 @@ button{
   position: absolute;
   inset: 0;
   z-index: -1;
-  width: 101vw;
+  width: 100%;
   height: 100vh;
   --bg-fade-size: 150px;
   --curveAmount: 200px;
@@ -9702,3 +9702,8 @@ html.zoho-salesiq-handoff-only:not(.zoho-salesiq-live-agent-requested) #zsiq_flo
   outline-offset: 4px;
 }
 .progressive-list-controls > button:disabled { cursor: progress; opacity: .7; }
+
+/* Destination choice uses the existing package panel and brand controls. */
+.package-builder__payment-note { color: #e2e8f0; font-size: .875rem; line-height: 1.5; margin: 1rem 0 0; }
+.service-builder[data-destination="cyprus"] .controls label { display: grid; gap: .5rem; color: #e2e8f0; }
+.service-builder[data-destination="cyprus"] .controls input[type="time"], .service-builder[data-destination="cyprus"] .controls select { min-height: 44px; max-width: 100%; padding: .5rem .75rem; border: 1px solid #dedee5; border-radius: .75rem; background: #fff; color: #282741; }

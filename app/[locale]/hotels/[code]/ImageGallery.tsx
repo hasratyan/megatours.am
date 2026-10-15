@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, ViewTransition } from "react";
+import { bypassHotelImageOptimization } from "@/lib/hotel-image";
 import Image from "next/image";
 import { useTranslations } from "@/components/language-provider";
 import { hotelImageTransitionName } from "@/lib/hotel-navigation";
@@ -157,6 +158,7 @@ export default function ImageGallery({ images, altText, hotelCode }: ImageGaller
               <ViewTransition name={idx === 0 ? hotelImageTransitionName(hotelCode) : undefined} default="none" share={idx === 0 ? "hotel-image" : "none"}>
               <Image
                 src={src}
+                unoptimized={bypassHotelImageOptimization(src)}
                 alt={buildAlt(idx)}
                 width={0}
                 height={0}
@@ -180,6 +182,7 @@ export default function ImageGallery({ images, altText, hotelCode }: ImageGaller
             >
               <Image
                 src={images[selectedImageIndex]}
+                unoptimized={bypassHotelImageOptimization(images[selectedImageIndex])}
                 alt={buildAlt(selectedImageIndex)}
                 width={0}
                 height={0}

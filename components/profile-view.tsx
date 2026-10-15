@@ -230,7 +230,7 @@ export default function ProfileView({
     {
       key: "newSearch",
       icon: "search",
-      href: `/${locale}#hero` as Route,
+      href: `/${locale}/uae#hero` as Route,
       disabled: false,
       copy: t.profile.actions.items.newSearch,
     },
@@ -277,7 +277,7 @@ export default function ProfileView({
           </div>
         </div>
         <div className="profile-actions">
-          <Link className="profile-action" href={`/${locale}#hero`}>
+          <Link className="profile-action" href={`/${locale}/uae#hero`}>
             <span className="material-symbols-rounded" aria-hidden="true">search</span>{t.profile.actions.items.newSearch.cta}
           </Link>
           <Link className="profile-action secondary" href={`/${locale}#featured`}>

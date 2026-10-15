@@ -10,6 +10,7 @@ export interface AoryxRoomSearch {
 
 // Search parameters (frontend-friendly format)
 export interface AoryxSearchParams {
+  destinationId?: "uae" | "cyprus";
   destinationCode?: string;
   hotelCode?: string;
   areaId?: string;

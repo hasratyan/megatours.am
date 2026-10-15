@@ -1,3 +1,4 @@
+import { bypassHotelImageOptimization } from "@/lib/hotel-image";
 import Link from "next/link";
 import Image from "next/image";
 import type { Route } from "next";
@@ -26,7 +27,8 @@ type Props = {
 
 export default function HotelCard({ hotel, copy, locale }: Props) {
   const hasOldPrice = typeof hotel.oldPrice === "number" && hotel.oldPrice > 0;
-  const hotelHref = `/${locale}/hotels/${encodeURIComponent(hotel.hotelCode)}` as Route;
+  const query = hotel.destinationId === "cyprus" ? `?destinationId=cyprus&countryCode=CY&destinationCode=${encodeURIComponent(hotel.cityId ?? "")}` : "";
+  const hotelHref = `/${locale}/hotels/${encodeURIComponent(hotel.hotelCode)}${query}` as Route;
 
   return (
     <div className="hotel-card">
@@ -35,7 +37,7 @@ export default function HotelCard({ hotel, copy, locale }: Props) {
         {hotel.availability && <span className="availability">{hotel.availability}</span>}
       </div>
       <div className="image">
-        <Image src={hotel.image} alt={hotel.name} fill sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 100vw" />
+        {hotel.image ? <Image unoptimized={bypassHotelImageOptimization(hotel.image)} src={hotel.image} alt={hotel.name} fill sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 100vw" /> : <span className="material-symbols-rounded" aria-hidden="true">hotel</span>}
       </div>
       <div className="content">
         <div className="header">
@@ -48,7 +50,7 @@ export default function HotelCard({ hotel, copy, locale }: Props) {
               </p>
             )}
           </div>
-          <span className="rating">{hotel.rating.toFixed(1)} ★</span>
+          {hotel.rating > 0 ? <span className="rating">{hotel.rating.toFixed(1)} ★</span> : null}
         </div>
         {hotel.perks.length > 0 && (
           <div className="perks">
@@ -60,11 +62,11 @@ export default function HotelCard({ hotel, copy, locale }: Props) {
         <div className="footer">
           <div>
             <p className="price">
-              {copy.from} {hotel.currency}{hotel.priceFrom}{" "}
+              {hotel.priceFrom === null ? {hy:"Ընտրեք ամսաթվերը",en:"Choose your dates",ru:"Выберите даты"}[locale] : <>{copy.from} {hotel.currency}{hotel.priceFrom}{" "}
               {hasOldPrice && (
                 <span className="old-price">{hotel.currency}{hotel.oldPrice}</span>
               )}{" "}
-              <small>{copy.perNight}</small>
+              <small>{copy.perNight}</small></>}
             </p>
           </div>
           <Link href={hotelHref}>

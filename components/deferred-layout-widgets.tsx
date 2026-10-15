@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useDestination } from "@/components/destinations/destination-provider";
 import type { Locale } from "@/lib/i18n";
 
 const PromoPopup = dynamic(() => import("@/components/promo-popup"));
@@ -17,6 +18,7 @@ export default function DeferredLayoutWidgets({ locale }: DeferredLayoutWidgetsP
   const [shouldRender, setShouldRender] = useState(false);
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const destination = useDestination();
 
   const isBookingAddonsVoucherRoute =
     typeof pathname === "string" &&
@@ -53,9 +55,9 @@ export default function DeferredLayoutWidgets({ locale }: DeferredLayoutWidgetsP
 
   return (
     <>
-      <PromoPopup />
-      {!hidePackageWidgets ? <PackageBuilderAiChat locale={locale} /> : null}
-      {!hidePackageWidgets ? <PackageBuilder /> : null}
+      {destination === "uae" ? <PromoPopup /> : null}
+      {!hidePackageWidgets && destination === "uae" ? <PackageBuilderAiChat locale={locale} /> : null}
+      {!hidePackageWidgets ? <PackageBuilder key={destination} /> : null}
     </>
   );
 }

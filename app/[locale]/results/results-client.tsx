@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition, ViewT
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildSearchQuery, parseSearchParams } from "@/lib/search-query";
 import type { AoryxSearchParams, AoryxSearchResult } from "@/types/aoryx";
+import { bypassHotelImageOptimization } from "@/lib/hotel-image";
 import Image from "next/image";
 import SearchForm from "@/components/search-form";
 import Loader from "@/components/loader";
@@ -21,6 +22,8 @@ import { resolveAoryxMealCode } from "@/lib/aoryx-meals";
 import { summarizeHotelMealPrices } from "@/lib/aoryx-meal-pricing";
 import { resolveAoryxSearchArea } from "@/lib/aoryx-areas";
 import { hotelImageTransitionName, isHotelSearchFresh, type CompletedHotelSearch } from "@/lib/hotel-navigation";
+import { searchDestinationHotelPresentation } from "@/lib/packages/hotel-client";
+import { useDestination } from "@/components/destinations/destination-provider";
 
 const ratingOptions = [5, 4, 3, 2, 1] as const;
 const mealOptions = [
@@ -45,6 +48,8 @@ interface DestinationInfo {
 
 type SafeSearchResult = Omit<AoryxSearchResult, "sessionId"> & {
   searchToken?: string | null;
+  partial?: boolean;
+  nextOffset?: number | null;
 };
 
 type StoredLocation = {
@@ -80,6 +85,7 @@ export default function ResultsClient({
   "use memo";
 
   const t = useTranslations();
+  const destination = useDestination();
   const { locale } = useLanguage();
   const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[locale] ?? "en-GB";
@@ -120,7 +126,7 @@ export default function ResultsClient({
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const raw = sessionStorage.getItem("megatours:lastSearchLocation");
+      const raw = sessionStorage.getItem(`megatours:lastSearchLocation${destination === "cyprus" ? ":cyprus" : ""}`);
       if (!raw) {
         setStoredLocation(null);
         return;
@@ -140,7 +146,7 @@ export default function ResultsClient({
       console.warn("[Results] Failed to read stored location", error);
       setStoredLocation(null);
     }
-  }, [searchKey]);
+  }, [searchKey, destination]);
 
   useEffect(() => {
     if (!requestKey) {
@@ -257,6 +263,16 @@ export default function ResultsClient({
   const selectedMeals = parsed.payload?.meals ?? emptyMeals;
   const priceRangeOverride =
     priceRangeOverrideState.key === priceOverrideKey ? priceRangeOverrideState.value : null;
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMore = async () => {
+    if (!parsed.payload || resultState?.nextOffset == null || loadingMore) return;
+    const key = requestKey;
+    setLoadingMore(true);
+    try {
+      const { presentation } = await searchDestinationHotelPresentation(parsed.payload, undefined, resultState.nextOffset);
+      if (completedSearchRef.current?.key === key) setResultState((prev) => prev ? { ...presentation, hotels: [...new Map([...prev.hotels, ...presentation.hotels].map((hotel) => [hotel.code, hotel])).values()], partial: prev.partial || presentation.partial } : presentation);
+    } catch { setErrorState(t.search.errors.submit); } finally { setLoadingMore(false); }
+  };
   const result = resultState;
   const error = errorState;
   const destinations = initialDestinations;
@@ -722,13 +738,15 @@ export default function ResultsClient({
                 {t.results.retry}
               </button>
             ) : null}
-            <Link href={`/${locale}` as Route}><span className="material-symbols-rounded">arrow_back</span>{t.common.backToSearch}</Link>
+            <Link href={`/${locale}/${destination}` as Route}><span className="material-symbols-rounded">arrow_back</span>{t.common.backToSearch}</Link>
           </div>
         </div>
       ) : (
         <div className="container">
           <div className="search">
             <SearchForm
+              key={destination}
+              destinationId={destination}
               copy={t.search}
               presetDestination={presetDestination}
               presetHotel={presetHotel}
@@ -746,6 +764,8 @@ export default function ResultsClient({
               useGuestAbbreviations
             />
           </div>
+          {result?.partial ? <p className="results-empty" role="status">{{ en: "Some availability could not be checked. You can retry for more options.", hy: "Որոշ տարբերակների հասանելիությունը չի ստուգվել։ Կարող եք կրկին որոնել։", ru: "Часть вариантов не удалось проверить. Можно повторить поиск." }[locale]}</p> : null}
+          {result?.nextOffset != null ? <button type="button" className="btn btn-primary" disabled={loadingMore || isSearching} onClick={() => { void loadMore(); }}>{loadingMore ? t.results.loading : { en: "Load more hotels", hy: "Բեռնել այլ հյուրանոցներ", ru: "Показать ещё отели" }[locale]}</button> : null}
           {isSearching ? (
             <Loader text={t.results.loading} />
           ) : result && result.hotels.length === 0 ? (
@@ -832,6 +852,7 @@ export default function ResultsClient({
                           fill
                           sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 100vw"
                           src={hotel.imageUrl}
+                          unoptimized={bypassHotelImageOptimization(hotel.imageUrl)}
                           alt={hotel.name ?? t.results.hotel.fallbackName}
                         />
                       ) : (

@@ -15,6 +15,9 @@ import type {
 } from "react-select";
 import type { InsuranceSelectOption as AddressSelectOption, InsuranceSelectProps } from "./checkout-insurance-select";
 import { useCurrency } from "@/components/currency-provider";
+import { useDestination } from "@/components/destinations/destination-provider";
+import DestinationCheckoutReview from "@/components/destinations/destination-checkout-review";
+import { packagePaymentCopy, packagePaymentProvider } from "@/lib/packages/payment";
 import { useLanguage } from "@/components/language-provider";
 import { ApiError, postJson } from "@/lib/api-helpers";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
@@ -784,10 +787,10 @@ type PackageCheckoutClientProps = {
   initialPaymentMethodFlags: PaymentMethodFlags;
 };
 
-export default function PackageCheckoutClient({
-  initialPaymentMethodFlags,
-}: PackageCheckoutClientProps) {
+export default function PackageCheckoutClient({ initialPaymentMethodFlags }: PackageCheckoutClientProps) {
   const { locale, t } = useLanguage();
+  const destinationId = useDestination();
+  const isCyprus = destinationId === "cyprus";
   const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[locale] ?? "en-GB";
   const { data: session } = useSession();
@@ -858,7 +861,7 @@ export default function PackageCheckoutClient({
   const efesCountriesLoadedRef = useRef(false);
   const restoredDraftSignatureRef = useRef<string | null>(null);
   const draftLookupCompletedSignatureRef = useRef<string | null>(null);
-  const isDevEnvironment = process.env.NODE_ENV === "development";
+  const isDevEnvironment = process.env.NODE_ENV === "development" && !isCyprus;
   const couponUiText = useMemo(
     () => ({
       applied: t.packageBuilder.checkout.couponApplied,
@@ -1059,8 +1062,8 @@ export default function PackageCheckoutClient({
 
   const hotel = builderState.hotel;
   const checkoutDraftSignature = useMemo(
-    () => buildCheckoutDraftSignature(hotel),
-    [hotel]
+    () => { const signature = buildCheckoutDraftSignature(hotel); return signature && isCyprus ? `cyprus:${signature}` : signature; },
+    [hotel, isCyprus]
   );
   const transfer = builderState.transfer;
   const excursion = builderState.excursion;
@@ -2379,7 +2382,7 @@ export default function PackageCheckoutClient({
   );
 
   const handleApplyCoupon = useCallback(async () => {
-    if (couponLoading || paymentLoading) return;
+    if (isCyprus || couponLoading || paymentLoading) return;
     const code = normalizeCouponInput(couponCode);
     if (!code) {
       setCouponError(couponUiText.enterCode);
@@ -2403,6 +2406,7 @@ export default function PackageCheckoutClient({
       setCouponLoading(false);
     }
   }, [
+    isCyprus,
     couponCode,
     couponLoading,
     couponUiText.applied,
@@ -2414,7 +2418,7 @@ export default function PackageCheckoutClient({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canPay || paymentLoading) return;
+    if (isCyprus || !canPay || paymentLoading) return;
     setPaymentError(null);
     setInsuranceQuoteError(null);
     setDevInsuranceMessage(null);
@@ -3129,6 +3133,7 @@ export default function PackageCheckoutClient({
       currency: string | null | undefined,
       rates: typeof baseRates
     ) => {
+      if (packagePaymentProvider(destinationId, id) === "kyte") return;
       const formatted = formatServicePrice(amount ?? null, currency ?? null, rates);
       totals.push({ id, label, value: formatted ?? "-", icon: serviceIconMap[id] });
     };
@@ -3196,7 +3201,7 @@ export default function PackageCheckoutClient({
       currency: string | null | undefined,
       rates: typeof baseRates
     ) => {
-      if (!selected) return;
+      if (!selected || packagePaymentProvider(destinationId, id) === "kyte") return;
       selectedCount += 1;
       const normalized = normalizeAmount(amount ?? null, currency ?? null, rates, displayCurrency);
       if (!normalized) {
@@ -3583,7 +3588,7 @@ export default function PackageCheckoutClient({
   );
 
   const canPay = Boolean(
-    termsAccepted &&
+    !isCyprus && termsAccepted &&
       enabledPaymentMethodOptions.length > 0 &&
       paymentMethod &&
       (!insuranceActive || insuranceTermsAccepted) &&
@@ -3604,6 +3609,7 @@ export default function PackageCheckoutClient({
         <div className="package-checkout__header">
           <h1>{t.packageBuilder.checkout.title}</h1>
           <p>{t.packageBuilder.checkout.subtitle}</p>
+          {isCyprus ? <DestinationCheckoutReview state={builderState} /> : null}
           {formattedSessionRemaining ? (
             <p className="package-checkout__timer">
               <span className="material-symbols-rounded">timer</span>
@@ -4677,7 +4683,7 @@ export default function PackageCheckoutClient({
 
           <aside className="package-checkout__summary">
             <div className="checkout-summary__card">
-              <h3><span className="material-symbols-rounded" aria-hidden="true">payments</span>{t.packageBuilder.checkout.totalTitle}</h3>
+              <h3><span className="material-symbols-rounded" aria-hidden="true">payments</span>{isCyprus ? packagePaymentCopy[locale].checkoutTotal : t.packageBuilder.checkout.totalTitle}</h3>
               {serviceTotals.map((service) => (
                 <div key={service.id} className="checkout-summary__line">
                   <span>
@@ -4690,7 +4696,7 @@ export default function PackageCheckoutClient({
                 </div>
               ))}
               <div className="checkout-summary__line">
-                {hideTotalLabel ? null : <b>{t.packageBuilder.checkout.totalLabel}</b>}
+                {hideTotalLabel ? null : <b>{isCyprus ? packagePaymentCopy[locale].checkoutTotal : t.packageBuilder.checkout.totalLabel}</b>}
                 <strong className={couponDiscountSummary ? "checkout-summary__amount--striked" : ""}>
                   {estimatedTotal.label ?? 0}
                 </strong>
@@ -4723,7 +4729,7 @@ export default function PackageCheckoutClient({
                     type="button"
                     className="checkout-apply"
                     onClick={handleApplyCoupon}
-                    disabled={couponLoading || paymentLoading}
+                    disabled={isCyprus || couponLoading || paymentLoading}
                   >
                     {couponLoading ? couponUiText.applying : t.packageBuilder.checkout.applyCoupon}
                   </button>
@@ -4755,6 +4761,13 @@ export default function PackageCheckoutClient({
                 </button>
               )}
             </div>
+            {isCyprus && builderState.flight?.selected ? (
+              <div className="checkout-summary__card">
+                <h3><span className="material-symbols-rounded" aria-hidden="true">flight</span>{packagePaymentCopy[locale].flightTitle}</h3>
+                <p>{packagePaymentCopy[locale].notice}</p>
+                <strong>{formatServicePrice(builderState.flight.price ?? null, builderState.flight.currency ?? null, baseRates) ?? t.common.contactForRates}</strong>
+              </div>
+            ) : null}
           </aside>
         </form>
         {checkoutRestoreDraftModal ? (

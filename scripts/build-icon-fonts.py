@@ -1,6 +1,7 @@
 """Regenerate self-hosted Material Symbols subsets; see docs/performance.md."""
 import hashlib
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from fontTools.ttLib import TTFont
 
 ROOT = Path(__file__).resolve().parents[1]
 tokens = set(json.loads(subprocess.check_output(
-    ["node", str(ROOT / "scripts/icon-source-tokens.mjs")], text=True
+    [os.environ.get("ICON_FONTS_NODE", "node"), str(ROOT / "scripts/icon-source-tokens.mjs")], text=True
 )))
 
 output = ROOT / "assets/fonts"

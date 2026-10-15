@@ -1,0 +1,7 @@
+.switcher { display: flex; justify-content: center; flex-wrap: wrap; gap: .65rem; margin-bottom: 1.4rem; }
+.country { display: inline-flex; align-items: center; gap: .55rem; padding: .65rem 1.15rem; border: 1px solid rgba(255,255,255,.3); border-radius: 999px; background: rgba(14,31,43,.35); color: #fff; text-decoration: none; font-weight: 600; transition: background .2s, border-color .2s; }
+.country span { font-size: 1.35rem; line-height: 1; }
+.country:hover { background: rgba(255,255,255,.15); }
+.country:focus-visible { outline: 2px solid #bce5dc; outline-offset: 4px; }
+.active { background: #bce5dc; border-color: #bce5dc; color: #142a37; }
+.active:hover { background: #cbece5; }

@@ -7,6 +7,8 @@ const withBundleAnalyzer = bundleAnalyzer({
 });
 
 const nextConfig: NextConfig = {
+  // Keep local quote-flow verification separate from an already running development server.
+  distDir: process.env.NODE_ENV === "development" && process.env.MEGATOURS_ISOLATED_PREVIEW === "1" ? ".next-preview" : ".next",
   typedRoutes: true,
   cacheComponents: true,
   partialPrefetching: true,
@@ -24,6 +26,8 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
+      { protocol: "https", hostname: "api.tbotechnology.in" },
+      { protocol: "https", hostname: "photos.hotelbeds.com" },
       {
         protocol: "https",
         hostname: "lh3.googleusercontent.com",
