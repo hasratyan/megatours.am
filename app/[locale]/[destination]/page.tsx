@@ -11,7 +11,8 @@ import { destinations, getDestination } from "@/lib/destinations/registry";
 import UaeHome from "@/components/destinations/uae-home";
 import CyprusHome from "@/components/destinations/cyprus-home";
 
-export const ensureStatic = "navigation";
+// Keep the shell/prefetch static while the agent catalogue loads for a real request.
+export const ensureStatic = "prefetch";
 
 type PageProps = {
   params: Promise<{
