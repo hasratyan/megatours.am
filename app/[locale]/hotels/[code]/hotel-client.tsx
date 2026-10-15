@@ -6,6 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signIn, useSession } from "@/lib/auth-compat/react";
 import SearchForm from "@/components/search-form";
+import { useDestination } from "@/components/destinations/destination-provider";
+import { searchDestinationHotelPresentation } from "@/lib/packages/hotel-client";
+import type { DestinationHotelPrebookResult } from "@/lib/packages/contracts";
 import Loader from "@/components/loader";
 import ProgressiveList from "@/components/progressive-list";
 import { useCurrency } from "@/components/currency-provider";
@@ -847,6 +850,7 @@ export default function HotelClient({
   initialExcursionError = null,
   initialExcursionFee = null,
 }: HotelClientProps) {
+  const destinationId = useDestination();
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -1156,7 +1160,7 @@ export default function HotelClient({
     setRoomsLoading(true);
     setRoomsError(null);
 
-    postJson<SafeRoomDetails>("/api/aoryx/room-details", roomDetailsPayload)
+    (destinationId === "cyprus" ? searchDestinationHotelPresentation(roomDetailsPayload).then((data) => ({ currency: roomDetailsPayload.currency ?? null, rooms: data.rooms })) : postJson<SafeRoomDetails>("/api/aoryx/room-details", roomDetailsPayload))
       .then((data) => {
         if (!active) return;
         setRoomOptions(Array.isArray(data.rooms) ? data.rooms : []);
@@ -1178,6 +1182,7 @@ export default function HotelClient({
       active = false;
     };
   }, [
+    destinationId,
     initialRoomDetails,
     initialRoomsError,
     roomDetailsPayload,
@@ -1788,7 +1793,7 @@ export default function HotelClient({
     if (resolvedDestinationCode) return resolvedDestinationCode;
     const destinationName =
       hotelInfo?.destinationName?.trim() ?? hotelInfo?.address?.cityName?.trim() ?? "";
-    if (!destinationName) return null;
+    if (!destinationName || destinationId === "cyprus") return null;
     const countryCode = hotelInfo?.address?.countryCode?.trim() || "AE";
 
     try {
@@ -1829,6 +1834,7 @@ export default function HotelClient({
       return null;
     }
   }, [
+    destinationId,
     destinationCodeFromQuery,
     hotelInfo?.destinationName,
     hotelInfo?.address?.cityName,
@@ -2208,6 +2214,19 @@ export default function HotelClient({
         selectionKey,
       };
 
+      if (destinationId === "cyprus") {
+        setBookingPreparing(true); setPrebookingKey(group.key); setBookingError(null);
+        try {
+          const uniqueIds = [...new Set(rateKeys)];
+          if (uniqueIds.length !== 1) throw new Error(t.hotel.errors.prebookFailed);
+          const validated = await postJson<DestinationHotelPrebookResult>("/api/destinations/cyprus/hotels/prebook", { offerId: uniqueIds[0] });
+          updatePackageBuilderState(() => ({ destinationId: "cyprus", destinationQuotes: { hotel: validated }, hotel: { ...nextHotel, countryCode: "CY", price: validated.offer.price.amount, currency: validated.offer.price.currency, selectionKey: validated.offer.id }, sessionExpiresAt: Date.parse(validated.offer.expiresAt), updatedAt: Date.now() }));
+          openPackageBuilder();
+        } catch (error) { setBookingError(resolveSafeErrorFromUnknown(error, t.hotel.errors.prebookFailed)); }
+        finally { setBookingPreparing(false); setPrebookingKey(null); }
+        return;
+      }
+
       if (authStatus === "loading") {
         setBookingError(t.hotel.errors.checkingSignIn);
         return;
@@ -2314,6 +2333,7 @@ export default function HotelClient({
       roomDetailsPayload?.rooms,
       searchParams,
       t,
+      destinationId,
     ]
   );
 
@@ -2701,7 +2721,7 @@ export default function HotelClient({
             <div className="results-error">
               <p>{finalError}</p>
               <div className="results-error-actions">
-                <Link href={`/${locale}` as Route} className="btn btn-primary">{t.common.backToSearch}</Link>
+                <Link href={`/${locale}/${destinationId}` as Route} className="btn btn-primary">{t.common.backToSearch}</Link>
               </div>
             </div>
           )}
@@ -2883,7 +2903,9 @@ export default function HotelClient({
                                     disabled={!canBook || bookingPreparing}
                                     onClick={() => handlePrebook(group)}
                                   >
-                                    {!isSignedIn
+                                    {destinationId === "cyprus"
+                                      ? t.packageBuilder.addTag
+                                      : !isSignedIn
                                       ? t.hotel.roomOptions.signInToBook
                                       : isPrebooking
                                       ? t.hotel.roomOptions.checkingAvailability

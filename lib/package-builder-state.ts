@@ -1,4 +1,5 @@
 export type PackageBuilderService = "hotel" | "flight" | "transfer" | "excursion" | "insurance";
+import { destinationFromPath, type DestinationId } from "@/lib/destinations/registry";
 
 export type ServiceFlagKey = PackageBuilderService | "aiChat";
 export type ServiceFlags = Record<ServiceFlagKey, boolean>;
@@ -21,6 +22,7 @@ import type {
   BookingInsuranceTraveler,
 } from "@/types/aoryx";
 import type { MealPlanKey } from "@/lib/meal-plans";
+import type { DestinationHotelPrebookResult, ExtraServicePrebookResult, DestinationPackageReview } from "@/lib/packages/contracts";
 
 export type PackageBuilderHotelSelection = {
   selected: boolean;
@@ -207,6 +209,14 @@ export type PackageBuilderFlightSelection = PackageBuilderServiceSelection & {
 };
 
 export type PackageBuilderState = {
+  destinationId?: DestinationId;
+  destinationQuotes?: {
+    hotel: DestinationHotelPrebookResult;
+    services?: Partial<Record<"transfer" | "flight", ExtraServicePrebookResult>>;
+    attraction?: ExtraServicePrebookResult;
+    review?: DestinationPackageReview;
+  };
+  destinationDefaults?: { hotelOfferId: string; insurance: "pending" | "ready" | "unavailable"; attractions: "pending" | "ready" | "empty" | "unavailable" };
   hotel?: PackageBuilderHotelSelection;
   transfer?: PackageBuilderServiceSelection & {
     destinationName?: string | null;
@@ -248,55 +258,72 @@ const OWNER_STATE_PREFIX = "megatours-package-builder:state:";
 
 const isBrowser = typeof window !== "undefined";
 
-export const readPackageBuilderState = (): PackageBuilderState => {
-  if (!isBrowser) return {};
-  const raw = window.localStorage.getItem(STORAGE_KEY);
+export const packageBuilderDestination = (): DestinationId => {
+  if (!isBrowser) return "uae";
+  const query = new URLSearchParams(window.location?.search ?? "");
+  return query.get("destinationId") === "cyprus" || query.get("countryCode") === "CY" ? "cyprus" : destinationFromPath(window.location?.pathname ?? "") ?? "uae";
+};
+const scopedKey = (key: string, destination: DestinationId) => destination === "uae" ? key : `${key}:${destination}`;
+const readStoredState = (raw: string | null, destination: DestinationId): PackageBuilderState => {
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw) as PackageBuilderState;
-    if (!parsed || typeof parsed !== "object") return {};
-    const normalized = normalizeHotelRooms(parsed, {});
-    if (normalized !== parsed) {
-      writePackageBuilderState(normalized);
-      return normalized;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    if (parsed.destinationId && parsed.destinationId !== destination) return {};
+    if (parsed.hotel?.countryCode && parsed.hotel.countryCode !== (destination === "uae" ? "AE" : "CY")) return {};
+    // Migrate the short-lived single-extra draft without dropping its quote or other services.
+    const legacy = parsed as PackageBuilderState & { bookingMode?: unknown; destinationQuotes?: PackageBuilderState["destinationQuotes"] & { service?: ExtraServicePrebookResult } };
+    if (destination === "cyprus" && ("bookingMode" in legacy || legacy.destinationQuotes?.service)) {
+      const next = { ...legacy };
+      delete next.bookingMode;
+      if (next.destinationQuotes?.service) {
+        const { service, ...quotes } = next.destinationQuotes;
+        const kind = service.offer.service;
+        next.destinationQuotes = { ...quotes, services: { ...quotes.services, ...((kind === "transfer" || kind === "flight") ? { [kind]: service } : {}) }, review: undefined };
+      }
+      return next;
     }
     return parsed;
-  } catch {
-    return {};
+  } catch { return {}; }
+};
+
+export const readPackageBuilderState = (destination: DestinationId = packageBuilderDestination()): PackageBuilderState => {
+  if (!isBrowser) return {};
+  const parsed = readStoredState(window.localStorage.getItem(scopedKey(STORAGE_KEY, destination)), destination);
+  const normalized = normalizeHotelRooms(parsed, {});
+  if (normalized !== parsed) {
+    writePackageBuilderState(normalized, destination);
   }
+  return normalized;
 };
 
 export const readPackageBuilderOwner = (): string | null => {
   if (!isBrowser) return null;
-  const owner = window.localStorage.getItem(OWNER_KEY);
+  const owner = window.localStorage.getItem(scopedKey(OWNER_KEY, packageBuilderDestination()));
   return owner && owner.trim().length > 0 ? owner : null;
 };
 
 export const writePackageBuilderOwner = (owner: string | null) => {
   if (!isBrowser) return;
   if (!owner) {
-    window.localStorage.removeItem(OWNER_KEY);
+    window.localStorage.removeItem(scopedKey(OWNER_KEY, packageBuilderDestination()));
     return;
   }
-  window.localStorage.setItem(OWNER_KEY, owner);
+  window.localStorage.setItem(scopedKey(OWNER_KEY, packageBuilderDestination()), owner);
 };
 
-const ownerStateKey = (owner: string) => `${OWNER_STATE_PREFIX}${owner}`;
+const ownerStateKey = (owner: string) => scopedKey(`${OWNER_STATE_PREFIX}${owner}`, packageBuilderDestination());
 
 export const readPackageBuilderStateForOwner = (owner: string): PackageBuilderState => {
   if (!isBrowser) return {};
   const raw = window.localStorage.getItem(ownerStateKey(owner));
   if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as PackageBuilderState;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+  return readStoredState(raw, packageBuilderDestination());
 };
 
 export const writePackageBuilderStateForOwner = (owner: string, state: PackageBuilderState) => {
   if (!isBrowser) return;
+  assertDraftDestination(state, packageBuilderDestination());
   window.localStorage.setItem(ownerStateKey(owner), JSON.stringify(state));
 };
 
@@ -314,9 +341,15 @@ export const resetPackageBuilderState = () => {
   }
 };
 
-export const writePackageBuilderState = (state: PackageBuilderState) => {
+const assertDraftDestination = (state: PackageBuilderState, destination: DestinationId) => {
+  if (state.destinationId && state.destinationId !== destination) throw new Error("Booking draft belongs to another destination.");
+  if (state.hotel?.countryCode && state.hotel.countryCode !== (destination === "uae" ? "AE" : "CY")) throw new Error("Hotel belongs to another destination.");
+};
+
+export const writePackageBuilderState = (state: PackageBuilderState, destination: DestinationId = packageBuilderDestination()) => {
   if (!isBrowser) return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  assertDraftDestination(state, destination);
+  window.localStorage.setItem(scopedKey(STORAGE_KEY, destination), JSON.stringify({ ...state, destinationId: destination }));
   window.dispatchEvent(new Event(UPDATE_EVENT));
 };
 

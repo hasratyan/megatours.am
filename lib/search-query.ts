@@ -57,7 +57,9 @@ export function parseSearchParams(
   const destinationCode = searchParams.get("destinationCode") ?? undefined;
   const hotelCode = searchParams.get("hotelCode") ?? undefined;
   const area = resolveAoryxSearchArea(searchParams.get("areaId"), destinationCode, hotelCode);
-  const countryCode = searchParams.get("countryCode") ?? "AE";
+  const requestedCountry = searchParams.get("countryCode")?.toUpperCase() ?? "AE";
+  const destinationId = requestedCountry === "CY" || searchParams.get("destinationId") === "cyprus" ? "cyprus" : "uae";
+  const countryCode = destinationId === "cyprus" ? "CY" : requestedCountry;
   const nationality = searchParams.get("nationality") ?? "AM";
   const currency = searchParams.get("currency") ?? "USD";
   const checkInDate = searchParams.get("checkInDate") ?? undefined;
@@ -77,6 +79,7 @@ export function parseSearchParams(
     payload: {
       destinationCode,
       hotelCode,
+      ...(destinationId === "cyprus" ? { destinationId } : {}),
       ...(area ? { areaId: area.id } : {}),
       countryCode,
       nationality,
@@ -92,11 +95,14 @@ export function parseSearchParams(
 
 export function buildSearchQuery(params: AoryxSearchParams): string {
   const search = new URLSearchParams();
+  if (params.destinationId === "cyprus" || params.countryCode === "CY") {
+    search.set("destinationId", "cyprus");
+  }
   if (params.destinationCode) search.set("destinationCode", params.destinationCode);
   if (params.hotelCode) search.set("hotelCode", params.hotelCode);
   const area = resolveAoryxSearchArea(params.areaId, params.destinationCode, params.hotelCode);
   if (area) search.set("areaId", area.id);
-  search.set("countryCode", params.countryCode);
+  search.set("countryCode", params.destinationId === "cyprus" ? "CY" : params.countryCode);
   search.set("nationality", params.nationality);
   search.set("currency", params.currency ?? "USD");
   search.set("checkInDate", params.checkInDate);

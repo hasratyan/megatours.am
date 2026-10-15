@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import type { DestinationId } from "@/lib/destinations/registry";
 
 type NetworkInformation = {
   effectiveType?: string;
@@ -21,8 +22,9 @@ const shouldEnableHeroVideo = () => {
   return true;
 };
 
-export default function HeroMedia() {
+export default function HeroMedia({ destination = "uae" }: { destination?: DestinationId }) {
   const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
+  const video = destination === "uae" ? "/videos/uae.mp4" : process.env.NEXT_PUBLIC_CYPRUS_HERO_VIDEO?.trim();
 
   useEffect(() => {
     if (!shouldEnableHeroVideo()) return;
@@ -51,17 +53,18 @@ export default function HeroMedia() {
   return (
     <div className="videoWrap" aria-hidden="true">
       <Image
-        src="/images/burj-khalifa.webp"
+        src={destination === "uae" ? "/images/burj-khalifa.webp" : "/images/destinations/cyprus.webp"}
         alt=""
         fill
         priority
         sizes="100vw"
         className="videoWrap__image"
       />
-      {shouldLoadVideo ? (
+      {shouldLoadVideo && video ? (
         <video
           className="videoWrap__video"
-          src="/videos/uae.mp4"
+          key={destination}
+          src={video}
           preload="none"
           autoPlay
           muted

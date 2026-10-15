@@ -20,6 +20,8 @@ export type FeaturedHotelSelection = {
 };
 
 export type FeaturedHotelCard = {
+  destinationId?: "uae" | "cyprus";
+  cityId?: string;
   id: string;
   hotelCode: string;
   name: string;
@@ -27,7 +29,7 @@ export type FeaturedHotelCard = {
   rating: number;
   image: string;
   perks: string[];
-  priceFrom: number;
+  priceFrom: number | null;
   oldPrice: number | null;
   currency: string;
   badge: string | null;

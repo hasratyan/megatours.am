@@ -3,6 +3,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import { destinationSlugs } from "@/lib/destination-data";
 import { FEATURED_HOTELS_CACHE_TAG, getFeaturedHotelSelections } from "@/lib/featured-hotels";
 import { defaultLocale, locales } from "@/lib/i18n";
+import { destinations } from "@/lib/destinations/registry";
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, "");
 
@@ -26,6 +27,7 @@ const servicePaths = [
 
 const routeDefinitions: RouteDefinition[] = [
   { path: "", priority: 1, changeFrequency: "daily" },
+  ...destinations.map((destination) => ({ path: `/${destination.id}`, priority: 0.95, changeFrequency: "weekly" as const })),
   { path: "/services", priority: 0.8, changeFrequency: "weekly" },
   ...servicePaths.map((path) => ({ path, priority: 0.7, changeFrequency: "weekly" as const })),
   ...destinationSlugs.map((slug) => ({ path: `/${slug}`, priority: 0.85, changeFrequency: "weekly" as const })),

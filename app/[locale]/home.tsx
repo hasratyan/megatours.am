@@ -11,38 +11,44 @@ import PartnerCarousel from "@/components/partner-carousel";
 import PackageBuilderCta from "@/components/package-builder-cta";
 import type { FeaturedHotelCard } from "@/lib/featured-hotels";
 import { type Locale } from "@/lib/i18n";
+import type { DestinationId } from "@/lib/destinations/registry";
+import { destinationTranslations } from "@/lib/destinations/translations";
+import HomeCountrySwitcher from "@/components/destinations/home-country-switcher";
 
 type HomeProps = {
   featuredHotels: FeaturedHotelCard[];
   locale: Locale;
+  destination?: DestinationId;
 };
 
-export default function Home({ featuredHotels, locale }: HomeProps) {
-  const t = getTranslations(locale);
+export default function Home({ featuredHotels, locale, destination = "uae" }: HomeProps) {
+  const t = destinationTranslations(getTranslations(locale), destination, locale);
+  const serviceQuery = destination === "cyprus" ? "?destinationId=cyprus&countryCode=CY" : "";
 
   const resolveServiceHref = (icon: string): Route | null => {
-    if (icon === "hotel") return `/${locale}/services/hotel` as Route;
-    if (icon === "flight") return `/${locale}/services/flight` as Route;
-    if (icon === "directions_car") return `/${locale}/services/transfer` as Route;
-    if (icon === "tour" || icon === "attractions") return `/${locale}/services/excursion` as Route;
-    if (icon === "shield_with_heart") return `/${locale}/services/insurance` as Route;
+    if (icon === "hotel") return `/${locale}/${destination}#hero` as Route;
+    if (icon === "flight") return `/${locale}/services/flight${serviceQuery}` as Route;
+    if (icon === "directions_car") return `/${locale}/services/transfer${serviceQuery}` as Route;
+    if (icon === "tour" || icon === "attractions") return `/${locale}/services/excursion${serviceQuery}` as Route;
+    if (icon === "shield_with_heart") return `/${locale}/services/insurance${serviceQuery}` as Route;
     return null;
   };
 
   return (
     <>
-      <HeroMedia />
+      <HeroMedia destination={destination} />
       <main role="main" id="main-content">
         <div className="container">
           <div id="hero">
             <div className="search">
+              <HomeCountrySwitcher locale={locale} destination={destination} />
               <ShinyText
                 text={t.hero.title}
                 disabled={false}
                 speed={3}
               />
               <h3>{t.hero.subtitle}</h3>
-              <SearchForm copy={t.search} />
+              <SearchForm key={destination} copy={t.search} destinationId={destination} />
             </div>
           </div>
         </div>
@@ -171,7 +177,7 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
             </div>
             <div className="background"><div className="shape"></div></div>
           </div>
-          <div id="flydubai">
+          {destination === "uae" ? <div id="flydubai">
             <div className="header">
               <div className="logos">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 158 32" width="100%" height="100%">
@@ -189,6 +195,7 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
             </div>
             <div className="background"><div className="shape"></div></div>
           </div>
+          : null}
           <div id="efes">
             <div className="header">
               <div className="logos">
@@ -215,7 +222,7 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
             </div>
             <div className="background"><div className="shape"></div></div>
           </div>
-          <div id="yas">
+          {destination === "uae" ? <div id="yas">
             <div className="header">
               <div className="logos">
                 <Image src="/images/logos/yas.webp" alt={t.home.yas.alt} width={200} height={110} />
@@ -228,6 +235,7 @@ export default function Home({ featuredHotels, locale }: HomeProps) {
             </div>
             <div className="background"><div className="shape"></div></div>
           </div>
+          : null}
         </PartnerCarousel>
         {/* Trust Stats Section */}
         <div className="container">

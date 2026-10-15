@@ -5,6 +5,14 @@ import type { SearchActionResult } from "@/app/[locale]/results/actions";
 const unavailableSearchResult = (): SearchActionResult => ({ ok: false, error: "" });
 
 export async function fetchResultsSearch(query: string, signal: AbortSignal): Promise<SearchActionResult> {
+  const params = new URLSearchParams(query);
+  if (params.get("countryCode") === "CY" || params.get("destinationId") === "cyprus") {
+    const [{ parseSearchParams }, { searchDestinationHotelPresentation }] = await Promise.all([import("@/lib/search-query"), import("@/lib/packages/hotel-client")]);
+    const search = parseSearchParams(params).payload;
+    if (!search) return unavailableSearchResult();
+    try { return { ok: true, data: (await searchDestinationHotelPresentation(search, signal)).presentation }; }
+    catch { return unavailableSearchResult(); }
+  }
   const response = await fetch("/api/aoryx/results-search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

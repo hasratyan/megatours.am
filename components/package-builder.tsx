@@ -28,6 +28,10 @@ import {
 } from "@/lib/package-builder-state";
 import { buildSearchQuery } from "@/lib/search-query";
 import { buildFlightRedirectFromHotel } from "@/lib/flight-redirect";
+import { useDestination } from "@/components/destinations/destination-provider";
+import DestinationDefaults from "@/components/destinations/destination-defaults";
+import { isDestinationPackageReady, removeDestinationService } from "@/lib/packages/selection";
+import { packagePaymentCopy, packagePaymentProvider } from "@/lib/packages/payment";
 
 type ServiceItem = {
   id: PackageBuilderService;
@@ -59,6 +63,10 @@ const formatRemainingTime = (remainingMs: number) => {
 
 export default function PackageBuilder() {
   const { locale, t } = useLanguage();
+  const destinationId = useDestination();
+  const isCyprus = destinationId === "cyprus";
+  const homeHref = `/${locale}/${destinationId}`;
+  const destinationQuery = isCyprus ? "?destinationId=cyprus&countryCode=CY" : "";
   const router = useRouter();
   const { data: session, status: authStatus } = useSession();
   const intlLocale = intlLocales[locale] ?? "en-GB";
@@ -176,7 +184,7 @@ export default function PackageBuilder() {
     }
     if (transferType === "GROUP") return t.packageBuilder.transfers.group;
     if (transferType === "INDIVIDUAL") return t.packageBuilder.transfers.individual;
-    return null;
+    return builderState.transfer.label?.trim() || null;
   })();
   const selectedFlightLabel = (() => {
     if (!builderState.flight?.selected) return null;
@@ -222,6 +230,7 @@ export default function PackageBuilder() {
       return base as Route;
     }
     const query = buildSearchQuery({
+      destinationId,
       destinationCode: selection.destinationCode ?? undefined,
       hotelCode: selection.hotelCode ?? undefined,
       countryCode: selection.countryCode ?? "AE",
@@ -245,7 +254,7 @@ export default function PackageBuilder() {
     { id: "excursion", icon: "tour", label: t.packageBuilder.services.excursion },
     { id: "insurance", icon: "shield_with_heart", label: t.packageBuilder.services.insurance },
   ];
-  const previewableServicesWithoutHotel = new Set<PackageBuilderService>([
+  const previewableServicesWithoutHotel = new Set<PackageBuilderService>(isCyprus ? [] : [
     "transfer",
     "excursion",
     "insurance",
@@ -254,7 +263,7 @@ export default function PackageBuilder() {
     serviceId === "hotel"
       ? builderState.hotel?.selected === true
       : builderState[serviceId]?.selected === true;
-  const allEnabledSelected = services
+  const allEnabledSelected = isCyprus ? isDestinationPackageReady(builderState) : services
     .filter((service) => service.id !== "flight" && serviceFlags[service.id] !== false)
     .every((service) => isServiceSelected(service.id));
   const serviceDisabledMessage = (() => {
@@ -409,7 +418,7 @@ export default function PackageBuilder() {
       currency: string | null | undefined,
       rates: typeof hotelRates
     ) => {
-      if (!selected) return;
+      if (!selected || packagePaymentProvider(destinationId, id) === "kyte") return;
       selectedCount += 1;
       const normalized = normalizeAmount(price, currency, rates, displayCurrency);
       if (!normalized) {
@@ -520,6 +529,8 @@ export default function PackageBuilder() {
               excursion: undefined,
               insurance: undefined,
               flight: undefined,
+              destinationQuotes: undefined,
+              destinationDefaults: undefined,
               sessionExpiresAt: undefined,
               updatedAt: Date.now(),
             }));
@@ -596,16 +607,16 @@ export default function PackageBuilder() {
       setShowHotelWarning(true);
       setDisabledServiceId(null);
       setIsOpen(true);
-      router.push(withDisplayCurrencyParam(`/${locale}#hero`, displayCurrency) as Route);
+      router.push(withDisplayCurrencyParam(`${homeHref}#hero`, displayCurrency) as Route);
       return;
     }
 
-    if (service.id === "flight" && flightRedirect) {
+    if (!isCyprus && service.id === "flight" && flightRedirect) {
       openExternalFlightRedirect(flightRedirect.url);
       return;
     }
 
-    const target = service.id === "hotel" ? `/${locale}` : `/${locale}/services/${service.id}`;
+    const target = service.id === "hotel" ? homeHref : `/${locale}/services/${service.id}${destinationQuery}`;
     beginNavigation(service.id, withDisplayCurrencyParam(target, displayCurrency) as Route);
   };
 
@@ -619,10 +630,13 @@ export default function PackageBuilder() {
           excursion: undefined,
           insurance: undefined,
           flight: undefined,
+          destinationQuotes: undefined,
+          destinationDefaults: undefined,
           sessionExpiresAt: undefined,
           updatedAt: Date.now(),
         };
       }
+      if (isCyprus) return removeDestinationService(prev, serviceId);
       const next = { ...prev, updatedAt: Date.now() };
       if (serviceId === "transfer") next.transfer = undefined;
       if (serviceId === "flight") next.flight = undefined;
@@ -633,11 +647,11 @@ export default function PackageBuilder() {
   };
 
   const handleCheckout = () => {
-    if (!hasHotel) {
+    if (!hasHotel || (isCyprus && !allEnabledSelected)) {
       setShowHotelWarning(true);
       return;
     }
-    beginNavigation(null, withDisplayCurrencyParam(`/${locale}/checkout`, displayCurrency) as Route);
+    beginNavigation(null, withDisplayCurrencyParam(`/${locale}/checkout${destinationQuery}`, displayCurrency) as Route);
   };
 
   const toggleLabel = hasAnySelection
@@ -647,6 +661,7 @@ export default function PackageBuilder() {
 
   return (
     <div className={`package-builder${isOpen ? " is-open" : ""}`}>
+      {isCyprus ? <DestinationDefaults state={builderState} /> : null}
       <div className="package-builder__shell">
         {!isOpen ? (
           <button
@@ -690,12 +705,15 @@ export default function PackageBuilder() {
                 </span>
               </button>
             </div>
+            {isCyprus && builderState.destinationDefaults?.attractions === "unavailable" ? <p className="package-builder__warning" role="status">{{ en: "Attraction availability could not be checked. Open Attractions to try again.", hy: "Տեսարժան վայրերի հասանելիությունը չի ստուգվել։ Կրկին փորձելու համար բացեք ծառայությունը։", ru: "Не удалось проверить экскурсии. Откройте раздел экскурсий, чтобы повторить поиск." }[locale]}</p> : null}
+            {isCyprus && builderState.destinationDefaults?.attractions === "empty" ? <p className="package-builder__warning" role="status">{{ en: "No available attraction was found for these hotel dates and guests.", hy: "Այս ամսաթվերի և հյուրերի համար հասանելի տեսարժան վայր չի գտնվել։", ru: "На даты отеля и для выбранных гостей экскурсии не найдены." }[locale]}</p> : null}
+            {isCyprus && (builderState.destinationQuotes?.hotel.priceChanged || builderState.destinationQuotes?.hotel.termsChanged) ? <p className="package-builder__warning" role="status">{{ en: "Your hotel price or conditions changed. Please review the updated selection.", hy: "Հյուրանոցի գինը կամ պայմանները փոխվել են։ Ստուգեք թարմացված ընտրությունը։", ru: "Цена или условия отеля изменились. Проверьте обновлённый вариант." }[locale]}</p> : null}
             {allEnabledSelected ? (
               <div className="package-builder__completion" role="status">
                 <span className="material-symbols-rounded" aria-hidden="true">
                   check_circle
                 </span>
-                <span>{t.packageBuilder.allSelected}</span>
+                <span>{isCyprus ? { en: "Your package is ready for review.", hy: "Ձեր փաթեթը պատրաստ է ստուգման։", ru: "Ваш пакет готов к проверке." }[locale] : t.packageBuilder.allSelected}</span>
               </div>
             ) : null}
             {sessionTenPopover && (
@@ -785,7 +803,7 @@ export default function PackageBuilder() {
                             ? selectedExcursionLabel
                         : null;
                 const viewHref: Route | null =
-                  service.id === "hotel" ? hotelViewHref : `/${locale}/services/${service.id}` as Route;
+                  service.id === "hotel" ? hotelViewHref : `/${locale}/services/${service.id}${destinationQuery}` as Route;
                 const showView = isSelected && Boolean(viewHref);
                 const showChange = service.id === "hotel" && isSelected;
                 const canRemove = isSelected;
@@ -849,7 +867,7 @@ export default function PackageBuilder() {
                                 disabled={isPendingNavigation}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  if (service.id === "flight" && flightRedirect) {
+                                  if (!isCyprus && service.id === "flight" && flightRedirect) {
                                     openExternalFlightRedirect(flightRedirect.url);
                                   } else if (viewHref) {
                                     beginNavigation(service.id, viewHref);
@@ -866,7 +884,7 @@ export default function PackageBuilder() {
                                 disabled={isPendingNavigation}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  beginNavigation(service.id, `/${locale}` as Route);
+                                  beginNavigation(service.id, homeHref as Route);
                                 }}
                               >
                                 {t.packageBuilder.changeHotel}
@@ -893,6 +911,7 @@ export default function PackageBuilder() {
                 );
               })}
             </div>
+            {isCyprus ? <p className="package-builder__payment-note">{packagePaymentCopy[locale].notice}</p> : null}
             {hasHotel && (
               <div className="package-builder__footer">
                 {hasHotel && formattedSessionRemaining ? (
@@ -906,7 +925,7 @@ export default function PackageBuilder() {
                   <button
                     type="button"
                     className="package-builder__checkout"
-                    disabled={isPendingNavigation}
+                    disabled={isPendingNavigation || (isCyprus && !allEnabledSelected)}
                     onClick={handleCheckout}
                   >
                     <span className="material-symbols-rounded" aria-hidden="true">payments</span>
@@ -917,7 +936,7 @@ export default function PackageBuilder() {
                       {checkoutTotal.label ? (
                         <span className="package-builder__checkout-total">
                           ({checkoutTotal.isExact
-                            ? `${t.common.total}: ${checkoutTotal.label}`
+                            ? `${isCyprus ? packagePaymentCopy[locale].checkoutTotal : t.common.total}: ${checkoutTotal.label}`
                             : checkoutTotal.label})
                         </span>
                       ) : null}

@@ -112,7 +112,9 @@ export default async function ServicePage({ params, searchParams }: PageProps) {
   }
 
   const session = await getServerSession(authOptions);
-  const canAccessWithoutSession = publicServiceKeys.has(serviceKey);
+  const destinationQuery = await searchParams;
+  const isCyprus = resolveQueryValue(destinationQuery.destinationId) === "cyprus" || resolveQueryValue(destinationQuery.countryCode) === "CY";
+  const canAccessWithoutSession = publicServiceKeys.has(serviceKey) || (isCyprus && serviceKey === "flight");
   let bookingAddonContext:
     | {
         bookingId: string;

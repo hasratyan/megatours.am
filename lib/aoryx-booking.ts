@@ -645,6 +645,8 @@ const parseRooms = (
 
 export const parseBookingPayload = (body: unknown, sessionId?: string): AoryxBookingPayload => {
   const record = body as UnknownRecord;
+  if (record.destinationId && record.destinationId !== "uae") throw new Error("This destination requires its own booking flow.");
+  if (record.countryCode === "CY") throw new Error("Cyprus bookings require the destination booking flow.");
   const hotelCode = sanitizeString(record.hotelCode) ?? "";
   if (!hotelCode) {
     throw new Error("hotelCode is required");

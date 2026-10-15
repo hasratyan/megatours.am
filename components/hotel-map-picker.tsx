@@ -9,6 +9,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+import { useDestination } from "@/components/destinations/destination-provider";
 import { useLanguage } from "@/components/language-provider";
 import type { PluralForms } from "@/lib/i18n";
 import type { SearchLocationOption } from "@/lib/search-locations";
@@ -104,6 +105,7 @@ export default function HotelMapPicker({
   areaId,
 }: HotelMapPickerProps) {
   const { locale, t } = useLanguage();
+  const destinationId = useDestination();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerClusterRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -221,7 +223,7 @@ export default function HotelMapPicker({
     if (validHotels.length === 0) return;
 
     // Default center (Dubai)
-    const defaultCenter: L.LatLngExpression = [25.2048, 55.2708];
+    const defaultCenter: L.LatLngExpression = destinationId === "cyprus" ? [34.9, 33.3] : [25.2048, 55.2708];
     
     const map = L.map(mapRef.current, {
       center: defaultCenter,
@@ -267,7 +269,7 @@ export default function HotelMapPicker({
       markers.clear();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [validHotels.length > 0]);
+  }, [destinationId, validHotels.length > 0]);
 
   useEffect(() => {
     if (!isOpen) return;

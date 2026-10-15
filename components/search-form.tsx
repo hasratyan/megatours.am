@@ -19,6 +19,8 @@ import type { SearchFormDateRange, SearchFormDateRangePickerProps } from "./sear
 import type { SearchFormLocationSelectProps } from "./search-form-location-select";
 import { getAreaLocationOptions, type SearchLocationOption as LocationOption } from "@/lib/search-locations";
 import { buildSearchQuery } from "@/lib/search-query";
+import { useDestination } from "@/components/destinations/destination-provider";
+import type { DestinationId } from "@/lib/destinations/registry";
 
 const MapPickerLoading = () => {
   const { t } = useLanguage();
@@ -320,6 +322,7 @@ const intlLocales: Record<AppLocale, string> = {
 };
 
 type Props = {
+  destinationId?: DestinationId;
   copy: SearchCopy;
   hideLocationFields?: boolean;
   presetDestination?: { id: string; label?: string; rawId?: string };
@@ -342,6 +345,7 @@ type Props = {
 };
 
 export default function SearchForm({
+  destinationId,
   copy,
   hideLocationFields = false,
   presetDestination,
@@ -369,6 +373,8 @@ export default function SearchForm({
   const locationSelectInputId = `${locationSelectInstanceId}-input`;
   const router = useRouter();
   const { locale: appLocale } = useLanguage();
+  const contextDestination = useDestination();
+  const activeDestination = destinationId ?? contextDestination;
   const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[appLocale];
   const presetDestinationId = presetDestination?.id;
@@ -471,6 +477,7 @@ export default function SearchForm({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (activeDestination === "cyprus") { queueMicrotask(() => { setReferrerPreset(null); setReferrerChecked(true); }); return; }
     try {
       const params = new URLSearchParams(window.location.search);
       const src = params.get("src")?.trim().toLowerCase();
@@ -502,7 +509,7 @@ export default function SearchForm({
     } finally {
       setReferrerChecked(true);
     }
-  }, []);
+  }, [activeDestination]);
 
   const persistSelectedLocation = useCallback((location: LocationOption | null) => {
     if (typeof window === "undefined") return;
@@ -518,11 +525,11 @@ export default function SearchForm({
       areaId: location.areaId,
     };
     try {
-      sessionStorage.setItem("megatours:lastSearchLocation", JSON.stringify(payload));
+      sessionStorage.setItem(`megatours:lastSearchLocation${activeDestination === "cyprus" ? ":cyprus" : ""}`, JSON.stringify(payload));
     } catch (error) {
       console.warn("[SearchForm] Failed to persist last location", error);
     }
-  }, []);
+  }, [activeDestination]);
 
   const mapHotelRatesByCode = useMemo(() => {
     const index = new Map<string, MapHotelRateMeta>();
@@ -675,11 +682,11 @@ export default function SearchForm({
   const fetchHotelsForDestination = useCallback(
     async (destination: LocationOption) => {
       const destinationId = destination.rawId ?? destination.value;
-      const response = await loadSearchHotels(destinationId, destination.value);
+      const response = await loadSearchHotels(destinationId, destination.value, activeDestination);
       const fallbackParentDestinationId = destination.rawId ?? destination.value;
       return mapHotelsToOptions(response.hotels ?? [], fallbackParentDestinationId);
     },
-    [mapHotelsToOptions]
+    [activeDestination, mapHotelsToOptions]
   );
 
   const loadHotelsForAllDestinations = useCallback(
@@ -780,7 +787,7 @@ export default function SearchForm({
     if (hideLocationFields) return;
 
     let active = true;
-    loadSearchDestinations()
+    loadSearchDestinations(activeDestination)
       .then((response) => {
         if (!active) return;
         const options = (response.destinations ?? []).map<LocationOption>((dest) => ({
@@ -798,7 +805,7 @@ export default function SearchForm({
         if (active) setDestinationsLoading(false);
       });
     return () => { active = false; };
-  }, [hideLocationFields, copy.unknownHotel]);
+  }, [hideLocationFields, copy.unknownHotel, activeDestination]);
 
   // Initialize location once destinations are loaded.
   // Catalogs load separately when the picker or map is opened.
@@ -958,9 +965,10 @@ export default function SearchForm({
             : location.parentDestinationId ?? undefined,
         hotelCode: location.type === "hotel" ? location.value : undefined,
         areaId: location.type === "area" ? location.areaId : undefined,
-        countryCode: "AE",
+        destinationId: activeDestination,
+        countryCode: activeDestination === "cyprus" ? "CY" : "AE",
         nationality: "AM",
-        currency: "USD",
+        currency: activeDestination === "cyprus" ? "EUR" : "USD",
         checkInDate: formatDateLocal(dateRange.startDate),
         checkOutDate: formatDateLocal(dateRange.endDate),
         rooms: rooms.map((room, index) => ({
@@ -1003,6 +1011,7 @@ export default function SearchForm({
       appLocale,
       displayCurrency,
       router,
+      activeDestination,
     ]
   );
 

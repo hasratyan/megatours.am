@@ -13,20 +13,28 @@ import { navigation } from "next/cache";
 import { getHotelGalleryImages, getHotelPrefetchSummary } from "@/lib/hotel-presentation";
 import ImageGallery from "./ImageGallery";
 import HotelAmenities from "./HotelAmenities";
+import { loadAgentCatalog } from "@/lib/catalog/agent-client";
+import { presentHotelContent } from "@/lib/packages/hotel-presentation";
 
 export const ensureStatic = "prefetch";
 
 const resolveLocale = (value: string | undefined) =>
   locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
 
-const getHotelInfoCached = cache(getHotelContent);
+const getHotelInfoCached = cache(async (code: string, country = "AE") => {
+  if (country !== "CY") return getHotelContent(code);
+  const { hotel, images, facilities } = await loadAgentCatalog({ resource: "hotel", hotelId: code });
+  return hotel ? presentHotelContent(hotel, images, facilities) : null;
+});
 
 const buildHotelMetaDescription = (
   hotelName: string,
   destinationName: string | null | undefined,
-  locale: Locale
+  locale: Locale,
+  country = "AE",
 ) => {
   const location = destinationName?.trim();
+  if (country === "CY") return locale === "hy" ? `${hotelName}, Կիպրոս. Դիտեք լուսանկարներ, հարմարություններ և ամրագրեք MEGATOURS-ում։` : locale === "ru" ? `${hotelName}, Кипр: фото, удобства и бронирование на MEGATOURS.` : `${hotelName}, Cyprus: photos, amenities and booking on MEGATOURS.`;
   if (locale === "hy") {
     return location
       ? `${hotelName} հյուրանոց ${location}-ում, ԱՄԷ. Դիտեք լուսանկարներ, հարմարություններ և ամրագրեք MEGATOURS-ում։`
@@ -44,13 +52,16 @@ const buildHotelMetaDescription = (
 
 type PageProps = {
   params: Promise<{ locale: string; code?: string | string[] }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export async function generateMetadata({ params }: { params: Promise<{ locale: string; code?: string | string[] }> }) {
+export async function generateMetadata({ params, searchParams }: PageProps) {
   const resolvedParams = await params;
   const resolvedLocale = resolveLocale(resolvedParams.locale);
   const t = getTranslations(resolvedLocale);
   const hotelCode = Array.isArray(resolvedParams.code) ? resolvedParams.code[0] : resolvedParams.code;
+  const query = await searchParams;
+  const country = query.countryCode === "CY" || query.destinationId === "cyprus" ? "CY" : "AE";
 
   if (!hotelCode) {
     return buildLocalizedMetadata({
@@ -62,7 +73,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   }
 
   try {
-    const info = await getHotelInfoCached(hotelCode);
+    const info = await getHotelInfoCached(hotelCode, country);
     if (info?.name) {
       const title = buildHotelShareTitle(info.name, resolvedLocale);
       const primaryImageUrl = resolveHotelPrimaryImageUrl(info);
@@ -70,7 +81,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
       return buildLocalizedMetadata({
         locale: resolvedLocale,
         title,
-        description: buildHotelMetaDescription(info.name, info.destinationName, resolvedLocale),
+        description: buildHotelMetaDescription(info.name, info.destinationName, resolvedLocale, country),
         path: `/hotels/${hotelCode}`,
         imagePath: primaryImageUrl,
       });
@@ -87,26 +98,28 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   });
 }
 
-export default function HotelPage({ params }: PageProps) {
+export default function HotelPage({ params, searchParams }: PageProps) {
   return (
     <Suspense fallback={<RouteLoading className="results" />}>
-      <HotelContent params={params} />
+      <HotelContent params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function HotelContent({ params }: PageProps) {
+async function HotelContent({ params, searchParams }: PageProps) {
   const resolvedParams = await params;
   const resolvedLocale = resolveLocale(resolvedParams.locale);
   const t = getTranslations(resolvedLocale);
   const hotelCode = Array.isArray(resolvedParams.code) ? resolvedParams.code[0] : resolvedParams.code;
+  const query = await searchParams;
+  const country = query.countryCode === "CY" || query.destinationId === "cyprus" ? "CY" : "AE";
 
   let hotelInfoResult: AoryxHotelInfoResult | null = null;
   let hotelError: string | null = null;
 
   if (hotelCode) {
     try {
-      hotelInfoResult = await getHotelInfoCached(hotelCode);
+      hotelInfoResult = await getHotelInfoCached(hotelCode, country);
       if (!hotelInfoResult) {
         hotelError = t.hotel.errors.loadHotelFailed;
       }
@@ -139,12 +152,12 @@ async function HotelContent({ params }: PageProps) {
                 images={getHotelGalleryImages(hotelInfoResult.imageUrls).slice(0, 1)}
                 altText={hotelInfoResult.name ?? t.results.hotel.fallbackName} />
             }>
-              <HotelGallery hotelCode={hotelCode} locale={resolvedLocale} />
+              <HotelGallery hotelCode={hotelCode} locale={resolvedLocale} country={country} />
             </Suspense>
           ) : null}
           amenities={hotelInfoResult && hotelCode ? (
             <Suspense fallback={null}>
-              <HotelAmenityContent hotelCode={hotelCode} />
+              <HotelAmenityContent hotelCode={hotelCode} country={country} />
             </Suspense>
           ) : null}
           initialRoomDetails={null}
@@ -157,9 +170,9 @@ async function HotelContent({ params }: PageProps) {
   );
 }
 
-async function HotelGallery({ hotelCode, locale }: { hotelCode: string; locale: Locale }) {
+async function HotelGallery({ hotelCode, locale, country }: { hotelCode: string; locale: Locale; country: string }) {
   await navigation();
-  const info = await getHotelInfoCached(hotelCode);
+  const info = await getHotelInfoCached(hotelCode, country);
   if (!info) return null;
   const images = getHotelGalleryImages(info.imageUrls);
   if (!images.length) return null;
@@ -167,9 +180,9 @@ async function HotelGallery({ hotelCode, locale }: { hotelCode: string; locale: 
     altText={info.name ?? getTranslations(locale).results.hotel.fallbackName} />;
 }
 
-async function HotelAmenityContent({ hotelCode }: { hotelCode: string }) {
+async function HotelAmenityContent({ hotelCode, country }: { hotelCode: string; country: string }) {
   await navigation();
-  const info = await getHotelInfoCached(hotelCode);
+  const info = await getHotelInfoCached(hotelCode, country);
   return info?.masterHotelAmenities?.length
     ? <HotelAmenities key={hotelCode} amenities={info.masterHotelAmenities} />
     : null;
