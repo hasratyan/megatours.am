@@ -26,10 +26,20 @@ registerHooks({
 const { NextRequest } = await import("next/server.js");
 const { POST: search } = await import("../app/api/destinations/[destination]/hotels/search/route.ts");
 const { POST: prebook } = await import("../app/api/destinations/[destination]/hotels/prebook/route.ts");
-const { destinationSearchSession } = await import("../lib/packages/search-session.ts");
+const { destinationSearchSession, isSameOriginMutation } = await import("../lib/packages/search-session.ts");
 const { destinationServiceProxy } = await import("../lib/packages/service-proxy.ts");
 const request = (payload, headers = {}) => new NextRequest("https://b2c.invalid/api/destinations/cyprus/hotels/search", { method: "POST", headers: { "content-type": "application/json", host: "b2c.invalid", origin: "https://b2c.invalid", ...headers }, body: JSON.stringify(payload) });
 const params = { params: Promise.resolve({ destination: "cyprus" }) };
+test("HTTPS browser requests behind the production proxy use only the configured public origin", () => {
+  const env = { NODE_ENV: "production", NEXT_PUBLIC_SITE_URL: "https://b2c.invalid" };
+  const proxied = (origin, extra = {}) => new NextRequest("http://localhost:3002/api/destinations/cyprus/hotels/search", { method: "POST", headers: { origin, ...extra } });
+  assert.equal(isSameOriginMutation(proxied("https://b2c.invalid"), env), true);
+  assert.equal(isSameOriginMutation(proxied("http://b2c.invalid"), env), false);
+  assert.equal(isSameOriginMutation(proxied("http://localhost:3002"), env), false);
+  assert.equal(isSameOriginMutation(proxied("https://attacker.invalid", { "x-forwarded-host": "attacker.invalid" }), env), false);
+  assert.equal(isSameOriginMutation(proxied("https://b2c.invalid", { "sec-fetch-site": "cross-site" }), env), false);
+  assert.equal(isSameOriginMutation(proxied("https://b2c.invalid"), { ...env, NEXT_PUBLIC_SITE_URL: "invalid" }), false);
+});
 
 test("public search replaces client identity and cannot override pricing/market", async (t) => {
   const previous = globalThis.fetch;

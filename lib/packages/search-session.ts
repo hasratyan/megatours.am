@@ -10,9 +10,14 @@ export function destinationSearchSession(request: NextRequest) {
     return response;
   } };
 }
-export function isSameOriginMutation(request: NextRequest) {
+export function isSameOriginMutation(request: NextRequest, env: Record<string, string | undefined> = process.env) {
   if (request.headers.get("sec-fetch-site") === "cross-site") return false;
   const origin = request.headers.get("origin");
   if (!origin) return true;
-  try { return new URL(origin).origin === request.nextUrl.origin; } catch { return false; }
+  try {
+    // TLS terminates at the reverse proxy; compare against configured public origin.
+    const publicUrl = env.NODE_ENV === "production" ? env.NEXT_PUBLIC_SITE_URL || env.NEXTAUTH_URL : undefined;
+    const expected = publicUrl ? new URL(publicUrl).origin : request.nextUrl.origin;
+    return new URL(origin).origin === expected;
+  } catch { return false; }
 }
