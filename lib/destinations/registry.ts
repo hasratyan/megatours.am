@@ -42,8 +42,8 @@ export const destinations: readonly DestinationConfig[] = [
     image: "/images/destinations/cyprus.webp",
     // City identities come from the agent catalogue. Names are editorial hints only.
     cities: [], airports: ["LCA", "PFO"],
-    // Marisa Apartments has reported incorrect coordinates. Keep its catalogue listing available.
-    mapExcludedHotelIds: ["U_4aabdcb4_34.9899_34.0024"],
+    // Marisa Hotel Apartments has coordinates outside Cyprus. Keep its catalogue listing available.
+    mapExcludedHotelIds: ["U_442c0fd1_41.2501_-2.1905"],
   },
 ];
 
