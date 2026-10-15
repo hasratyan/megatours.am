@@ -13,16 +13,16 @@ export const packagePaymentCopy = {
   en: {
     checkoutTotal: "MEGATOURS checkout total",
     flightTitle: "Separate flight payment",
-    notice: "Flight tickets are paid separately through Kyte. Their price is excluded from the MEGATOURS checkout total.",
+    notice: "Flight tickets are paid separately. Their price is not included in the MEGATOURS checkout total.",
   },
   hy: {
     checkoutTotal: "MEGATOURS-ի վճարման ընդհանուր գումարը",
     flightTitle: "Ավիատոմսերի առանձին վճարում",
-    notice: "Ավիատոմսերի վճարումը կատարվում է առանձին՝ Kyte-ի միջոցով։ Դրանց արժեքը ներառված չէ MEGATOURS-ի վճարման ընդհանուր գումարում։",
+    notice: "Ավիատոմսերի վճարումը կատարվում է առանձին։ Դրանց արժեքը ներառված չէ MEGATOURS-ի վճարման ընդհանուր գումարում։",
   },
   ru: {
     checkoutTotal: "Итого к оплате MEGATOURS",
     flightTitle: "Отдельная оплата авиабилетов",
-    notice: "Авиабилеты оплачиваются отдельно через Kyte. Их стоимость не включена в сумму оплаты MEGATOURS.",
+    notice: "Авиабилеты оплачиваются отдельно. Их стоимость не включена в сумму оплаты MEGATOURS.",
   },
 };
