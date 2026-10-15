@@ -2,8 +2,10 @@ import type { Locale } from "@/lib/i18n";
 import Home from "@/app/[locale]/home";
 import { loadAgentCatalog } from "@/lib/catalog/agent-client";
 import type { FeaturedHotelCard } from "@/lib/featured-hotels";
+import { connection } from "next/server";
 
 export default async function CyprusHome({ locale }: { locale: Locale }) {
+  await connection();
   let featuredHotels: FeaturedHotelCard[] = [];
   try {
     const { cities = [] } = await loadAgentCatalog({ resource: "cities" });
