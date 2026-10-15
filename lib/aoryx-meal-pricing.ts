@@ -17,16 +17,20 @@ export function summarizeHotelMealPrices(
   mealStartingPrices: MealStartingPrice[];
 } {
   const baseCurrency = hotel.currency ?? searchCurrency;
-  const mealStartingPrices = (hotel.availableRates ?? []).flatMap((rate) => {
+  const cheapestByMeal = new Map<string, MealStartingPrice>();
+  for (const rate of hotel.availableRates ?? []) {
     const code = resolveAoryxMealCode(rate.mealCode);
-    if (!code || typeof rate.amount !== "number" || !Number.isFinite(rate.amount)) return [];
+    if (!code || typeof rate.amount !== "number" || !Number.isFinite(rate.amount)) continue;
     const normalized = normalizeAmount(rate.amount, baseCurrency, amdRates, displayCurrency);
-    return [{
+    const price = {
       code,
       amount: Math.round(normalized?.amount ?? rate.amount),
       currency: normalized?.currency ?? baseCurrency ?? "USD",
-    }];
-  }).sort((a, b) => a.amount - b.amount);
+    };
+    const current = cheapestByMeal.get(code);
+    if (!current || price.amount < current.amount) cheapestByMeal.set(code, price);
+  }
+  const mealStartingPrices = [...cheapestByMeal.values()].sort((a, b) => a.amount - b.amount);
 
   const eligibleRates = selectedMeals.length > 0
     ? mealStartingPrices.filter((rate) => selectedMeals.includes(rate.code))

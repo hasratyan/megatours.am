@@ -151,6 +151,35 @@ test("hotel cards show each meal starting price and label the cheapest eligible 
   assert.equal(summarizeHotelMealPrices(hotel, "USD", ["AI"], null, "USD").displayPrice, null);
 });
 
+test("hotel cards show one lowest price per meal plan without removing individual offers", () => {
+  const hotel = {
+    currency: "AMD",
+    minPrice: 184212,
+    availableRates: [
+      { mealCode: "BB", amount: 225967 },
+      { mealCode: "BED AND BREAKFAST", amount: 184212 },
+      { mealCode: "BB", amount: 212048 },
+      { mealCode: "BB", amount: 228832 },
+      { mealCode: "RO", amount: 237019 },
+      { mealCode: "HBP", amount: 280000 },
+      { mealCode: "HB", amount: 263628 },
+    ],
+  };
+  const original = structuredClone(hotel);
+  const card = summarizeHotelMealPrices(hotel, "AMD", [], null, "AMD");
+  assert.deepEqual(card.mealStartingPrices, [
+    { code: "BB", amount: 184212, currency: "AMD" },
+    { code: "RO", amount: 237019, currency: "AMD" },
+    { code: "HB", amount: 263628, currency: "AMD" },
+  ]);
+  assert.equal(card.displayPrice, 184212);
+  assert.equal(card.primaryMealCode, "BB");
+  const halfBoard = summarizeHotelMealPrices(hotel, "AMD", ["HB"], null, "AMD");
+  assert.equal(halfBoard.displayPrice, 263628);
+  assert.equal(halfBoard.primaryMealCode, "HB");
+  assert.deepEqual(hotel, original, "card summaries preserve the complete rate list");
+});
+
 test("four-room prices and bookable options require a complete supplier combination", async (t) => {
   const previous = globalThis.fetch;
   t.after(() => { globalThis.fetch = previous; });
