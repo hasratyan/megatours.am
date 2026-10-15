@@ -17,6 +17,7 @@
 
 # next.js
 /.next/
+/.next-preview/
 /out/
 
 # production
@@ -25,6 +26,18 @@
 # misc
 .DS_Store
 *.pem
+
+# Local IDE database settings
+/.idea/dataSources.xml
+/.idea/db-forest-config.xml
+
+# Generated logs, verification artifacts, and temporary files
+/logs/
+/output/
+/tmp/
+
+# Copied from node_modules by scripts/copy-maplibre-worker.mjs
+/public/maplibre/
 
 # debug
 npm-debug.log*
