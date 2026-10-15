@@ -17,6 +17,7 @@ import { ApiError, postJson } from "@/lib/api-helpers";
 import { parseSearchParams } from "@/lib/search-query";
 import { resolveAoryxMealCode } from "@/lib/aoryx-meals";
 import { groupCompleteRoomOptions } from "@/lib/aoryx-room-groups";
+import { summarizeRoomPolicy } from "@/lib/room-policy";
 import { resolveSafeErrorFromUnknown } from "@/lib/error-utils";
 import { resolveHotelPrimaryImageUrl } from "@/lib/hotel-share";
 import { useLanguage, useTranslations } from "@/components/language-provider";
@@ -2808,16 +2809,18 @@ export default function HotelClient({
                             getGroupMealLabel(group),
                             t.hotel.roomOptions.mealPlans
                           );
-                          const cancellationPolicyLabel = localizeRefundability(
-                            group.option.cancellationPolicy,
-                            t.hotel.roomOptions
-                          );
                           const groupNonRefundable =
                             group.key in prebookNonRefundableByGroupKey
                               ? prebookNonRefundableByGroupKey[group.key]
                               : summarizeNonRefundable(
                                   group.items.map((item) => resolveRoomNonRefundable(item))
                                 );
+                          const cancellationPolicyLabel = summarizeRoomPolicy(
+                            group.items,
+                            groupNonRefundable,
+                            intlLocale,
+                            t.hotel.roomOptions.refundableUntil
+                          );
                           const rateKeys = group.items
                             .map((item) => item.rateKey)
                             .filter((key): key is string => typeof key === "string" && key.length > 0);

@@ -1136,6 +1136,7 @@ export type Translation = {
         ultraAllInclusive: string;
       };
       refundable: string;
+      refundableUntil: string;
       nonRefundable: string;
       roomsLeft: PluralForms;
       roomBreakdown: string;

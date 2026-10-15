@@ -86,6 +86,7 @@ test("a draft copied into another destination storage key cannot restore supplie
 
 const { parseSearchParams, buildSearchQuery } = await import("../lib/search-query.ts");
 const { presentHotelRooms, presentHotelSearch } = await import("../lib/packages/hotel-presentation.ts");
+const { summarizeRoomPolicy } = await import("../lib/room-policy.ts");
 test("shared search keeps Cyprus country, package and multi-room totals together", () => {
   const {payload} = parseSearchParams(new URLSearchParams({destinationId:"cyprus",countryCode:"AE",destinationCode:"CITY_CY_1",checkInDate:"2026-10-16",checkOutDate:"2026-10-20",bookingMode:"hotel_transfer",rooms:JSON.stringify([{roomIdentifier:1,adults:2,childrenAges:[]},{roomIdentifier:2,adults:1,childrenAges:[8]}])}));
   assert.equal(payload.countryCode,"CY");
@@ -96,6 +97,23 @@ test("shared search keeps Cyprus country, package and multi-room totals together
   assert.equal(new Set(rooms.map(room=>room.groupIdentity)).size,1);
   const result=presentHotelSearch({offers:[offer],partial:true,nextOffset:60},payload);
   assert.equal(result.partial,true); assert.equal(result.nextOffset,60); assert.equal(result.hotels[0].code,"CY-hotel");
+});
+
+test("Cyprus room cards derive a date-only deadline while preserving complete cancellation terms", () => {
+  const offer = {id:"opaque-quote", roomName:"Double", mealPlan:"BB", refundable:true, price:{amount:100.01,currency:"EUR"}, cancellationPolicies:[
+    {from:"14-10-2026 00:00:00", amount:0, currency:"USD", type:"amount"},
+    {from:"07-11-2026 00:00:00", amount:369.71, currency:"USD", type:"amount"},
+    {from:"2026-11-12T00:00:00", amount:100, currency:"EUR", type:"percent"},
+  ], payAtProperty:[], notices:[]};
+  const rooms = presentHotelRooms(offer, {rooms:[{roomIdentifier:1,adults:2,childrenAges:[]}]});
+  assert.equal(summarizeRoomPolicy(rooms, false, "en-GB", "Refundable until", now), "Refundable until 7 Nov 2026");
+  assert.equal(rooms[0].totalPrice, 100.01);
+  assert.equal(rooms[0].policies[1].currency, "USD");
+  assert.equal(rooms[0].policies[1].conditions[0].fromDate, "2026-11-07T00:00:00");
+  assert.equal(rooms[0].policies[1].conditions[0].fixed, 369.71);
+  assert.equal(rooms[0].policies[2].conditions[0].percentage, 100);
+  assert.equal(rooms[0].cancellationPolicy, "14-10-2026 00:00:00: 0 USD\n07-11-2026 00:00:00: 369.71 USD\n2026-11-12T00:00:00: 100 %");
+  assert.equal(summarizeRoomPolicy(rooms, true, "en-GB", "Refundable until", now), null);
 });
 
 const { applyDestinationServiceQuote, removeDestinationService, destinationPackageReviewInput, isDestinationPackageReady } = await import("../lib/packages/selection.ts");

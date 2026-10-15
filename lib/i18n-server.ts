@@ -1441,6 +1441,7 @@ const translations: Record<Locale, Translation> = {
           ultraAllInclusive: "Ուլտրա ամեն ինչ ներառված",
         },
         refundable: "Վերադարձվող",
+        refundableUntil: "Վերադարձվող է մինչև",
         nonRefundable: "Չվերադարձվող",
         roomsLeft: {
           one: "Մնաց {count} սենյակ",
@@ -3001,6 +3002,7 @@ const translations: Record<Locale, Translation> = {
           ultraAllInclusive: "Ultra All Inclusive",
         },
         refundable: "Refundable",
+        refundableUntil: "Refundable until",
         nonRefundable: "Non-Refundable",
         roomsLeft: {
           one: "{count} room remaining",
@@ -4571,6 +4573,7 @@ const translations: Record<Locale, Translation> = {
           ultraAllInclusive: "Ультра все включено",
         },
         refundable: "С возвратом",
+        refundableUntil: "Возврат возможен до",
         nonRefundable: "Невозвратный",
         roomsLeft: {
           one: "Остался {count} номер",

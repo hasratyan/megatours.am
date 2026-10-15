@@ -1,6 +1,7 @@
-import type { AoryxSearchParams, AoryxSearchResult, AoryxRoomOption, AoryxHotelInfoResult } from "@/types/aoryx";
+import type { AoryxSearchParams, AoryxSearchResult, AoryxRoomOption, AoryxRoomPolicy, AoryxHotelInfoResult } from "@/types/aoryx";
 import type { DestinationHotelSearch, DestinationHotelSearchResult, HotelOffer, HotelSummary } from "./contracts";
 import { resolveAoryxMealCode } from "@/lib/aoryx-meals";
+import { normalizeRoomPolicyDate } from "@/lib/room-policy";
 
 export function destinationSearchInput(search: AoryxSearchParams, offset = 0): DestinationHotelSearch {
   return { destinationId: "cyprus", cityId: search.destinationCode ?? "", hotelId: search.hotelCode, checkIn: search.checkInDate, checkOut: search.checkOutDate, rooms: search.rooms.map(({ adults, childrenAges }) => ({ adults, childrenAges })), nationality: search.nationality, currency: search.currency === "USD" ? "USD" : "EUR", offset };
@@ -18,9 +19,18 @@ export function presentHotelSearch(result: DestinationHotelSearchResult, search:
 /** Compatibility at the shared view boundary only. Opaque quote IDs are never Aoryx tokens. */
 export function presentHotelRooms(offer: HotelOffer, search: AoryxSearchParams): AoryxRoomOption[] {
   const count = search.rooms.length, cents = Math.round(offer.price.amount * 100), share = Math.floor(cents / count);
+  const policies: AoryxRoomPolicy[] = offer.cancellationPolicies.map((policy) => ({
+    type: "CAN", textCondition: null, currency: policy.currency,
+    conditions: [{
+      fromDate: normalizeRoomPolicyDate(policy.from), toDate: null, fromTime: null, toTime: null,
+      timezone: null, unit: null, text: null, nights: null, applicableOn: null,
+      percentage: policy.type === "percent" ? policy.amount : null,
+      fixed: policy.type === "amount" ? policy.amount : null,
+    }],
+  }));
   return search.rooms.map((room, index) => {
     const amount = (share + (index === count - 1 ? cents - share * count : 0)) / 100;
-    return { id: `${offer.id}:${index}`, rateKey: offer.id, rateIdentity: offer.id, groupIdentity: offer.id, roomIdentifier: room.roomIdentifier, name: offer.roomName, boardType: offer.mealPlan, meal: offer.mealPlan, mealCode: resolveAoryxMealCode(offer.mealPlan), refundable: offer.refundable, currency: offer.price.currency, totalPrice: amount, displayTotalPrice: amount, availableRooms: null, cancellationPolicy: offer.cancellationPolicies.map((policy) => `${policy.from}: ${policy.amount} ${policy.type === "percent" ? "%" : policy.currency}`).join("\n") || null, adultCount: room.adults, childCount: room.childrenAges.length, childAges: room.childrenAges, remarks: [...offer.notices, ...offer.payAtProperty.map((tax) => `${tax.description}: ${tax.amount} ${tax.currency}`)].map((text) => ({ type: "Information", text })) };
+    return { id: `${offer.id}:${index}`, rateKey: offer.id, rateIdentity: offer.id, groupIdentity: offer.id, roomIdentifier: room.roomIdentifier, name: offer.roomName, boardType: offer.mealPlan, meal: offer.mealPlan, mealCode: resolveAoryxMealCode(offer.mealPlan), refundable: offer.refundable, currency: offer.price.currency, totalPrice: amount, displayTotalPrice: amount, availableRooms: null, policies, cancellationPolicy: offer.cancellationPolicies.map((policy) => `${policy.from}: ${policy.amount} ${policy.type === "percent" ? "%" : policy.currency}`).join("\n") || null, adultCount: room.adults, childCount: room.childrenAges.length, childAges: room.childrenAges, remarks: [...offer.notices, ...offer.payAtProperty.map((tax) => `${tax.description}: ${tax.amount} ${tax.currency}`)].map((text) => ({ type: "Information", text })) };
   });
 }
 export function presentHotelContent(hotel: HotelSummary, images: string[] = [], facilities: string[] = []): AoryxHotelInfoResult {
