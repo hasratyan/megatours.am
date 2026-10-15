@@ -7,6 +7,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { signIn, useSession } from "@/lib/auth-compat/react";
 import SearchForm from "@/components/search-form";
 import { useDestination } from "@/components/destinations/destination-provider";
+import { isHotelMapVisible } from "@/lib/destinations/registry";
 import { searchDestinationHotelPresentation } from "@/lib/packages/hotel-client";
 import type { DestinationHotelPrebookResult } from "@/lib/packages/contracts";
 import Loader from "@/components/loader";
@@ -1215,10 +1216,11 @@ export default function HotelClient({
   }, [roomOptionsSurfaceError]);
   const roundedRating = Math.round(hotelInfo?.rating ?? 0);
   const hotelCoordinates = useMemo(() => {
+    if (!isHotelMapVisible(destinationId, hotelInfo?.systemId ?? hotelCode ?? "")) return null;
     const lat = toFinite(hotelInfo?.geoCode?.lat) ?? fallbackCoordinates?.lat ?? null;
     const lon = toFinite(hotelInfo?.geoCode?.lon) ?? fallbackCoordinates?.lon ?? null;
     return lat !== null && lon !== null ? { lat, lon } : null;
-  }, [fallbackCoordinates?.lat, fallbackCoordinates?.lon, hotelInfo?.geoCode?.lat, hotelInfo?.geoCode?.lon]);
+  }, [destinationId, hotelCode, hotelInfo?.systemId, fallbackCoordinates?.lat, fallbackCoordinates?.lon, hotelInfo?.geoCode?.lat, hotelInfo?.geoCode?.lon]);
   const roomOptionsErrorPopoverId = "room-options-error-popover";
   const mapPopoverId = "hotel-map-popover";
   const mapEmbedSrc = hotelCoordinates

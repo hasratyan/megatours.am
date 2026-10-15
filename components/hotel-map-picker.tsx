@@ -14,6 +14,7 @@ import { useLanguage } from "@/components/language-provider";
 import type { PluralForms } from "@/lib/i18n";
 import type { SearchLocationOption } from "@/lib/search-locations";
 import { isHotelInAoryxArea } from "@/lib/aoryx-area-filter";
+import { isHotelMapVisible } from "@/lib/destinations/registry";
 
 // Types - exported for use in search-form
 export type MapLocationOption = SearchLocationOption;
@@ -176,6 +177,7 @@ export default function HotelMapPicker({
       const hasZeroRating =
         typeof rating === "number" && Number.isFinite(rating) && rating <= 0;
       return (
+        isHotelMapVisible(destinationId, hotel.value) &&
         typeof lat === "number" &&
         typeof lng === "number" &&
         lat !== 0 &&
@@ -186,7 +188,7 @@ export default function HotelMapPicker({
         (!areaId || isHotelInAoryxArea(lat, lng, areaId))
       );
     });
-  }, [hotels, areaId]);
+  }, [hotels, areaId, destinationId]);
 
   // Build a lookup map for hotels
   useEffect(() => {

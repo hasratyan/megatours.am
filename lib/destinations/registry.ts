@@ -17,6 +17,7 @@ export type DestinationConfig = {
   flightPaymentProvider: "megatours" | "kyte";
   cities: readonly { id: string; name: string }[];
   airports: readonly string[];
+  mapExcludedHotelIds?: readonly string[];
 };
 
 const text = (en: string, hy: string, ru: string): Copy => ({ en, hy, ru });
@@ -41,6 +42,8 @@ export const destinations: readonly DestinationConfig[] = [
     image: "/images/destinations/cyprus.webp",
     // City identities come from the agent catalogue. Names are editorial hints only.
     cities: [], airports: ["LCA", "PFO"],
+    // Marisa Apartments has reported incorrect coordinates. Keep its catalogue listing available.
+    mapExcludedHotelIds: ["U_4aabdcb4_34.9899_34.0024"],
   },
 ];
 
@@ -71,6 +74,10 @@ export const destinationCopy = {
 
 export function getDestination(id: unknown): DestinationConfig | null {
   return destinations.find((destination) => destination.id === id) ?? null;
+}
+
+export function isHotelMapVisible(destination: DestinationId, hotelId: string): boolean {
+  return !getDestination(destination)?.mapExcludedHotelIds?.includes(hotelId);
 }
 
 /** Hotel is the base; every chosen extra becomes part of the required package. */
