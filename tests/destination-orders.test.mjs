@@ -141,10 +141,20 @@ test("card registration uses a bounded merchant reference and the server-locked 
   const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]])); Object.assign(process.env, values);
   globalThis.orderFixture.register = async (request) => {
     const body = new URLSearchParams(request.body); assert.ok(body.get("orderNumber").length <= 32); assert.equal(body.get("amount"), "12480700"); assert.equal(body.get("currency"), "051");
-    return { response: { ok: true }, parsedBody: { errorCode: "0", orderId: "fixture-bank", formUrl: "https://bank-fixture.invalid/pay/fixture-bank" } };
+    return { response: { ok: true }, parsedBody: { errorCode: "0", orderId: "fixture-bank", formUrl: "https://epg.arca.am/payment/fixture-bank" } };
   };
   try {
     const intent = await initializeHotelGateway({ provider: "idbank", orderId: id, amountAmd: 124807, locale: "en", email: "nobody@example.invalid", returnUrl: "https://megatours.am" });
     assert.equal(intent.gatewayId, "fixture-bank"); assert.ok(intent.merchantOrder.startsWith("CY-"));
   } finally { delete globalThis.orderFixture.register; for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
+});
+
+test("bank payment pages may use the confirmed bank gateway origin, but never arbitrary redirects", async () => {
+  const { allowedIdbankFormUrl } = await import("../lib/packages/hotel-gateway.ts");
+  const base = "https://ipayproxy.idp.am/payment/rest";
+  assert.equal(allowedIdbankFormUrl("https://epg.arca.am/payment/fixture", base), true);
+  assert.equal(allowedIdbankFormUrl("https://ipayproxy.idp.am/payment/fixture", base), true);
+  assert.equal(allowedIdbankFormUrl("https://attacker.invalid/payment", base), false);
+  assert.equal(allowedIdbankFormUrl("http://epg.arca.am/payment", base), false);
+  assert.equal(allowedIdbankFormUrl("https://epg.arca.am@attacker.invalid/payment", base), false);
 });

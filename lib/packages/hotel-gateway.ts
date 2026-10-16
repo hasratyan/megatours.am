@@ -26,6 +26,10 @@ export function gatewayCurrency(provider: Exclude<HotelGateway, "idram">) {
   if (!["051", "51", "AMD"].includes(code) || !Number.isInteger(decimals) || decimals < 0 || decimals > 2) throw new Error("Hotel checkout currency is not configured.");
   return { decimals, code: "051" };
 }
+export function allowedIdbankFormUrl(value: string, base: string) {
+  try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password && [new URL(base).origin, "https://epg.arca.am"].includes(url.origin); }
+  catch { return false; }
+}
 export async function initializeHotelGateway(input: { provider: HotelGateway; orderId: string; amountAmd: number; locale: string; returnUrl: string; email: string }): Promise<HotelPaymentIntent> {
   if (!Number.isFinite(input.amountAmd) || input.amountAmd <= 0) throw new Error("Invalid checkout amount.");
   const merchantOrder = input.provider === "idbank" ? `CY-${input.orderId.replace(/-/g, "").slice(0, 28)}` : `CY-${input.orderId}`;
@@ -41,7 +45,7 @@ export async function initializeHotelGateway(input: { provider: HotelGateway; or
     const body = new URLSearchParams({ userName, password, orderNumber: merchantOrder, amount: String(Math.round(input.amountAmd * 10 ** currency.decimals)), currency: currency.code, returnUrl: input.returnUrl, description: "MEGATOURS hotel and selected services", language: input.locale });
     const result = await postIdbankFormWithAudit({ operation: "register", url: `${base}/register.do`, body: body.toString(), context: { orderNumber: merchantOrder, amountMinor: Math.round(input.amountAmd * 10 ** currency.decimals), currencyCode: currency.code, returnUrl: input.returnUrl } });
     const response = result.parsedBody;
-    if (!result.response.ok || !response || (response.errorCode !== undefined && String(response.errorCode) !== "0") || !text(response.orderId) || !text(response.formUrl) || new URL(text(response.formUrl)).origin !== new URL(base).origin) throw new Error("Card payment could not be started. Please try again.");
+    if (!result.response.ok || !response || (response.errorCode !== undefined && String(response.errorCode) !== "0") || !text(response.orderId) || !text(response.formUrl) || !allowedIdbankFormUrl(text(response.formUrl), base)) throw new Error("Card payment could not be started. Please try again.");
     return { provider: "idbank", gatewayId: text(response.orderId), merchantOrder, amountAmd: input.amountAmd, decimals: currency.decimals, formUrl: text(response.formUrl) };
   }
   const clientId = text(process.env.AMERIA_VPOS_CLIENT_ID), userName = text(process.env.AMERIA_VPOS_USERNAME), password = text(process.env.AMERIA_VPOS_PASSWORD);
