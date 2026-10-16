@@ -95,6 +95,18 @@ test("a rejected hotel reference remains a selection conflict without exposing s
   assert.match(response.headers.get("set-cookie"), /HttpOnly/);
 });
 
+test("a room search outage uses the localized room error instead of internal search terminology", async (t) => {
+  const previous = globalThis.fetch;
+  t.after(() => { globalThis.fetch = previous; });
+  globalThis.fetch = async () => Response.json({ code: "unavailable" }, { status: 503 });
+  const { searchDestinationHotelPresentation } = await import("../lib/packages/hotel-client.ts");
+  const { resolveSafeErrorFromUnknown } = await import("../lib/error-utils.ts");
+  await assert.rejects(searchDestinationHotelPresentation({ hotelCode: "hotel", destinationCode: "city", checkInDate: "2026-10-28", checkOutDate: "2026-10-30", currency: "EUR", rooms: [{ roomIdentifier: 1, adults: 2, childrenAges: [] }] }), (error) => {
+    assert.equal(resolveSafeErrorFromUnknown(error, "Localized room availability error"), "Localized room availability error");
+    return true;
+  });
+});
+
 test("package routes whitelist identifiers and selections; client prices and ownership are ignored", async (t) => {
   const previous = globalThis.fetch; t.after(() => { globalThis.fetch = previous; });
   const hotelOfferId = "00000000-0000-0000-0000-000000000001";
