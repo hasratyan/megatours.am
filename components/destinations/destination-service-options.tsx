@@ -82,6 +82,7 @@ export default function DestinationServiceOptions({ service, state }: { service:
       const result = await run<ExtraServicePrebookResult>(service === "attraction" ? "attractions/prebook" : "services/prebook", { offerId: offer.id }, controller.signal);
       if (!controller.signal.aborted) {
         updatePackageBuilderState((prev) => applyDestinationServiceQuote(prev, result));
+        setOffers((prev) => prev?.map((item) => item.id === offer.id ? result.offer : item) ?? null);
         setChanged(result.priceChanged || result.termsChanged); openPackageBuilder();
       }
     } catch {
