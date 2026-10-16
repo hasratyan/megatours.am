@@ -4311,6 +4311,7 @@
         "add_2",
         "add_circle",
         "add_shopping_cart",
+        "air",
         "airline_seat_recline_normal",
         "airlines",
         "anchor",
@@ -4366,6 +4367,7 @@
         "contrast",
         "copyright",
         "create",
+        "credit_card",
         "css",
         "dangerous",
         "dashboard",
@@ -4405,6 +4407,7 @@
         "filter",
         "flag",
         "flight",
+        "flight_land",
         "flight_takeoff",
         "function",
         "gavel",
@@ -4493,7 +4496,6 @@
         "person",
         "phone",
         "phone_in_talk",
-        "photo",
         "php",
         "pill",
         "pinch",
@@ -4592,8 +4594,8 @@
         "window"
       ],
       "sourceBytes": 4001276,
-      "subsetBytes": 243356,
-      "sha256": "b511d244e67e371a82169bb1cbb52d1ee9886ef1397079db6eb755ada807bdba"
+      "subsetBytes": 244584,
+      "sha256": "bef773066f7da2bf600ade6586b4c3d73fd5fe33285035666631403aa5775e3d"
     },
     "rounded": {
       "availableIcons": [
@@ -8905,6 +8907,7 @@
         "add_2",
         "add_circle",
         "add_shopping_cart",
+        "air",
         "airline_seat_recline_normal",
         "airlines",
         "anchor",
@@ -8960,6 +8963,7 @@
         "contrast",
         "copyright",
         "create",
+        "credit_card",
         "css",
         "dangerous",
         "dashboard",
@@ -8999,6 +9003,7 @@
         "filter",
         "flag",
         "flight",
+        "flight_land",
         "flight_takeoff",
         "function",
         "gavel",
@@ -9087,7 +9092,6 @@
         "person",
         "phone",
         "phone_in_talk",
-        "photo",
         "php",
         "pill",
         "pinch",
@@ -9186,8 +9190,8 @@
         "window"
       ],
       "sourceBytes": 5397756,
-      "subsetBytes": 325940,
-      "sha256": "b35ee35d21b98978e71dcfe9e176d2435ebd42ce91b72b88fb86412262ffb44a"
+      "subsetBytes": 327740,
+      "sha256": "78c7a7f4efc82b3f6d05d4463fa048c4bf4755e6382570050d3fcad2042af08d"
     }
   }
 }

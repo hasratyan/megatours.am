@@ -9708,6 +9708,119 @@ html.zoho-salesiq-handoff-only:not(.zoho-salesiq-live-agent-requested) #zsiq_flo
 .service-builder[data-destination="cyprus"] .controls label { display: grid; gap: .5rem; color: #e2e8f0; }
 .service-builder[data-destination="cyprus"] .controls input[type="time"], .service-builder[data-destination="cyprus"] .controls select { min-height: 44px; max-width: 100%; padding: .5rem .75rem; border: 1px solid #dedee5; border-radius: .75rem; background: #fff; color: #282741; }
 
+main.service-builder[data-destination="cyprus"] {
+  .destination-services { display: grid; gap: 1.5rem; min-width: 0; }
+  .destination-service-context { margin: 0; gap: .75rem; }
+  .destination-service-context .badge { max-width: 100%; overflow-wrap: anywhere; }
+  .destination-services .service-types { margin-bottom: 0; grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr)); }
+  .destination-transfer-types button { min-height: 220px; border-radius: 1.5rem; }
+  .destination-transfer-types button > span { max-width: 65%; }
+  .destination-services .destination-attraction-types { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+  .destination-attraction-types button { min-height: 220px; padding: 1.5rem; border-radius: 1.5rem; }
+  .destination-attraction-types button img { opacity: .9; }
+  .destination-attraction-types button > span { align-content: center; }
+
+  .destination-service-search { min-width: 0; }
+  .destination-service-note { margin: 0 0 1.25rem; color: #cbd5e1; font-size: .95rem; }
+  .destination-service-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 1.25rem; align-items: end; margin-bottom: 0; }
+  .destination-service-controls label { display: grid; align-items: start; gap: .65rem; font-size: .9rem; color: #e2e8f0; min-width: 0; }
+  .destination-service-controls input[type="time"], .destination-service-controls select, .destination-service-query input {
+    width: 100%; min-width: 0; min-height: 46px; padding: .7rem .9rem; border: 1px solid #94a3b866;
+    border-radius: .85rem; background: #090e1ecc; color: #f8fafc; color-scheme: dark; font: inherit;
+  }
+  .destination-service-controls :is(input, select):focus-visible, .destination-service-query input:focus-visible {
+    outline: 2px solid #7cf2d4; outline-offset: 2px;
+  }
+  .destination-service-controls .service-builder__cta { min-height: 46px; width: auto; margin: 0; justify-content: center; }
+  .destination-service-search__intro { display: flex; gap: .85rem; align-items: center; grid-column: span 2; }
+  .destination-service-search__intro > .material-symbols-rounded { font-size: 2rem; color: #7cf2d4; }
+  .destination-service-search__intro h2 { font-size: 1.2rem; font-weight: 600; }
+  .destination-service-search__intro p { margin: .35rem 0 0; font-size: .9rem; color: #cbd5e1; }
+
+  .destination-flight-brand { position: relative; overflow: hidden; min-height: 250px; border-color: #d147b666; background: #231536b3; }
+  .destination-flight-brand__copy { position: relative; z-index: 1; max-width: 60%; display: grid; justify-items: start; gap: .75rem; }
+  .destination-flight-brand__copy h2 { font-size: 1.5rem; font-weight: 600; }
+  .destination-flight-brand__copy p { margin: 0; color: #ede6f5; line-height: 1.55; }
+  .destination-flight-brand__logo { width: 105px; height: 48px; object-fit: contain; }
+  .destination-flight-brand__aircraft { position: absolute; right: -30px; bottom: -10px; width: min(48%, 500px); height: auto; }
+  .destination-flight-payment { display: flex; align-items: flex-start; gap: .65rem; margin: 1.25rem 0 0; padding-top: 1rem; border-top: 1px solid #ffffff1f; color: #d7c9e7; font-size: .9rem; line-height: 1.5; }
+  .destination-flight-payment > span { color: #e4a9d9; flex-shrink: 0; }
+
+  .destination-service-results { scroll-margin-top: 110px; min-width: 0; }
+  .destination-service-result-controls { margin-bottom: 1.25rem; gap: 1rem; }
+  .destination-service-query { display: flex; align-items: center; gap: .65rem; flex: 1 1 240px; max-width: 480px; min-width: 0; }
+  .destination-service-query > span { color: #cbd5e1; }
+  .destination-service-reset { border: 1px solid #94a3b85c; border-radius: .85rem; padding: .65rem 1rem; color: #7cf2d4; background: transparent; }
+  .destination-service-results .options, .destination-service-selected .options { grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr)); }
+  .destination-service-results .destination-flight-options, .destination-service-selected .destination-flight-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .destination-services .option { min-width: 0; overflow-wrap: anywhere; }
+  .destination-services .option .service-builder__cta { width: auto; display: inline-flex; align-items: center; justify-content: center; gap: .5rem; flex-shrink: 0; }
+  .destination-services .destination-transfer-option { display: grid; grid-template-columns: 1fr; align-content: space-between; }
+  .destination-transfer-option .route { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; font-size: 1.1rem; font-weight: 600; color: #f8fafc; }
+  .destination-transfer-option .meta { margin-top: .65rem; font-size: .9rem; }
+  .destination-offer-footer { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: end; width: 100%; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #ffffff20; }
+  .destination-offer-price { display: grid; gap: .3rem; min-width: 0; flex: 1; }
+  .destination-offer-price small { color: #cbd5e1; font-size: .8rem; }
+  .destination-offer-price strong { color: #f8fafc; font-size: 1.15rem; line-height: 1.4; font-weight: 700; overflow-wrap: anywhere; }
+  .destination-services .destination-attraction-option { grid-template-columns: auto minmax(0, 1fr); }
+  .destination-attraction-option > input { width: 1rem; height: 1rem; accent-color: #7cf2d4; margin-top: .3rem; }
+  .destination-attraction-option h5 label { cursor: pointer; }
+  .destination-attraction-option .meta { font-size: .9rem; }
+  .destination-attraction-option .pricing.destination-offer-footer { display: flex; }
+  .destination-offer-conditions { color: #cbd5e1; font-size: .85rem; line-height: 1.55; margin-top: .8rem; }
+  .destination-offer-conditions summary { cursor: pointer; color: #e2e8f0; width: fit-content; }
+  .destination-offer-conditions ul { margin: .75rem 0 0; padding-left: 1.25rem; display: grid; gap: .5rem; }
+  .destination-offer-conditions li { overflow-wrap: anywhere; }
+  .destination-service-selected > h2 { margin-bottom: 1rem; font-size: 1.2rem; font-weight: 600; }
+
+  .destination-flight-option { display: grid; gap: 1.25rem; border-color: #b681be4d; }
+  .destination-flight-option__heading { display: flex; align-items: center; gap: 1rem; }
+  .destination-flight-option__heading h3 { font-size: 1.15rem; font-weight: 600; color: #f8fafc; }
+  .destination-flight-option__heading .meta { font-size: .8rem; margin-top: .25rem; }
+  .destination-flight-option__heading > .badge { margin-left: auto; }
+  .destination-carrier { display: inline-flex; justify-content: center; align-items: center; padding: .6rem .8rem; border-radius: .85rem; background: #b10984; }
+  .destination-carrier img { width: 70px; height: 32px; object-fit: contain; }
+  .destination-flight-journeys { display: grid; gap: 1.25rem; }
+  .destination-flight-journey + .destination-flight-journey { padding-top: 1rem; border-top: 1px solid #ffffff20; }
+  .destination-flight-journey__label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; color: #d7c9e7; font-size: .8rem; margin-bottom: .6rem; }
+  .destination-flight-journey__route { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: .85rem; }
+  .destination-flight-journey__route > div { display: grid; gap: .2rem; }
+  .destination-flight-journey__route > div:last-child { text-align: right; }
+  .destination-flight-journey__route strong { color: #fff; font-size: 1.5rem; font-weight: 700; }
+  .destination-flight-journey__route b { color: #e2e8f0; font-weight: 500; }
+  .destination-flight-journey__route small { color: #b9c3d2; font-size: .75rem; }
+  .destination-flight-journey__route > .material-symbols-rounded { color: #e3a2d7; transform: rotate(90deg); }
+  .destination-flight-option .destination-offer-footer { margin-top: 0; }
+  .destination-service-empty { display: grid; justify-items: start; gap: 1rem; }
+  .destination-service-empty > span { font-size: 2rem; color: #7cf2d4; }
+  .destination-service-empty p { margin: 0; }
+  .destination-service-loading { display: flex; align-items: center; justify-content: center; gap: .75rem; color: #e2e8f0; min-height: 100px; }
+  .destination-service-loading > span { animation: destination-service-spin 1s linear infinite; }
+
+  @media (max-width: 900px) {
+    .destination-service-results .destination-flight-options, .destination-service-selected .destination-flight-options { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 600px) {
+    .destination-services { gap: 1rem; }
+    .destination-service-controls { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+    .destination-service-search__intro { grid-column: auto; }
+    .destination-service-controls .service-builder__cta { width: 100%; }
+    .destination-flight-brand { min-height: 240px; }
+    .destination-flight-brand__copy { max-width: 100%; }
+    .destination-flight-brand__aircraft { width: 85%; opacity: .2; }
+    .destination-service-result-controls { align-items: stretch; }
+    .destination-service-query { max-width: none; flex-basis: 100%; }
+    .destination-offer-footer { gap: .75rem; }
+    .destination-services .destination-transfer-types button > span { max-width: 70%; }
+    .destination-transfer-types button img { width: 230px; opacity: .8; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .destination-service-loading > span { animation: none; }
+    .destination-services .service-types button, .destination-services .service-types img { transition: none; }
+  }
+}
+@keyframes destination-service-spin { to { transform: rotate(360deg); } }
+
 
 /* React Bits GooeyNav */
 .gooey-nav {

@@ -1,0 +1,32 @@
+export const destinationServiceCopy = {
+  en: {
+    airport: "Cyprus airport", origin: "Departure airport", arrival: "Airport arrival time", departure: "Hotel departure time",
+    search: "Find options", required: "Choose the services you want to add to your hotel stay.", empty: "No available options were found for your hotel dates and guests.",
+    conditions: "Conditions", changed: "The price or conditions changed. Review the updated details.", roundTrip: "Round trip", totalParty: "Total for {count} guests",
+    all: "All options", sea: "Boat trips", sightseeing: "Sightseeing", cars: "Cars and minivans", buses: "Buses and shuttles",
+    searchOffers: "Search options", noMatch: "No options match these filters.", reset: "Show all options", options: "{count} options",
+    hotelDates: "Hotel dates", hotel: "Your hotel", outbound: "Outbound", inbound: "Return", cancellationFrom: "Cancellation fee from",
+    transferTitle: "Airport transfers", attractionTitle: "Discover Cyprus", flightTitle: "Wizz Air flights", flightNote: "Compare round-trip fares for your hotel dates and guests.",
+    transferNote: "Airport to hotel and back · quoted for your whole party", attractionNote: "Experiences for your hotel dates and guests", available: "Check availability", selected: "Selected option",
+  },
+  hy: {
+    airport: "Կիպրոսի օդանավակայան", origin: "Մեկնման օդանավակայան", arrival: "Ժամանման ժամը օդանավակայանում", departure: "Հյուրանոցից մեկնելու ժամը",
+    search: "Գտնել տարբերակներ", required: "Ընտրեք այն ծառայությունները, որոնք ցանկանում եք ավելացնել հյուրանոցին։", empty: "Հյուրանոցի ամսաթվերի և հյուրերի համար հասանելի տարբերակներ չեն գտնվել։",
+    conditions: "Պայմաններ", changed: "Գինը կամ պայմանները փոխվել են։ Ստուգեք թարմացված տվյալները։", roundTrip: "Երկկողմանի", totalParty: "Ընդհանուր՝ {count} հյուրի համար",
+    all: "Բոլոր տարբերակները", sea: "Նավով ուղևորություններ", sightseeing: "Էքսկուրսիաներ", cars: "Մեքենաներ և մինիվեններ", buses: "Ավտոբուսներ և շաթլներ",
+    searchOffers: "Որոնել տարբերակներ", noMatch: "Այս ֆիլտրերով տարբերակներ չեն գտնվել։", reset: "Ցուցադրել բոլոր տարբերակները", options: "{count} տարբերակ",
+    hotelDates: "Հյուրանոցի ամսաթվերը", hotel: "Ձեր հյուրանոցը", outbound: "Մեկնում", inbound: "Վերադարձ", cancellationFrom: "Չեղարկման վճարը՝ սկսած",
+    transferTitle: "Օդանավակայանի տրանսֆերներ", attractionTitle: "Բացահայտեք Կիպրոսը", flightTitle: "Wizz Air-ի չվերթներ", flightNote: "Համեմատեք երկկողմանի ավիատոմսերը՝ հյուրանոցի ամսաթվերի և հյուրերի համար։",
+    transferNote: "Օդանավակայանից հյուրանոց և հետ՝ բոլոր հյուրերի համար", attractionNote: "Տպավորություններ՝ հյուրանոցի ամսաթվերի և հյուրերի համար", available: "Ստուգել առկայությունը", selected: "Ընտրված տարբերակը",
+  },
+  ru: {
+    airport: "Аэропорт Кипра", origin: "Аэропорт вылета", arrival: "Время прибытия в аэропорт", departure: "Время выезда из отеля",
+    search: "Найти варианты", required: "Выберите услуги, которые хотите добавить к проживанию.", empty: "На даты отеля и для выбранных гостей нет доступных вариантов.",
+    conditions: "Условия", changed: "Цена или условия изменились. Проверьте обновлённые данные.", roundTrip: "Туда и обратно", totalParty: "Итого за {count} гостей",
+    all: "Все варианты", sea: "Морские прогулки", sightseeing: "Экскурсии", cars: "Автомобили и минивэны", buses: "Автобусы и шаттлы",
+    searchOffers: "Поиск вариантов", noMatch: "Нет вариантов по выбранным фильтрам.", reset: "Показать все варианты", options: "{count} вариантов",
+    hotelDates: "Даты отеля", hotel: "Ваш отель", outbound: "Вылет", inbound: "Возвращение", cancellationFrom: "Плата за отмену с",
+    transferTitle: "Трансферы из аэропорта", attractionTitle: "Откройте Кипр", flightTitle: "Рейсы Wizz Air", flightNote: "Сравните тарифы туда и обратно на даты отеля для выбранных гостей.",
+    transferNote: "Аэропорт — отель — аэропорт · стоимость за всех гостей", attractionNote: "Впечатления на даты отеля для выбранных гостей", available: "Проверить наличие", selected: "Выбранный вариант",
+  },
+};
