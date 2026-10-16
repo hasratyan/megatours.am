@@ -216,7 +216,6 @@ export type PackageBuilderState = {
     attraction?: ExtraServicePrebookResult;
     review?: DestinationPackageReview;
   };
-  destinationDefaults?: { hotelOfferId: string; insurance: "pending" | "ready" | "unavailable"; attractions: "pending" | "ready" | "empty" | "unavailable" };
   hotel?: PackageBuilderHotelSelection;
   transfer?: PackageBuilderServiceSelection & {
     destinationName?: string | null;

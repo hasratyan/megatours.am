@@ -29,7 +29,6 @@ import {
 import { buildSearchQuery } from "@/lib/search-query";
 import { buildFlightRedirectFromHotel } from "@/lib/flight-redirect";
 import { useDestination } from "@/components/destinations/destination-provider";
-import DestinationDefaults from "@/components/destinations/destination-defaults";
 import { isDestinationPackageReady, removeDestinationService } from "@/lib/packages/selection";
 import { packagePaymentCopy, packagePaymentProvider } from "@/lib/packages/payment";
 
@@ -530,7 +529,6 @@ export default function PackageBuilder() {
               insurance: undefined,
               flight: undefined,
               destinationQuotes: undefined,
-              destinationDefaults: undefined,
               sessionExpiresAt: undefined,
               updatedAt: Date.now(),
             }));
@@ -631,7 +629,6 @@ export default function PackageBuilder() {
           insurance: undefined,
           flight: undefined,
           destinationQuotes: undefined,
-          destinationDefaults: undefined,
           sessionExpiresAt: undefined,
           updatedAt: Date.now(),
         };
@@ -661,7 +658,6 @@ export default function PackageBuilder() {
 
   return (
     <div className={`package-builder${isOpen ? " is-open" : ""}`}>
-      {isCyprus ? <DestinationDefaults state={builderState} /> : null}
       <div className="package-builder__shell">
         {!isOpen ? (
           <button
@@ -705,8 +701,6 @@ export default function PackageBuilder() {
                 </span>
               </button>
             </div>
-            {isCyprus && builderState.destinationDefaults?.attractions === "unavailable" ? <p className="package-builder__warning" role="status">{{ en: "Attraction availability could not be checked. Open Attractions to try again.", hy: "Տեսարժան վայրերի հասանելիությունը չի ստուգվել։ Կրկին փորձելու համար բացեք ծառայությունը։", ru: "Не удалось проверить экскурсии. Откройте раздел экскурсий, чтобы повторить поиск." }[locale]}</p> : null}
-            {isCyprus && builderState.destinationDefaults?.attractions === "empty" ? <p className="package-builder__warning" role="status">{{ en: "No available attraction was found for these hotel dates and guests.", hy: "Այս ամսաթվերի և հյուրերի համար հասանելի տեսարժան վայր չի գտնվել։", ru: "На даты отеля и для выбранных гостей экскурсии не найдены." }[locale]}</p> : null}
             {isCyprus && (builderState.destinationQuotes?.hotel.priceChanged || builderState.destinationQuotes?.hotel.termsChanged) ? <p className="package-builder__warning" role="status">{{ en: "Your hotel price or conditions changed. Please review the updated selection.", hy: "Հյուրանոցի գինը կամ պայմանները փոխվել են։ Ստուգեք թարմացված ընտրությունը։", ru: "Цена или условия отеля изменились. Проверьте обновлённый вариант." }[locale]}</p> : null}
             {allEnabledSelected ? (
               <div className="package-builder__completion" role="status">

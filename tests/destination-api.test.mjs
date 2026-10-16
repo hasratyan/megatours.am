@@ -102,7 +102,7 @@ test("package routes whitelist identifiers and selections; client prices and own
   assert.equal((await destinationServiceProxy(request({ hotelOfferId }, { origin: "https://attacker.invalid" }), params.params, "services/search")).status, 403);
 });
 
-test("automatic attraction searches cannot select a supplier, country, price or owner", async (t) => {
+test("attraction searches cannot select a supplier, country, price or owner", async (t) => {
   const previous = globalThis.fetch; t.after(() => { globalThis.fetch = previous; });
   const hotelOfferId = "00000000-0000-0000-0000-000000000001";
   globalThis.fetch = async (url, init) => {
@@ -114,6 +114,17 @@ test("automatic attraction searches cannot select a supplier, country, price or 
   };
   const response = await destinationServiceProxy(request({ hotelOfferId, ownerId: "attacker", countryCode: "AE", price: 1, rateKey: "private", offerId: "fake" }), params.params, "attractions/search");
   assert.equal(response.status, 200); assert.deepEqual(await response.json(), { offers: [] });
+});
+
+test("extra service and package endpoints require a hotel offer before any upstream call", async (t) => {
+  const previous = globalThis.fetch; t.after(() => { globalThis.fetch = previous; });
+  globalThis.fetch = () => { throw new Error("Must not call agent without a hotel"); };
+  for (const operation of ["services/search", "services/prebook", "attractions/search", "attractions/prebook", "packages/review"]) {
+    for (const hotel of [{}, {hotelOfferId:""}, {hotelOfferId:"invalid"}]) {
+      const response = await destinationServiceProxy(request({...hotel,service:"transfer",offerId:"00000000-0000-0000-0000-000000000001"}), params.params, operation);
+      assert.equal(response.status, 400);
+    }
+  }
 });
 
 test("malformed service arrays and obsolete fixed-type reviews cannot silently drop extras", async (t) => {

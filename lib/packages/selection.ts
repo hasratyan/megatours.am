@@ -23,7 +23,7 @@ export function isDestinationPackageReady(state: PackageBuilderState, now = Date
   if (state.excursion?.selected) extras.push(state.destinationQuotes?.attraction?.offer);
   return extras.every((offer) => offer && offer.hotelOfferId === hotel.offer.id && offer.contextKey === hotel.contextKey && Number.isFinite(Date.parse(offer.expiresAt)) && Date.parse(offer.expiresAt) > now);
 }
-/** Editing one service preserves the other hotel-bound quotes and default selections. */
+/** Editing one service preserves the other explicitly selected hotel-bound services. */
 export function applyDestinationServiceQuote(state: PackageBuilderState, quote: ExtraServicePrebookResult): PackageBuilderState {
   const offer = quote.offer, hotel = state.destinationQuotes?.hotel;
   if (!hotel || offer.hotelOfferId !== hotel.offer.id || offer.contextKey !== hotel.contextKey) return state;

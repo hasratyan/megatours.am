@@ -118,6 +118,15 @@ test("Cyprus room cards derive a date-only deadline while preserving complete ca
 
 const { applyDestinationServiceQuote, removeDestinationService, destinationPackageReviewInput, isDestinationPackageReady } = await import("../lib/packages/selection.ts");
 const hotelDraft = () => ({destinationId:"cyprus",hotel:{selected:true,hotelCode:"CY-1",countryCode:"CY"},destinationQuotes:{hotel:{offer:{id:"hotel-quote",expiresAt:new Date(now+60000).toISOString()},contextKey:"trip-1"}},insurance:{selected:true,planId:"elite",price:2000},excursion:undefined});
+test("hotel-only packages are ready without extras; no extra service can be checked out without a hotel", () => {
+  const hotelOnly = removeDestinationService(hotelDraft(), "insurance");
+  assert.equal(isDestinationPackageReady(hotelOnly, now), true);
+  assert.deepEqual(destinationPackageReviewInput(hotelOnly), {hotelOfferId:"hotel-quote", selectedServices:[], serviceOfferIds:[]});
+  for (const service of ["insurance", "excursion", "transfer", "flight"]) {
+    assert.equal(isDestinationPackageReady({[service]:{selected:true,price:100,currency:"EUR"}}, now), false);
+    assert.equal(isDestinationPackageReady({...hotelOnly,hotel:undefined,[service]:{selected:true,price:100,currency:"EUR"}}, now), false);
+  }
+});
 test("selected insurance stays pending until priced and can be removed for hotel only", () => {
   const current = hotelDraft();
   for (const patch of [{price:null}, {quoteLoading:true}, {quoteError:"unavailable"}, {price:0}]) {
@@ -127,7 +136,7 @@ test("selected insurance stays pending until priced and can be removed for hotel
   assert.equal(isDestinationPackageReady(removeDestinationService(current, "insurance"), now), true);
 });
 const extra = (service,id=service) => ({offer:{id,service,destinationId:"cyprus",hotelOfferId:"hotel-quote",contextKey:"trip-1",expiresAt:new Date(now+60000).toISOString(),title:service,price:{amount:100,currency:"EUR"},journeys:[{from:"EVN",to:"LCA",departure:"2026-11-01",description:""}]}});
-test("adding flight preserves transfer and defaults; removing or changing one preserves the other", () => {
+test("adding flight preserves explicitly selected transfer and insurance; removing or changing one preserves the others", () => {
   let current = applyDestinationServiceQuote(hotelDraft(),extra("transfer"));
   current = applyDestinationServiceQuote(current,extra("flight"));
   assert.equal(current.transfer.selected,true); assert.equal(current.flight.selected,true);
