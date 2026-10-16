@@ -124,3 +124,13 @@ test("Cyprus payment stays disabled until launch, and a test bank endpoint canno
     assert.equal(hotelGatewayConfigured("idram"), false);
   } finally { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
 });
+
+test("wallet payment forms use the bank's Armenian language code without contacting the wallet", async () => {
+  const { initializeHotelGateway } = await import("../lib/packages/hotel-gateway.ts");
+  const previous = { account: process.env.IDRAM_REC_ACCOUNT, secret: process.env.IDRAM_SECRET_KEY };
+  process.env.IDRAM_REC_ACCOUNT = "fixture"; process.env.IDRAM_SECRET_KEY = "fixture";
+  try {
+    const intent = await initializeHotelGateway({ provider: "idram", orderId: id, amountAmd: 100, locale: "hy", email: "nobody@example.invalid", returnUrl: "https://megatours.am" });
+    assert.equal(intent.fields.EDP_LANGUAGE, "AM"); assert.equal(intent.fields.EDP_AMOUNT, "100.00"); assert.equal(intent.fields.EDP_BILL_NO, `CY-${id}`);
+  } finally { if (previous.account === undefined) delete process.env.IDRAM_REC_ACCOUNT; else process.env.IDRAM_REC_ACCOUNT = previous.account; if (previous.secret === undefined) delete process.env.IDRAM_SECRET_KEY; else process.env.IDRAM_SECRET_KEY = previous.secret; }
+});

@@ -32,7 +32,7 @@ export async function initializeHotelGateway(input: { provider: HotelGateway; or
   if (input.provider === "idram") {
     const account = text(process.env.IDRAM_REC_ACCOUNT), secret = text(process.env.IDRAM_SECRET_KEY);
     if (!account || !secret) throw new Error("Wallet payment is not configured.");
-    return { provider: "idram", gatewayId: merchantOrder, merchantOrder, amountAmd: input.amountAmd, decimals: 2, action: "https://banking.idram.am/Payment/GetPayment", fields: { EDP_REC_ACCOUNT: account, EDP_BILL_NO: merchantOrder, EDP_AMOUNT: input.amountAmd.toFixed(2), EDP_DESCRIPTION: "MEGATOURS hotel and selected services", EDP_LANGUAGE: input.locale.toUpperCase(), EDP_EMAIL: input.email } };
+    return { provider: "idram", gatewayId: merchantOrder, merchantOrder, amountAmd: input.amountAmd, decimals: 2, action: "https://banking.idram.am/Payment/GetPayment", fields: { EDP_REC_ACCOUNT: account, EDP_BILL_NO: merchantOrder, EDP_AMOUNT: input.amountAmd.toFixed(2), EDP_DESCRIPTION: "MEGATOURS hotel and selected services", EDP_LANGUAGE: input.locale === "hy" ? "AM" : input.locale.toUpperCase(), EDP_EMAIL: input.email } };
   }
   const base = baseUrl(input.provider), currency = gatewayCurrency(input.provider);
   if (input.provider === "idbank") {
