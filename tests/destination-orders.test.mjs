@@ -111,3 +111,16 @@ test("transfer pickup dates and local times must match the server-validated quot
   assert.equal(transferScheduleMatches(journeys,{...accepted,departureDateTime:"2026-11-18T09:00"}),false);
   assert.equal(transferScheduleMatches(journeys,{}),false);
 });
+
+test("Cyprus payment stays disabled until launch, and a test bank endpoint cannot take live bookings", async () => {
+  const { hotelGatewayConfigured } = await import("../lib/packages/hotel-gateway.ts");
+  const values = { B2C_CYPRUS_CHECKOUT_ENABLED: "true", IDRAM_REC_ACCOUNT: "fixture", IDRAM_SECRET_KEY: "fixture", NODE_ENV: "production", AMERIA_VPOS_BASE_URL: "https://servicestest.ameriabank.am", AMERIA_VPOS_CLIENT_ID: "fixture", AMERIA_VPOS_USERNAME: "fixture", AMERIA_VPOS_PASSWORD: "fixture" };
+  const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, values);
+  try {
+    assert.equal(hotelGatewayConfigured("idram"), true);
+    assert.equal(hotelGatewayConfigured("ameriabank"), false);
+    delete process.env.B2C_CYPRUS_CHECKOUT_ENABLED;
+    assert.equal(hotelGatewayConfigured("idram"), false);
+  } finally { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
+});
