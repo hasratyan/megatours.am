@@ -14,7 +14,7 @@ const stubs = {
   "@/lib/payment-method-flags": 'export const getPaymentMethodFlags=async()=>({idbank_card:true,ameria_card:true,idram:true});',
   "@/lib/booking-addons": 'export const parseBookingAddonServices=()=>({});',
   "@/lib/efes-client": 'export const requoteEfesInsuranceSelection=()=>{throw Error("unexpected insurance call")};export const createEfesPoliciesFromBooking=()=>{throw Error("unexpected issuance")};',
-  "@/lib/idbank-gateway-audit": 'export const postIdbankFormWithAudit=async()=>{throw Error("unexpected bank registration")};',
+  "@/lib/idbank-gateway-audit": 'export const postIdbankFormWithAudit=async(input)=>{if(!globalThis.orderFixture.register)throw Error("unexpected bank registration");return globalThis.orderFixture.register(input)};',
   "@/lib/vpos-payment-details": 'export const getVposPaymentDetails=async()=>({raw:globalThis.orderFixture.bank});',
 };
 registerHooks({ resolve(specifier, context, next) {
@@ -133,4 +133,18 @@ test("wallet payment forms use the bank's Armenian language code without contact
     const intent = await initializeHotelGateway({ provider: "idram", orderId: id, amountAmd: 100, locale: "hy", email: "nobody@example.invalid", returnUrl: "https://megatours.am" });
     assert.equal(intent.fields.EDP_LANGUAGE, "AM"); assert.equal(intent.fields.EDP_AMOUNT, "100.00"); assert.equal(intent.fields.EDP_BILL_NO, `CY-${id}`);
   } finally { if (previous.account === undefined) delete process.env.IDRAM_REC_ACCOUNT; else process.env.IDRAM_REC_ACCOUNT = previous.account; if (previous.secret === undefined) delete process.env.IDRAM_SECRET_KEY; else process.env.IDRAM_SECRET_KEY = previous.secret; }
+});
+
+test("card registration uses a bounded merchant reference and the server-locked AMD amount", async () => {
+  const { initializeHotelGateway } = await import("../lib/packages/hotel-gateway.ts");
+  const values = { VPOS_BASE_URL: "https://bank-fixture.invalid/payment/rest", VPOS_USER: "fixture", VPOS_PASSWORD: "fixture", VPOS_CURRENCY_CODE: "051", VPOS_CURRENCY_DECIMALS: "2" };
+  const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]])); Object.assign(process.env, values);
+  globalThis.orderFixture.register = async (request) => {
+    const body = new URLSearchParams(request.body); assert.ok(body.get("orderNumber").length <= 32); assert.equal(body.get("amount"), "12480700"); assert.equal(body.get("currency"), "051");
+    return { response: { ok: true }, parsedBody: { errorCode: "0", orderId: "fixture-bank", formUrl: "https://bank-fixture.invalid/pay/fixture-bank" } };
+  };
+  try {
+    const intent = await initializeHotelGateway({ provider: "idbank", orderId: id, amountAmd: 124807, locale: "en", email: "nobody@example.invalid", returnUrl: "https://megatours.am" });
+    assert.equal(intent.gatewayId, "fixture-bank"); assert.ok(intent.merchantOrder.startsWith("CY-"));
+  } finally { delete globalThis.orderFixture.register; for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
 });

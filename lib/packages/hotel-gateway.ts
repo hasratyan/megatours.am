@@ -28,7 +28,7 @@ export function gatewayCurrency(provider: Exclude<HotelGateway, "idram">) {
 }
 export async function initializeHotelGateway(input: { provider: HotelGateway; orderId: string; amountAmd: number; locale: string; returnUrl: string; email: string }): Promise<HotelPaymentIntent> {
   if (!Number.isFinite(input.amountAmd) || input.amountAmd <= 0) throw new Error("Invalid checkout amount.");
-  const merchantOrder = `CY-${input.orderId}`;
+  const merchantOrder = input.provider === "idbank" ? `CY-${input.orderId.replace(/-/g, "").slice(0, 28)}` : `CY-${input.orderId}`;
   if (input.provider === "idram") {
     const account = text(process.env.IDRAM_REC_ACCOUNT), secret = text(process.env.IDRAM_SECRET_KEY);
     if (!account || !secret) throw new Error("Wallet payment is not configured.");
