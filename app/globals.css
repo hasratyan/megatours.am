@@ -9734,12 +9734,12 @@ main.service-builder[data-destination="cyprus"] {
   .destination-service-controls .service-builder__cta { min-height: 46px; width: auto; margin: 0; justify-content: center; }
   .destination-service-search__intro { display: flex; gap: .85rem; align-items: center; grid-column: span 2; }
   .destination-service-search__intro > .material-symbols-rounded { font-size: 2rem; color: #7cf2d4; }
-  .destination-service-search__intro h2 { font-size: 1.2rem; font-weight: 600; }
+  .destination-service-search__intro h2 { font-size: 1.2rem; font-weight: 600; color: #f8fafc; }
   .destination-service-search__intro p { margin: .35rem 0 0; font-size: .9rem; color: #cbd5e1; }
 
   .destination-flight-brand { position: relative; overflow: hidden; min-height: 250px; border-color: #d147b666; background: #231536b3; }
   .destination-flight-brand__copy { position: relative; z-index: 1; max-width: 60%; display: grid; justify-items: start; gap: .75rem; }
-  .destination-flight-brand__copy h2 { font-size: 1.5rem; font-weight: 600; }
+  .destination-flight-brand__copy h2 { font-size: 1.5rem; font-weight: 600; color: #f8fafc; }
   .destination-flight-brand__copy p { margin: 0; color: #ede6f5; line-height: 1.55; }
   .destination-flight-brand__logo { width: 105px; height: 48px; object-fit: contain; }
   .destination-flight-brand__aircraft { position: absolute; right: -30px; bottom: -10px; width: min(48%, 500px); height: auto; }
@@ -9771,7 +9771,7 @@ main.service-builder[data-destination="cyprus"] {
   .destination-offer-conditions summary { cursor: pointer; color: #e2e8f0; width: fit-content; }
   .destination-offer-conditions ul { margin: .75rem 0 0; padding-left: 1.25rem; display: grid; gap: .5rem; }
   .destination-offer-conditions li { overflow-wrap: anywhere; }
-  .destination-service-selected > h2 { margin-bottom: 1rem; font-size: 1.2rem; font-weight: 600; }
+  .destination-service-selected > h2 { margin-bottom: 1rem; font-size: 1.2rem; font-weight: 600; color: #f8fafc; }
 
   .destination-flight-option { display: grid; gap: 1.25rem; border-color: #b681be4d; }
   .destination-flight-option__heading { display: flex; align-items: center; gap: 1rem; }
