@@ -198,7 +198,6 @@ export function DestinationOfferCard({ offer, selected, busy, guestCount, locale
     <div className="destination-flight-option__heading">
       {wizz ? <span className="destination-carrier"><Image src="/images/logos/wizz-air-white.png" alt="Wizz Air" width={70} height={32} unoptimized /></span> : <span className="material-symbols-rounded" aria-hidden="true">flight</span>}
       <div><h3>{offer.title}</h3><span className="meta">{c.roundTrip}</span></div>
-      {selected ? <span className="badge">{selectedLabel}</span> : null}
     </div>
     <div className="destination-flight-journeys">{offer.journeys.map((journey, index) => <FlightJourney key={index} journey={journey} label={index === 0 ? c.outbound : c.inbound} locale={locale} />)}</div>
     <OfferConditions offer={offer} locale={locale} c={c} />

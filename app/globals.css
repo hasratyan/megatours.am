@@ -9777,7 +9777,6 @@ main.service-builder[data-destination="cyprus"] {
   .destination-flight-option__heading { display: flex; align-items: center; gap: 1rem; }
   .destination-flight-option__heading h3 { font-size: 1.15rem; font-weight: 600; color: #f8fafc; }
   .destination-flight-option__heading .meta { font-size: .8rem; margin-top: .25rem; }
-  .destination-flight-option__heading > .badge { margin-left: auto; }
   .destination-carrier { display: inline-flex; justify-content: center; align-items: center; padding: .6rem .8rem; border-radius: .85rem; background: #b10984; }
   .destination-carrier img { width: 70px; height: 32px; object-fit: contain; }
   .destination-flight-journeys { display: grid; gap: 1.25rem; }
@@ -9811,6 +9810,8 @@ main.service-builder[data-destination="cyprus"] {
     .destination-service-result-controls { align-items: stretch; }
     .destination-service-query { max-width: none; flex-basis: 100%; }
     .destination-offer-footer { gap: .75rem; }
+    .destination-flight-option .destination-offer-footer { flex-direction: column; align-items: stretch; }
+    .destination-flight-option .destination-offer-footer .service-builder__cta { align-self: flex-end; }
     .destination-services .destination-transfer-types button > span { max-width: 70%; }
     .destination-transfer-types button img { width: 230px; opacity: .8; }
   }
