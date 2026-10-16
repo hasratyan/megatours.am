@@ -85,6 +85,16 @@ test("supplier failures expose only a safe code and fresh owner cookie", async (
   assert.match(response.headers.get("set-cookie"), /HttpOnly/);
 });
 
+test("a rejected hotel reference remains a selection conflict without exposing supplier diagnostics", async (t) => {
+  const previous = globalThis.fetch;
+  t.after(() => { globalThis.fetch = previous; });
+  globalThis.fetch = async () => Response.json({ error: "Private supplier availability reference is missing" }, { status: 409 });
+  const response = await prebook(request({ offerId: "00000000-0000-0000-0000-000000000001" }), params);
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { code: "expired" });
+  assert.match(response.headers.get("set-cookie"), /HttpOnly/);
+});
+
 test("package routes whitelist identifiers and selections; client prices and ownership are ignored", async (t) => {
   const previous = globalThis.fetch; t.after(() => { globalThis.fetch = previous; });
   const hotelOfferId = "00000000-0000-0000-0000-000000000001";

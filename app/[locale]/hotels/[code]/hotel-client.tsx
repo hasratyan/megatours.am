@@ -2225,7 +2225,11 @@ export default function HotelClient({
           const validated = await postJson<DestinationHotelPrebookResult>("/api/destinations/cyprus/hotels/prebook", { offerId: uniqueIds[0] });
           updatePackageBuilderState(() => ({ destinationId: "cyprus", destinationQuotes: { hotel: validated }, hotel: { ...nextHotel, countryCode: "CY", price: validated.offer.price.amount, currency: validated.offer.price.currency, selectionKey: validated.offer.id }, sessionExpiresAt: Date.parse(validated.offer.expiresAt), updatedAt: Date.now() }));
           openPackageBuilder();
-        } catch (error) { setBookingError(resolveSafeErrorFromUnknown(error, t.hotel.errors.prebookFailed)); }
+        } catch (error) {
+          setBookingError(error instanceof ApiError && error.code === "expired"
+            ? t.hotel.errors.cannotBookOption
+            : resolveSafeErrorFromUnknown(error, t.hotel.errors.prebookFailed));
+        }
         finally { setBookingPreparing(false); setPrebookingKey(null); }
         return;
       }
