@@ -9714,7 +9714,7 @@ main.service-builder[data-destination="cyprus"] {
   .destination-service-context .badge { max-width: 100%; overflow-wrap: anywhere; }
   .destination-services .service-types { margin-bottom: 0; grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr)); }
   .destination-transfer-types button { min-height: 220px; border-radius: 1.5rem; }
-  .destination-transfer-types button > span { max-width: 65%; }
+  .destination-transfer-types button > span { max-width: none; }
   .destination-services .destination-attraction-types { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
   .destination-attraction-types button { min-height: 220px; padding: 1.5rem; border-radius: 1.5rem; }
   .destination-attraction-types button img { opacity: .9; }

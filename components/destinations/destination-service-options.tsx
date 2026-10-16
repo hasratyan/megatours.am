@@ -96,7 +96,7 @@ export default function DestinationServiceOptions({ service, state }: { service:
   function categoryNote(value: ServiceCategory) {
     const matching = filterServiceOffers(currentOffers ?? [], value, "");
     if (currentOffers) return c.options.replace("{count}", String(matching.length));
-    return service === "transfer" ? c.roundTrip : c.available;
+    return c.available;
   }
 
   if (!hotelId) return <div className="panel destination-service-empty">

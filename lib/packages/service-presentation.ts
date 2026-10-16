@@ -30,7 +30,7 @@ export function serviceDate(value: string | null | undefined, locale: string): s
 }
 
 export function serviceTime(value: string | undefined): string | null {
-  return value?.match(/T(\d{2}:\d{2})(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?$/)?.[1] ?? null;
+  return value?.match(/T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/)?.[1] ?? null;
 }
 
 export function serviceCondition(value: string, locale: string, fromLabel: string): string {

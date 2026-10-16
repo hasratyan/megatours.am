@@ -61,6 +61,7 @@ test("experience filters and text search preserve the complete quoted party pric
 test("journey times stay airport-local and cancellation timestamps become labeled calendar dates",()=>{
   assert.equal(serviceDate("2026-11-15T00:00:00+14:00","en-GB"),"15 Nov 2026");
   assert.equal(serviceTime("2026-11-15T12:15:00+02:00"),"12:15");
+  assert.equal(serviceTime("2026-11-15T12:15:00.000Z"),"12:15");
   assert.equal(serviceTime("2026-11-15"),null);
   assert.equal(serviceCondition("2026-11-14T23:59:00: 50 EUR","en-GB","Cancellation fee from"),"Cancellation fee from 14 Nov 2026 · 50 EUR");
 });
