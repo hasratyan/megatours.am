@@ -12,6 +12,7 @@ function baseUrl(provider: Exclude<HotelGateway, "idram">) {
   return value.replace(/\/+$/, "");
 }
 export function hotelGatewayConfigured(provider: HotelGateway) {
+  if (process.env.B2C_CYPRUS_CHECKOUT_ENABLED !== "true") return false;
   try {
     if (provider === "idram") return Boolean(text(process.env.IDRAM_REC_ACCOUNT) && text(process.env.IDRAM_SECRET_KEY));
     baseUrl(provider); gatewayCurrency(provider);
