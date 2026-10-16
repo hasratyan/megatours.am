@@ -16,6 +16,7 @@ import type {
 import type { InsuranceSelectOption as AddressSelectOption, InsuranceSelectProps } from "./checkout-insurance-select";
 import { useCurrency } from "@/components/currency-provider";
 import { useDestination } from "@/components/destinations/destination-provider";
+import { destinationPackageReviewInput, isDestinationPackageReady } from "@/lib/packages/selection";
 import DestinationCheckoutReview from "@/components/destinations/destination-checkout-review";
 import { packagePaymentCopy, packagePaymentProvider } from "@/lib/packages/payment";
 import { useLanguage } from "@/components/language-provider";
@@ -785,12 +786,14 @@ const hasMeaningfulCheckoutDraft = (draft: CheckoutDraft) =>
 
 type PackageCheckoutClientProps = {
   initialPaymentMethodFlags: PaymentMethodFlags;
+  cyprusPaymentMethodFlags?: PaymentMethodFlags;
 };
 
-export default function PackageCheckoutClient({ initialPaymentMethodFlags }: PackageCheckoutClientProps) {
+export default function PackageCheckoutClient({ initialPaymentMethodFlags, cyprusPaymentMethodFlags }: PackageCheckoutClientProps) {
   const { locale, t } = useLanguage();
   const destinationId = useDestination();
   const isCyprus = destinationId === "cyprus";
+  const paymentMethodFlags = isCyprus && cyprusPaymentMethodFlags ? cyprusPaymentMethodFlags : initialPaymentMethodFlags;
   const { currency: displayCurrency } = useCurrency();
   const intlLocale = intlLocales[locale] ?? "en-GB";
   const { data: session } = useSession();
@@ -801,11 +804,11 @@ export default function PackageCheckoutClient({ initialPaymentMethodFlags }: Pac
   const enabledPaymentMethods = useMemo<PaymentMethod[]>(
     () => {
       const regularMethods: PaymentMethod[] = paymentMethodOrder.filter(
-        (method) => initialPaymentMethodFlags[method] !== false
+        (method) => paymentMethodFlags[method] !== false
       );
-      return isAdminCheckoutUser ? [...regularMethods, "admin"] : regularMethods;
+      return isAdminCheckoutUser && !isCyprus ? [...regularMethods, "admin"] : regularMethods;
     },
-    [initialPaymentMethodFlags, isAdminCheckoutUser]
+    [paymentMethodFlags, isAdminCheckoutUser, isCyprus]
   );
   const [builderState, setBuilderState] = useState<PackageBuilderState>({});
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(
@@ -824,6 +827,7 @@ export default function PackageCheckoutClient({ initialPaymentMethodFlags }: Pac
   const [devInsuranceMessage, setDevInsuranceMessage] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [sessionRemainingMs, setSessionRemainingMs] = useState<number | null>(null);
+  const [attractionAnswers, setAttractionAnswers] = useState<Record<string, string>>({});
   const [contact, setContact] = useState({
     firstName: "",
     lastName: "",
@@ -931,11 +935,11 @@ export default function PackageCheckoutClient({ initialPaymentMethodFlags }: Pac
     () =>
       paymentMethodOptions.filter((option) =>
         option.value === "admin"
-          ? isAdminCheckoutUser
+          ? isAdminCheckoutUser && !isCyprus
           : isCheckoutPaymentMethod(option.value) &&
-            initialPaymentMethodFlags[option.value] !== false
+            paymentMethodFlags[option.value] !== false
       ),
-    [initialPaymentMethodFlags, isAdminCheckoutUser, paymentMethodOptions]
+    [paymentMethodFlags, isAdminCheckoutUser, paymentMethodOptions, isCyprus]
   );
   const selectedPaymentMethodOption =
     enabledPaymentMethodOptions.find((option) => option.value === paymentMethod) ?? null;
@@ -2418,7 +2422,7 @@ export default function PackageCheckoutClient({ initialPaymentMethodFlags }: Pac
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (isCyprus || !canPay || paymentLoading) return;
+    if (!canPay || paymentLoading) return;
     setPaymentError(null);
     setInsuranceQuoteError(null);
     setDevInsuranceMessage(null);
@@ -2689,6 +2693,19 @@ export default function PackageCheckoutClient({ initialPaymentMethodFlags }: Pac
         locale,
         couponCode: appliedCoupon?.code ?? undefined,
       };
+      if (isCyprus) {
+        const checkout = await postJson<{ formUrl?: string; action?: string; fields?: Record<string, string> }>("/api/destinations/cyprus/orders/checkout", {
+          ...destinationPackageReviewInput(builderState), locale, paymentMethod,
+          rooms: payload.rooms.map((room) => ({ guests: room.guests })), contact,
+          transferDetails: { flightNumber: transferFlightDetails.flightNumber, departureFlightNumber: transferFlightDetails.departureFlightNumber },
+          insurance: payload.insurance, attractionAnswers,
+        });
+        if (checkout.formUrl) { window.location.assign(checkout.formUrl); return; }
+        if (!checkout.action || !checkout.fields) throw new Error(t.packageBuilder.checkout.errors.paymentFailed);
+        const form = document.createElement("form"); form.method = "POST"; form.action = checkout.action;
+        Object.entries(checkout.fields).forEach(([name, value]) => { const input = document.createElement("input"); input.type = "hidden"; input.name = name; input.value = value; form.appendChild(input); });
+        document.body.appendChild(form); form.submit(); return;
+      }
       if (paymentMethod === "admin") {
         const response = await postJson<AdminCheckoutResponse>(
           "/api/payments/admin/checkout",
@@ -3588,7 +3605,7 @@ export default function PackageCheckoutClient({ initialPaymentMethodFlags }: Pac
   );
 
   const canPay = Boolean(
-    !isCyprus && termsAccepted &&
+    (!isCyprus || isDestinationPackageReady(builderState)) && termsAccepted &&
       enabledPaymentMethodOptions.length > 0 &&
       paymentMethod &&
       (!insuranceActive || insuranceTermsAccepted) &&
@@ -3621,6 +3638,7 @@ export default function PackageCheckoutClient({ initialPaymentMethodFlags }: Pac
 
         <form className="package-checkout__layout" onSubmit={handleSubmit}>
           <section className="package-checkout__panel">
+            {isCyprus && builderState.destinationQuotes?.attraction?.offer.questions?.some((question) => question.code !== "PHONENUMBER") ? <div className="checkout-section"><h2>{t.packageBuilder.services.excursion}</h2>{builderState.destinationQuotes.attraction.offer.questions.filter((question) => question.code !== "PHONENUMBER").map((question) => <label key={question.code} className="destination-order__field"><span>{question.text}</span><input required={question.required} value={attractionAnswers[question.code] ?? ""} onChange={(event) => setAttractionAnswers((current) => ({ ...current, [question.code]: event.target.value }))} maxLength={500} /></label>)}</div> : null}
             <div className="checkout-section">
               <div className="checkout-section__heading">
                 <h2>{t.packageBuilder.checkout.summaryTitle}</h2>

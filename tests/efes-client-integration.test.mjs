@@ -55,6 +55,7 @@ test("real EFES client retains slow results, deduplicates, and refreshes pending
   let policyCalls = 0;
   let quoteCalls = 0;
   let mode = "slow";
+  let expectedCountry = null;
   const payload = {
     customerRefNumber: "test-booking", sessionId: "test-session", rooms: [],
     insurance: { provider: "efes", price: 8400, startDate: "2026-09-13", endDate: "2026-09-19", territoryCode: "world", riskAmount: 15000, riskCurrency: "EUR", travelers:
@@ -74,6 +75,7 @@ test("real EFES client retains slow results, deduplicates, and refreshes pending
     }
     policyCalls++;
     const body = JSON.parse(options.body);
+    if (expectedCountry) assert.equal(body.TRAVEL_COUNTRIES, expectedCountry);
     const index = Number(body.TRAVEL_PASSPORT_NUMBER.slice(-1));
     assert.equal(body.RISK_UNIVERSAL_PREMIUM, index === 1 ? "4200" : "2100");
     assert.equal(body.INSURED_NAME, "Անի");
@@ -103,6 +105,11 @@ test("real EFES client retains slow results, deduplicates, and refreshes pending
     await refreshEfesPolicyResults(stale);
     assert.equal(resolveInsuranceIssuance({ insuranceSelected: true, ...stale }).status, "confirmed");
 
+    mode = "cyprus"; expectedCountry = "Cyprus";
+    const cyprus = { ...payload, countryCode: "CY", customerRefNumber: "cyprus-test", insurance: { ...payload.insurance, travelCountries: "Կիպրոս" } };
+    const cyprusPolicies = await createEfesPoliciesFromBooking(cyprus);
+    assert.equal(cyprusPolicies.length, 4);
+    expectedCountry = null;
     mode = "mixed";
     const nextPayload = { ...payload, customerRefNumber: "test-booking-2" };
     let mixed;

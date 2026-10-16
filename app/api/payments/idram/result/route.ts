@@ -1,3 +1,4 @@
+import { destinationIdramCallback } from "@/lib/packages/orders";
 import { hasPendingEfesPolicy } from "@/lib/insurance-policy-status";
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
@@ -209,6 +210,7 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
 
   const billNo = readField(formData, "EDP_BILL_NO");
+  if (billNo.startsWith("CY-")) return destinationIdramCallback(formData);
   const recAccount = readField(formData, "EDP_REC_ACCOUNT");
   const amountRaw = readField(formData, "EDP_AMOUNT");
   const precheckFlag = readField(formData, "EDP_PRECHECK");

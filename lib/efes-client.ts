@@ -1114,7 +1114,7 @@ export async function createEfesPoliciesFromBooking(
   const territoryLabel =
     insurance.territoryPolicyLabel ??
     (insurance.territoryCode ? DEFAULT_TERRITORY_LABEL : insurance.territoryLabel ?? DEFAULT_TERRITORY_LABEL);
-  const travelCountries = EFES_TRAVEL_COUNTRY_LABEL;
+  const travelCountries = payload.countryCode === "CY" ? "Cyprus" : EFES_TRAVEL_COUNTRY_LABEL;
   if (!travelCountries) {
     throw new EfesClientError("Missing travel countries for EFES policy");
   }

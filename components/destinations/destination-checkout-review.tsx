@@ -6,7 +6,7 @@ import type { DestinationPackageReview } from "@/lib/packages/contracts";
 import { destinationPackageReviewInput } from "@/lib/packages/selection";
 import { destinationCopy } from "@/lib/destinations/registry";
 
-/** Validate the destination quote inside the same checkout form; payment dispatch is not enabled yet. */
+/** Validate hotel-bound services before opening the bank payment page. */
 export default function DestinationCheckoutReview({ state }: { state: PackageBuilderState }) {
   const { locale, t } = useLanguage();
   const [result, setResult] = useState<{ key: string; review?: DestinationPackageReview; error?: string } | null>(null);
@@ -27,6 +27,6 @@ export default function DestinationCheckoutReview({ state }: { state: PackageBui
     return () => controller.abort();
   }, [hotelId, payload, locale, key]);
   const current = result?.key === key ? result : null;
-  const pending = { en: "Online booking is being prepared. Contact MEGATOURS to complete your reservation.", hy: "Առցանց ամրագրումը նախապատրաստվում է։ Ամրագրումն ավարտելու համար կապվեք MEGATOURS-ի հետ։", ru: "Онлайн-бронирование готовится. Для завершения бронирования свяжитесь с MEGATOURS." }[locale];
-  return <div className="checkout-section" role="status"><p>{!hotelId ? t.packageBuilder.warningSelectHotel : current?.error ?? (!current?.review ? t.packageBuilder.toggleInProgress : pending)}</p>{current?.review ? <a href="tel:+37455659965">(+374 55) 65-99-65</a> : null}</div>;
+  const pending = { en: "Pay for your hotel and selected services first. After the hotel is confirmed, you can book and pay for flights separately. Flight fares will be checked again before payment.", hy: "Նախ վճարեք հյուրանոցի և ընտրված ծառայությունների համար։ Հյուրանոցի հաստատումից հետո կարող եք առանձին ամրագրել և վճարել ավիատոմսերը։ Ավիատոմսերի արժեքը կստուգվի կրկին մինչև վճարումը։", ru: "Сначала оплатите отель и выбранные услуги. После подтверждения отеля можно отдельно забронировать и оплатить авиабилеты. Тариф будет проверен повторно перед оплатой." }[locale];
+  return <div className="checkout-section" role="status"><p>{!hotelId ? t.packageBuilder.warningSelectHotel : current?.error ?? (!current?.review ? t.packageBuilder.toggleInProgress : pending)}</p></div>;
 }

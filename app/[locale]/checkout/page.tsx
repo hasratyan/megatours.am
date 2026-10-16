@@ -1,3 +1,4 @@
+import { hotelGatewayConfigured } from "@/lib/packages/hotel-gateway";
 import { getTranslations } from "@/lib/i18n-server";
 import { getServerSession } from "@/lib/auth-compat/server";
 import PackageCheckoutClient from "@/components/package-checkout-client";
@@ -42,5 +43,5 @@ export default async function CheckoutPage() {
   } catch (error) {
     console.error("[CheckoutPage] Failed to load payment method flags", error);
   }
-  return <PackageCheckoutClient initialPaymentMethodFlags={paymentMethodFlags} />;
+  return <PackageCheckoutClient initialPaymentMethodFlags={paymentMethodFlags} cyprusPaymentMethodFlags={{ idram: paymentMethodFlags.idram && hotelGatewayConfigured("idram"), idbank_card: paymentMethodFlags.idbank_card && hotelGatewayConfigured("idbank"), ameria_card: paymentMethodFlags.ameria_card && hotelGatewayConfigured("ameriabank") }} />;
 }

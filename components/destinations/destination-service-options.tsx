@@ -50,7 +50,7 @@ export default function DestinationServiceOptions({ service, state }: { service:
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ hotelOfferId: hotelId, ...payload }), signal,
     });
-    if (!response.ok) throw new Error(destinationCopy.unavailable[locale]);
+    if (!response.ok) throw new Error(response.status === 409 ? { en: "This option changed or expired. Search again and select an available option.", hy: "Այս տարբերակը փոխվել է կամ ժամկետանց է։ Կրկին որոնեք և ընտրեք հասանելի տարբերակ։", ru: "Этот вариант изменился или истёк. Повторите поиск и выберите доступный вариант." }[locale] : destinationCopy.unavailable[locale]);
     return response.json();
   }
 
@@ -71,8 +71,8 @@ export default function DestinationServiceOptions({ service, state }: { service:
         setOffers(result.offers.filter((offer) => offer.service === service && offer.hotelOfferId === hotelId));
         setSearchedKey(requestKey);
       }
-    } catch {
-      if (!controller.signal.aborted) setError(destinationCopy.unavailable[locale]);
+    } catch (err) {
+      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : destinationCopy.unavailable[locale]);
     } finally { if (!controller.signal.aborted) setBusy(false); }
   }
 
@@ -85,8 +85,8 @@ export default function DestinationServiceOptions({ service, state }: { service:
         setOffers((prev) => prev?.map((item) => item.id === offer.id ? result.offer : item) ?? null);
         setChanged(result.priceChanged || result.termsChanged); openPackageBuilder();
       }
-    } catch {
-      if (!controller.signal.aborted) setError(destinationCopy.unavailable[locale]);
+    } catch (err) {
+      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : destinationCopy.unavailable[locale]);
     } finally { if (!controller.signal.aborted) setBusy(false); }
   }
 

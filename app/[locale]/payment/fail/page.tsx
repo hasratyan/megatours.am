@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { orderIdValid } from "@/lib/packages/order-security";
 import { getTranslations } from "@/lib/i18n-server";
 import Link from "next/link";
 import type { Route } from "next";
@@ -90,6 +92,7 @@ export default async function PaymentFailPage({
     typeof orderId === "string" ? orderId : typeof mdOrder === "string" ? mdOrder : null;
   const orderNumberParam = typeof orderNumber === "string" ? orderNumber : null;
   const locale = await resolveLocaleFromCookie();
+  if (typeof EDP_BILL_NO === "string" && EDP_BILL_NO.startsWith("CY-") && orderIdValid(EDP_BILL_NO.slice(3))) redirect(`/${locale}/orders/${EDP_BILL_NO.slice(3)}` as import("next").Route);
   const t = getTranslations(locale);
   const session = await getServerSession(authOptions);
   const sessionUserId = session?.user?.id ?? null;

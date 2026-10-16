@@ -4404,6 +4404,7 @@
         "favorite",
         "favorite_border",
         "fax",
+        "female",
         "filter",
         "flag",
         "flight",
@@ -4458,6 +4459,7 @@
         "loop",
         "luggage",
         "mail",
+        "male",
         "map",
         "margin",
         "markdown",
@@ -4479,6 +4481,7 @@
         "opacity",
         "open_in_new",
         "orbit",
+        "orders",
         "output",
         "pace",
         "package",
@@ -4594,8 +4597,8 @@
         "window"
       ],
       "sourceBytes": 4001276,
-      "subsetBytes": 244584,
-      "sha256": "bef773066f7da2bf600ade6586b4c3d73fd5fe33285035666631403aa5775e3d"
+      "subsetBytes": 246496,
+      "sha256": "89e2b7bcc6f495fb58300b6da3b966990ad5244b107bbb0f330ded9c4fb7da8a"
     },
     "rounded": {
       "availableIcons": [
@@ -9000,6 +9003,7 @@
         "favorite",
         "favorite_border",
         "fax",
+        "female",
         "filter",
         "flag",
         "flight",
@@ -9054,6 +9058,7 @@
         "loop",
         "luggage",
         "mail",
+        "male",
         "map",
         "margin",
         "markdown",
@@ -9075,6 +9080,7 @@
         "opacity",
         "open_in_new",
         "orbit",
+        "orders",
         "output",
         "pace",
         "package",
@@ -9190,8 +9196,8 @@
         "window"
       ],
       "sourceBytes": 5397756,
-      "subsetBytes": 327740,
-      "sha256": "78c7a7f4efc82b3f6d05d4463fa048c4bf4755e6382570050d3fcad2042af08d"
+      "subsetBytes": 330040,
+      "sha256": "e4169053663fc81536992d7271618231cf9a28942dbadf59fa73461ae0e0ee69"
     }
   }
 }

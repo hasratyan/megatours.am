@@ -9999,3 +9999,20 @@ main.service-builder[data-destination="cyprus"] {
     transition: none;
   }
 }
+
+.destination-order { padding-block: 3rem; color: #f8fafc; }
+.destination-order h1 { font-size: 2rem; font-weight: 700; line-height: 1.2; }
+.destination-order h2 { font-size: 1.5rem; font-weight: 600; line-height: 1.3; text-align: left; margin: 0; }
+.destination-order h3 { font-size: 1.15rem; font-weight: 600; line-height: 1.4; }
+.destination-order .container { max-width: 980px; }
+.destination-order .package-checkout__panel { margin-block: 1.5rem; overflow-wrap: anywhere; }
+.destination-order__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-block: 1rem; }
+.destination-order__field { display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
+.destination-order__field input, .destination-order__field select { width: 100%; min-height: 46px; border: 1px solid var(--border-color, #737789); border-radius: .65rem; padding: .7rem; background: var(--surface-color, #fff); color: #15162e; font: inherit; }
+.destination-order__fare { border: 1px solid #737789; border-radius: 1rem; padding: 1.25rem; margin-block: 1rem; }
+.destination-order__fare-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.destination-order__fare-heading img { object-fit: contain; }
+.destination-order__notice { border: 1px solid #a4a44d; border-radius: .8rem; padding: 1rem; margin-block: 1rem; }
+.destination-order__challenge { width: 100%; height: 620px; border: 0; background: white; border-radius: .8rem; }
+.destination-order fieldset { border: 1px solid #737789; border-radius: .8rem; padding: 1rem; margin-block: 1rem; min-width: 0; }
+@media (max-width: 600px) { .destination-order__fields { grid-template-columns: 1fr; } .destination-order__fare { padding: 1rem; } }

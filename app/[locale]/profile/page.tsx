@@ -1,3 +1,4 @@
+import DestinationOrderHistory from "@/components/destinations/destination-order-history";
 import { getTranslations } from "@/lib/i18n-server";
 import { getServerSession } from "@/lib/auth-compat/server";
 import { authOptions } from "@/lib/auth";
@@ -254,6 +255,7 @@ export default async function ProfilePage() {
 
   return (
     <main className="container profile-page">
+      <DestinationOrderHistory customerId={session.user.id} />
       <ProfileView
         user={{
           name: session.user.name ?? null,
