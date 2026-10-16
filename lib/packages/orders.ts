@@ -11,10 +11,10 @@ import { parseBookingAddonServices } from "@/lib/booking-addons";
 import { requoteEfesInsuranceSelection, createEfesPoliciesFromBooking } from "@/lib/efes-client";
 import type { AoryxBookingPayload, BookingInsuranceSelection } from "@/types/aoryx";
 import { agentService, DestinationServiceError, type AgentOperation } from "./agent-service-client";
-import type { DestinationOrder, PreparedDestinationOrder } from "./contracts";
+import type { DestinationOrder, PreparedDestinationOrder, DestinationPackageReview } from "./contracts";
 import { destinationSearchSession, isSameOriginMutation } from "./search-session";
 import { initializeHotelGateway, verifyHotelGateway, hotelGatewayConfigured, type HotelPaymentIntent, type HotelGateway } from "./hotel-gateway";
-import { nonceHash, orderIdValid, seal, unseal, validIdramSignature } from "./order-security";
+import { nonceHash, orderIdValid, seal, unseal, validIdramSignature, transferScheduleMatches } from "./order-security";
 
 type Row = { _id: string; customerId: string; locale: string; hotelName?: string; createdAt?: Date; amountAmd: number; expiresAt: string; privatePayload: string; gateway?: HotelPaymentIntent; initializing?: boolean; paid?: boolean; paymentReference?: string; insuranceStatus?: string; policies?: unknown[]; callbackHash?: string; callbackExpires?: Date; callbackUsed?: boolean; callbackActive?: boolean; flightDispatchError?: boolean };
 const rows = async () => (await getDb()).collection<Row>("destination_orders");
@@ -81,6 +81,11 @@ async function startCheckout(body: Record<string, unknown>, customerId: string, 
   const provider: HotelGateway | null = body.paymentMethod === "idram" ? "idram" : body.paymentMethod === "idbank_card" ? "idbank" : body.paymentMethod === "ameria_card" ? "ameriabank" : null;
   if (!provider || !hotelGatewayConfigured(provider) || !(await getPaymentMethodFlags())[body.paymentMethod as "idram" | "idbank_card" | "ameria_card"]) throw new DestinationServiceError(400, "invalid");
   const owner = destinationSearchSession(request), selectedServices = body.selectedServices;
+  if (Array.isArray(selectedServices) && selectedServices.includes("transfer")) {
+    const review = await agentService<DestinationPackageReview>("packages/review", { ownerId: owner.ownerId, hotelOfferId: body.hotelOfferId, selectedServices, serviceOfferIds: body.serviceOfferIds, attractionOfferId: body.attractionOfferId });
+    const transfer = review.services.find((service) => service.service === "transfer");
+    if (!transfer || !transferScheduleMatches(transfer.journeys, object(body.transferDetails))) throw new DestinationServiceError(409, "transfer_changed");
+  }
   const prepared = await agentService<PreparedDestinationOrder>("orders/prepare", { ownerId: owner.ownerId, customerId, hotelOfferId: body.hotelOfferId, selectedServices, serviceOfferIds: body.serviceOfferIds, attractionOfferId: body.attractionOfferId, rooms: body.rooms, contact: body.contact, transferDetails: body.transferDetails, attractionAnswers: body.attractionAnswers, checkoutFingerprint: createHash("sha256").update(JSON.stringify(parseBookingAddonServices({ insurance: body.insurance }).insurance ?? null)).digest("hex") });
   const collection = await rows();
   let row = await collection.findOne({ _id: prepared.order.id, customerId });

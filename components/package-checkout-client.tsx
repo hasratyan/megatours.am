@@ -838,6 +838,12 @@ export default function PackageCheckoutClient({ initialPaymentMethodFlags, cypru
   const [transferFlightDetails, setTransferFlightDetails] = useState<TransferFlightDetailsForm>(
     EMPTY_TRANSFER_FLIGHT_DETAILS
   );
+  const cyprusTransferArrival = builderState.destinationQuotes?.services?.transfer?.offer.journeys[0]?.departure.slice(0, 16);
+  const cyprusTransferDeparture = builderState.destinationQuotes?.services?.transfer?.offer.journeys[1]?.departure.slice(0, 16);
+  useEffect(() => {
+    if (!isCyprus || !cyprusTransferArrival || !cyprusTransferDeparture) return;
+    queueMicrotask(() => setTransferFlightDetails((current) => ({ ...current, arrivalDateTime: cyprusTransferArrival, departureDateTime: cyprusTransferDeparture })));
+  }, [isCyprus, cyprusTransferArrival, cyprusTransferDeparture]);
   const [transferFieldErrors, setTransferFieldErrors] = useState<TransferFlightFieldErrors>({});
   const [insuranceTravelers, setInsuranceTravelers] = useState<InsuranceTravelerForm[]>([]);
   const [efesCountries, setEfesCountries] = useState<EfesCountry[]>([]);
@@ -2697,7 +2703,7 @@ export default function PackageCheckoutClient({ initialPaymentMethodFlags, cypru
         const checkout = await postJson<{ formUrl?: string; action?: string; fields?: Record<string, string> }>("/api/destinations/cyprus/orders/checkout", {
           ...destinationPackageReviewInput(builderState), locale, paymentMethod,
           rooms: payload.rooms.map((room) => ({ guests: room.guests })), contact,
-          transferDetails: { flightNumber: transferFlightDetails.flightNumber, departureFlightNumber: transferFlightDetails.departureFlightNumber },
+          transferDetails: { flightNumber: transferFlightDetails.flightNumber, departureFlightNumber: transferFlightDetails.departureFlightNumber, arrivalDateTime: transferFlightDetails.arrivalDateTime, departureDateTime: transferFlightDetails.departureDateTime },
           insurance: payload.insurance, attractionAnswers,
         });
         if (checkout.formUrl) { window.location.assign(checkout.formUrl); return; }
@@ -3777,6 +3783,7 @@ export default function PackageCheckoutClient({ initialPaymentMethodFlags, cypru
                       </span>
                     ) : null}
                   </label>
+                  {isCyprus ? <p className="checkout-section__hint">{{ en: "Pickup times match your selected transfer. To change them, return to transfer selection before paying.", hy: "Ժամերը համապատասխանում են ընտրված տրանսֆերին։ Փոխելու համար մինչև վճարումը վերադարձեք տրանսֆերի ընտրությանը։", ru: "Время соответствует выбранному трансферу. Чтобы изменить его, вернитесь к выбору трансфера до оплаты." }[locale]}</p> : null}
                   <label className="checkout-field">
                     <span>{t.hotel.addons.transfers.arrivalDate}</span>
                     <input
@@ -3784,6 +3791,7 @@ export default function PackageCheckoutClient({ initialPaymentMethodFlags, cypru
                       type="datetime-local"
                       min={transferCheckInMinDateTime}
                       value={transferFlightDetails.arrivalDateTime}
+                      readOnly={isCyprus}
                       onChange={(event) =>
                         updateTransferFlightField("arrivalDateTime", event.target.value)
                       }
@@ -3828,6 +3836,7 @@ export default function PackageCheckoutClient({ initialPaymentMethodFlags, cypru
                           type="datetime-local"
                           min={transferDepartureMinDateTime}
                           value={transferFlightDetails.departureDateTime}
+                          readOnly={isCyprus}
                           onChange={(event) =>
                             updateTransferFlightField("departureDateTime", event.target.value)
                           }

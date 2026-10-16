@@ -32,7 +32,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { NextRequest } = await import("next/server.js");
 const { destinationOrderRoute, hotelBankReturn, flightBankReturn } = await import("../lib/packages/orders.ts");
 const { hotelGatewayPaidInFull } = await import("../lib/packages/hotel-gateway.ts");
-const { seal, unseal, nonceHash, validIdramSignature } = await import("../lib/packages/order-security.ts");
+const { seal, unseal, nonceHash, validIdramSignature, transferScheduleMatches } = await import("../lib/packages/order-security.ts");
 const { createHash } = await import("node:crypto");
 const id = "00000000-0000-4000-8000-000000000001";
 function fixture(t) {
@@ -101,4 +101,13 @@ test("private order payload is authenticated and wallet callbacks require the ex
   const fields={EDP_REC_ACCOUNT:"fixture",EDP_AMOUNT:"100.00",EDP_BILL_NO:`CY-${id}`,EDP_PAYER_ACCOUNT:"payer",EDP_TRANS_ID:"transaction",EDP_TRANS_DATE:"date"};
   fields.EDP_CHECKSUM=createHash("md5").update([fields.EDP_REC_ACCOUNT,fields.EDP_AMOUNT,"secret",fields.EDP_BILL_NO,fields.EDP_PAYER_ACCOUNT,fields.EDP_TRANS_ID,fields.EDP_TRANS_DATE].join(":" )).digest("hex");
   assert.equal(validIdramSignature(fields,"secret"),true);assert.equal(validIdramSignature({...fields,EDP_AMOUNT:"1.00"},"secret"),false);
+});
+
+test("transfer pickup dates and local times must match the server-validated quote", () => {
+  const journeys=[{departure:"2026-11-15T12:00:00"},{departure:"2026-11-17T09:00:00"}];
+  const accepted={arrivalDateTime:"2026-11-15T12:00",departureDateTime:"2026-11-17T09:00"};
+  assert.equal(transferScheduleMatches(journeys,accepted),true);
+  assert.equal(transferScheduleMatches(journeys,{...accepted,arrivalDateTime:"2026-11-15T14:00"}),false);
+  assert.equal(transferScheduleMatches(journeys,{...accepted,departureDateTime:"2026-11-18T09:00"}),false);
+  assert.equal(transferScheduleMatches(journeys,{}),false);
 });

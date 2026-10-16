@@ -21,3 +21,8 @@ export function validIdramSignature(fields: Record<string, string>, secret: stri
   const expected = createHash("md5").update([fields.EDP_REC_ACCOUNT, fields.EDP_AMOUNT, secret, fields.EDP_BILL_NO, fields.EDP_PAYER_ACCOUNT, fields.EDP_TRANS_ID, fields.EDP_TRANS_DATE].join(":"), "utf8").digest();
   return /^[a-f0-9]{32}$/i.test(fields.EDP_CHECKSUM ?? "") && timingSafeEqual(expected, Buffer.from(fields.EDP_CHECKSUM, "hex"));
 }
+
+export function transferScheduleMatches(journeys: { departure: string }[], details: Record<string, unknown>) {
+  const dates = [details.arrivalDateTime, details.departureDateTime];
+  return journeys.length === 2 && dates.every((value, index) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) && value === journeys[index].departure.slice(0, 16));
+}
