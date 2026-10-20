@@ -8047,9 +8047,9 @@ select:focus-visible {
   }
 
   .package-builder__completion{
-    margin: 0 0 0.75rem;
-    padding: 0.55rem 0.9rem;
-    border-radius: 999px;
+    margin-bottom: 1rem;
+    padding: .75em 1em;
+    border-radius: 1rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -9723,7 +9723,6 @@ main.service-builder[data-destination="cyprus"] {
   .destination-service-search { min-width: 0; }
   .destination-service-note { margin: 0 0 1.25rem; color: #cbd5e1; font-size: .95rem; }
   .destination-service-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); align-items: end; margin-bottom: 0; }
-  .destination-service-controls label {font-size: .9rem; min-width: 0; }
   .destination-service-controls input[type="time"], .destination-service-controls select, .destination-service-query input {
     min-width: 0;
     border: 1px solid #94a3b866;
@@ -9734,7 +9733,6 @@ main.service-builder[data-destination="cyprus"] {
   .destination-service-controls :is(input, select):focus-visible, .destination-service-query input:focus-visible {
     outline: 2px solid #7cf2d4; outline-offset: 2px;
   }
-  .destination-service-controls .service-builder__cta { min-height: 46px; width: auto; margin: 0; justify-content: center; }
   .destination-service-search__intro { display: flex; gap: .85rem; align-items: center; grid-column: span 2; }
   .destination-service-search__intro > .material-symbols-rounded { font-size: 2rem; color: #7cf2d4; }
   .destination-service-search__intro h2 { font-size: 1.2rem; font-weight: 600; color: #f8fafc; }
