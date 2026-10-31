@@ -413,6 +413,7 @@ header {
           margin-right: 1em;
           font-weight: 500;
           scroll-target-group: auto;
+          font-size: 0.95em;
 
           @media screen and (max-width: 1280px)  {
             display: none;
