@@ -1,5 +1,5 @@
 {
-  "packageVersion": "0.48.0",
+  "packageVersion": "0.48.3",
   "fonts": {
     "outlined": {
       "availableIcons": [
@@ -942,7 +942,10 @@
         "contract_delete",
         "contract_edit",
         "contrast",
+        "contrast_auto",
         "contrast_circle",
+        "contrast_inverse",
+        "contrast_inverse_auto",
         "contrast_rtl_off",
         "contrast_square",
         "control_camera",
@@ -1110,6 +1113,7 @@
         "device_thermostat",
         "device_unknown",
         "devices",
+        "devices_2",
         "devices_fold",
         "devices_fold_2",
         "devices_off",
@@ -1191,6 +1195,7 @@
         "document_scanner",
         "document_search",
         "document_share",
+        "document_share_stack",
         "domain",
         "domain_add",
         "domain_disabled",
@@ -2003,6 +2008,7 @@
         "inpatient",
         "input",
         "input_circle",
+        "input_search",
         "insert_chart",
         "insert_chart_filled",
         "insert_chart_outlined",
@@ -2285,6 +2291,7 @@
         "mail_lock",
         "mail_off",
         "mail_outline",
+        "mail_person",
         "mail_shield",
         "male",
         "man",
@@ -2371,6 +2378,7 @@
         "minimize",
         "minor_crash",
         "mintmark",
+        "mirror_stack",
         "missed_video_call",
         "missed_video_call_filled",
         "missing_controller",
@@ -2839,6 +2847,7 @@
         "person_celebrate",
         "person_check",
         "person_edit",
+        "person_eye",
         "person_filled",
         "person_heart",
         "person_off",
@@ -3022,6 +3031,7 @@
         "public_off",
         "publish",
         "published_with_changes",
+        "pull_request",
         "pulmonology",
         "pulse_alert",
         "punch_clock",
@@ -3553,6 +3563,7 @@
         "speed_2x",
         "speed_3",
         "speed_4",
+        "speed_4_progress",
         "speed_camera",
         "spellcheck",
         "split_scene",
@@ -4596,9 +4607,9 @@
         "wifi",
         "window"
       ],
-      "sourceBytes": 4001276,
-      "subsetBytes": 246496,
-      "sha256": "89e2b7bcc6f495fb58300b6da3b966990ad5244b107bbb0f330ded9c4fb7da8a"
+      "sourceBytes": 4011996,
+      "subsetBytes": 246596,
+      "sha256": "a61b9ea609316848556ad2be5b18871d225a8c4a9065048af04b6e5a3b90265e"
     },
     "rounded": {
       "availableIcons": [
@@ -5541,7 +5552,10 @@
         "contract_delete",
         "contract_edit",
         "contrast",
+        "contrast_auto",
         "contrast_circle",
+        "contrast_inverse",
+        "contrast_inverse_auto",
         "contrast_rtl_off",
         "contrast_square",
         "control_camera",
@@ -5709,6 +5723,7 @@
         "device_thermostat",
         "device_unknown",
         "devices",
+        "devices_2",
         "devices_fold",
         "devices_fold_2",
         "devices_off",
@@ -5790,6 +5805,7 @@
         "document_scanner",
         "document_search",
         "document_share",
+        "document_share_stack",
         "domain",
         "domain_add",
         "domain_disabled",
@@ -6602,6 +6618,7 @@
         "inpatient",
         "input",
         "input_circle",
+        "input_search",
         "insert_chart",
         "insert_chart_filled",
         "insert_chart_outlined",
@@ -6884,6 +6901,7 @@
         "mail_lock",
         "mail_off",
         "mail_outline",
+        "mail_person",
         "mail_shield",
         "male",
         "man",
@@ -6970,6 +6988,7 @@
         "minimize",
         "minor_crash",
         "mintmark",
+        "mirror_stack",
         "missed_video_call",
         "missed_video_call_filled",
         "missing_controller",
@@ -7438,6 +7457,7 @@
         "person_celebrate",
         "person_check",
         "person_edit",
+        "person_eye",
         "person_filled",
         "person_heart",
         "person_off",
@@ -7621,6 +7641,7 @@
         "public_off",
         "publish",
         "published_with_changes",
+        "pull_request",
         "pulmonology",
         "pulse_alert",
         "punch_clock",
@@ -8152,6 +8173,7 @@
         "speed_2x",
         "speed_3",
         "speed_4",
+        "speed_4_progress",
         "speed_camera",
         "spellcheck",
         "split_scene",
@@ -9195,9 +9217,9 @@
         "wifi",
         "window"
       ],
-      "sourceBytes": 5397756,
-      "subsetBytes": 330040,
-      "sha256": "e4169053663fc81536992d7271618231cf9a28942dbadf59fa73461ae0e0ee69"
+      "sourceBytes": 5415984,
+      "subsetBytes": 330628,
+      "sha256": "1822fb46ac46d37642a29527124fcaed92a0bbe89d51604535788f6be135b9af"
     }
   }
 }
